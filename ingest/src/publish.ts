@@ -3,14 +3,19 @@
 
 import { fetchAllowed, type FetchLike } from './allowlist.ts';
 import { config } from './config.ts';
+import { templateDetail } from './detail.ts';
 import { resolveSecClassification } from './sources/sec.ts';
-import type { MacroObservation, PublishPayload, RawItem, SummaryDraft } from './types.ts';
+import type { MacroObservation, PublishPayload, RawItem, RevisableCard, RevisePayload, SummaryDraft } from './types.ts';
 
 export interface Publisher {
   upsertItem(item: RawItem): Promise<{ id: string; is_new: boolean; status: string }>;
   setItemStatus(id: string, status: 'skipped' | 'failed', note: string): Promise<void>;
   publishBlurb(p: PublishPayload): Promise<{ status: 'published' | 'duplicate' | 'ticker_cap'; id: string | null }>;
   upsertMacro(o: MacroObservation): Promise<void>;
+  /** --rewrite: published cards whose prompt_version is not in `current` (api.blurbs_to_revise). */
+  listToRevise?(current: string[], limit: number): Promise<RevisableCard[]>;
+  /** --rewrite: update a card in place or hide it (api.revise_blurb). */
+  reviseBlurb?(p: RevisePayload): Promise<{ status: 'revised' | 'hidden' | 'not_found'; id: string }>;
 }
 
 export class SupabaseError extends Error {
@@ -51,14 +56,17 @@ export function createSupabasePublisher(opts: { url: string; key: string; fetchI
     setItemStatus: async (id, status, note) => { await rpc('set_item_status', { p_id: id, p_status: status, p_note: note }); },
     publishBlurb: (p) => rpc('publish_blurb', { p }),
     upsertMacro: async ({ move: _move, ...o }) => { await rpc('upsert_macro', { p: o }); },   // move is not stored
+    listToRevise: (current, limit) => rpc('blurbs_to_revise', { p_current: current, p_limit: limit }),
+    reviseBlurb: (p) => rpc('revise_blurb', { p }),
   };
 }
 
-/** Dry-run publisher: records everything, sends nothing. */
-export function createDryRunPublisher() {
+/** Dry-run publisher: records everything, sends nothing. `toRevise` feeds --rewrite --dry-run. */
+export function createDryRunPublisher(toRevise: RevisableCard[] = []) {
   const items: RawItem[] = [];
   const cards: PublishPayload[] = [];
   const macro: MacroObservation[] = [];
+  const revisions: RevisePayload[] = [];
   const seen = new Set<string>();
   const publisher: Publisher = {
     async upsertItem(item) {
@@ -74,8 +82,15 @@ export function createDryRunPublisher() {
       return { status: 'published', id: `dry-card-${cards.length}` };
     },
     async upsertMacro(o) { macro.push(o); },
+    async listToRevise(current, limit) {
+      return toRevise.filter((c) => !c.prompt_version || !current.includes(c.prompt_version)).slice(0, limit);
+    },
+    async reviseBlurb(p) {
+      revisions.push(p);
+      return { status: p.action === 'hide' ? 'hidden' : 'revised', id: p.id };
+    },
   };
-  return { publisher, items, cards, macro };
+  return { publisher, items, cards, macro, revisions };
 }
 
 export function itemPayload(item: RawItem) {
@@ -125,7 +140,9 @@ export function buildPublishPayload(
     as_of: item.published_at,
     sort_at: item.published_at,
     model: meta.model,
-    prompt_version: meta.aiGenerated ? config.promptVersion : null,
+    prompt_version: meta.aiGenerated ? config.promptVersion : config.templateVersion,
+    // AI cards: the validated AI detail or null (dropped). Template cards: a factual detail from metadata.
+    detail: meta.aiGenerated ? (draft.detail ?? null) : (draft.detail ?? templateDetail(item)),
     attribution: item.attribution ?? null,
     sources: [{
       name: item.source_name, kind: item.source_kind, doc_label: item.doc_label, url: item.url,

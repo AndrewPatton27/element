@@ -18,6 +18,7 @@ interface Props {
   done: boolean;
   onEndReached: () => void;
   onShowSources: (card: BlurbCard) => void;
+  onOpenDetail?: (card: BlurbCard) => void;
   wide?: boolean;
   reactions?: Record<string, Feedback>;
   onReact?: (card: BlurbCard, pressed: Feedback) => void;
@@ -35,6 +36,7 @@ export function FeedPager({
   done,
   onEndReached,
   onShowSources,
+  onOpenDetail,
   wide,
   reactions,
   onReact,
@@ -65,6 +67,12 @@ export function FeedPager({
     [items.length, onEndReached],
   );
   const next = useCallback(() => goTo(indexRef.current + 1), [goTo]);
+
+  // Page height changed (window resized, phone rotated): the old scroll offset no
+  // longer lines up with a card, so jump straight back to the current one.
+  useEffect(() => {
+    if (height > 0 && indexRef.current > 0) list.current?.scrollToOffset({ offset: height * indexRef.current, animated: false });
+  }, [height]);
 
   const active = items[index];
   useEffect(() => {
@@ -106,6 +114,7 @@ export function FeedPager({
             config={config}
             categories={categories}
             onShowSources={onShowSources}
+            onOpenDetail={onOpenDetail}
             onNext={last ? undefined : next}
             wide={wide}
             compact={compact}
@@ -117,7 +126,7 @@ export function FeedPager({
         </View>
       );
     },
-    [height, config, categories, onShowSources, next, wide, compact, items.length, done, p, reactions, onReact],
+    [height, config, categories, onShowSources, onOpenDetail, next, wide, compact, items.length, done, p, reactions, onReact],
   );
 
   return (

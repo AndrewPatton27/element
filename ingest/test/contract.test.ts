@@ -10,7 +10,7 @@ const read = <T>(f: string): T => JSON.parse(readFileSync(new URL(`../../contrac
 const CARD_KEYS = [
   'id', 'kind', 'headline', 'body', 'category', 'event_type', 'tickers', 'macro', 'sources', 'source_count',
   'as_of', 'published_at', 'sort_at', 'updated_at', 'revision', 'freshness', 'ai', 'attribution', 'image',
-  'is_saved', 'share_path', 'importance',
+  'is_saved', 'share_path', 'importance', 'detail',
 ];
 const MACRO_KEYS = ['series_id', 'label', 'value', 'change', 'direction', 'period', 'as_of', 'source_name', 'source_short', 'source_url', 'sort_order'];
 const SLUGS = ['markets', 'earnings', 'economy', 'policy', 'tech', 'deals', 'energy', 'insider', 'personal-finance', 'world', 'science', 'safety'];
@@ -57,7 +57,20 @@ function checkCard(c: BlurbCard) {
   assert.equal(c.share_path, `/b/${c.id}`);
   assert.equal(c.is_saved, false);
   for (const k of ['as_of', 'published_at', 'sort_at'] as const) assert.match(c[k], ISO, `${at}: ${k}`);
+  if (c.detail != null) {
+    const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
+    assert.ok(c.detail.paragraphs.length >= 2 && c.detail.paragraphs.length <= 4, `${at}: 2-4 paragraphs`);
+    assert.ok(words(c.detail.paragraphs.join(' ')) <= 180, `${at}: detail over 180 words`);
+    assert.ok(c.detail.key_points.length >= 3 && c.detail.key_points.length <= 5, `${at}: 3-5 key points`);
+    for (const k of c.detail.key_points) assert.ok(words(k) <= 15, `${at}: key point over 15 words`);
+  }
 }
+
+test('several sample cards carry a detail, some leave it null', () => {
+  const all = [...page1.items, ...page2.items];
+  assert.ok(all.filter((c) => c.detail).length >= 4);
+  assert.ok(all.filter((c) => c.detail === null).length >= 4);
+});
 
 test('app_config has the exact disclaimer and AI notice, no prices, no link-outs', () => {
   assert.equal(config.disclaimer, 'Informational only · Not investment advice');

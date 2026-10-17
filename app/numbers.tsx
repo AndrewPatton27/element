@@ -19,7 +19,7 @@ export default function NumbersScreen() {
         <Text style={[styles.title, { color: p.ink }]} accessibilityRole="header">
           Numbers to know
         </Text>
-        <Text style={[styles.sub, { color: p.muted }]}>Six figures that shape prices, jobs and loans. Latest official readings.</Text>
+        <Text style={[styles.sub, { color: p.muted }]}>Key numbers that shape prices, jobs and loans. Latest official readings.</Text>
       </View>
       <NumbersPanel api={api} config={config} variant="full" />
       <Disclaimer text={disclaimerText(config)} center />

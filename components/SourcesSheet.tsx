@@ -3,20 +3,18 @@
 
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, BlurbCard } from '../contract/types.ts';
-import { hostOf, relativeTime } from '../lib/format';
-import { CC_BY_SA_MARK, disclaimerText, howMadeText, primarySource, shareAlikeCredit } from '../lib/labels';
+import { disclaimerText, howMadeText, primarySource } from '../lib/labels';
 import { usePalette } from '../lib/useTheme';
 import { MAX_COLUMN_WIDTH } from '../lib/config';
 import { fonts } from '../lib/theme';
-import { BuildingIcon, CloseIcon, DocumentIcon, ExternalIcon, LinkIcon } from './Icons';
+import { CloseIcon } from './Icons';
+import { SourceList } from './SourceList';
 import { Disclaimer } from './Labels';
 import { openUrl } from './SourceChip';
 
 export function SourcesSheet({ card, config, onClose }: { card: BlurbCard | null; config: AppConfig | null; onClose: () => void }) {
   const p = usePalette();
-  const hidden = card ? card.source_count - card.sources.length : 0;
   const primary = card ? primarySource(card) : null;
-  const credit = card ? shareAlikeCredit(card, config) : null;
   return (
     <Modal visible={card !== null} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, { backgroundColor: p.overlay }]} onPress={onClose} accessibilityLabel="Close sources" />
@@ -37,47 +35,7 @@ export function SourcesSheet({ card, config, onClose }: { card: BlurbCard | null
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.list}>
-            {card?.sources.map((s) => (
-              <Pressable
-                key={s.url}
-                onPress={() => openUrl(s.url, card.id)}
-                accessibilityRole="link"
-                accessibilityLabel={`${s.name}${s.doc_label ? ', ' + s.doc_label : ''}, ${relativeTime(s.published_at)}. Opens the original.`}
-                style={({ pressed }) => [styles.row, { borderColor: p.navBorder, opacity: pressed ? 0.75 : 1 }]}
-              >
-                <View style={[styles.rowIcon, { backgroundColor: p.accentSoft }]}>
-                  {s.kind === 'government' ? (
-                    <BuildingIcon color={p.accentInk} />
-                  ) : s.kind === 'filing' ? (
-                    <DocumentIcon color={p.accentInk} />
-                  ) : (
-                    <LinkIcon color={p.accentInk} size={20} />
-                  )}
-                </View>
-                <View style={styles.rowText}>
-                  <Text style={[styles.rowName, { color: p.ink }]}>{s.name}</Text>
-                  <Text style={[styles.rowMeta, { color: p.muted }]} numberOfLines={2}>
-                    {[s.doc_label, hostOf(s.url), relativeTime(s.published_at)].filter(Boolean).join(' · ')}
-                  </Text>
-                  {s.attribution ? <Text style={[styles.rowMeta, { color: p.muted }]}>{s.attribution}</Text> : null}
-                  {(s.license_class as string) === 'cc_by_sa' && credit ? (
-                    <Text
-                      style={[styles.rowMeta, styles.licenseLink, { color: p.accentInk }]}
-                      onPress={() => openUrl(credit.licenseUrl)}
-                      accessibilityRole="link"
-                    >
-                      License: {CC_BY_SA_MARK}
-                    </Text>
-                  ) : null}
-                </View>
-                <ExternalIcon color={p.muted} />
-              </Pressable>
-            ))}
-            {hidden > 0 ? (
-              <Text style={[styles.rowMeta, { color: p.muted }]}>
-                and {hidden} more outlet{hidden === 1 ? '' : 's'}
-              </Text>
-            ) : null}
+            {card ? <SourceList card={card} config={config} /> : null}
             {card ? (
               <View style={[styles.how, { backgroundColor: p.surfaceMuted }]}>
                 <Text style={[styles.howTitle, { color: p.ink }]}>How this card was made</Text>
@@ -120,12 +78,6 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.serif, fontSize: 26, letterSpacing: -0.26 },
   close: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   list: { gap: 12 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 16, borderWidth: 1 },
-  rowIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  rowText: { flex: 1, gap: 2 },
-  rowName: { fontFamily: fonts.sansSemi, fontSize: 16 },
-  licenseLink: { textDecorationLine: 'underline' },
-  rowMeta: { fontFamily: fonts.sans, fontSize: 14 },
   how: { gap: 6, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14 },
   howTitle: { fontFamily: fonts.sansSemi, fontSize: 14 },
   howText: { fontFamily: fonts.sans, fontSize: 14, lineHeight: 20 },

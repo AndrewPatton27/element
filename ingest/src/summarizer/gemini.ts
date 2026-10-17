@@ -46,6 +46,7 @@ export function buildPrompt(input: SummarizeInput): string {
     '- "event_type": one of earnings, exec_change, deal, insider, macro_release, fed, or null.',
     '- "tickers": stock symbols that appear in the source text or the metadata below, else [].',
     `- "everyday_relevance": a whole number from 1 to 5. ${RELEVANCE_RUBRIC}`,
+    `- "detail": a longer, still easy version for readers who tap the card. "paragraphs": ${config.detail.minParagraphs} to ${config.detail.maxParagraphs} short paragraphs, at most ${config.detail.maxWords} words in total: what happened, the background a student needs to understand it, and what it means for regular people ONLY if that follows from the source. "key_points": ${config.detail.minKeyPoints} to ${config.detail.maxKeyPoints} short points, each at most ${config.detail.keyPointMaxWords} words. Same rules as the card: plain words, facts from the source only, every number must appear in the source, no advice, no predictions, no copying more than 8 words in a row.`,
     'Return JSON only.',
     '',
     `SOURCE: ${it.source_name}, ${it.doc_label}, ${it.published_at}`,
@@ -71,8 +72,17 @@ export const RESPONSE_SCHEMA = {
     event_type: { type: 'STRING', nullable: true },
     tickers: { type: 'ARRAY', items: { type: 'STRING' } },
     everyday_relevance: { type: 'INTEGER', description: `1 to 5. ${RELEVANCE_RUBRIC}` },
+    detail: {
+      type: 'OBJECT',
+      description: `In-depth version: ${config.detail.minParagraphs}-${config.detail.maxParagraphs} short paragraphs (<= ${config.detail.maxWords} words in total) and ${config.detail.minKeyPoints}-${config.detail.maxKeyPoints} key points (<= ${config.detail.keyPointMaxWords} words each).`,
+      properties: {
+        paragraphs: { type: 'ARRAY', items: { type: 'STRING' } },
+        key_points: { type: 'ARRAY', items: { type: 'STRING' } },
+      },
+      required: ['paragraphs', 'key_points'],
+    },
   },
-  required: ['headline', 'body', 'category', 'event_type', 'tickers', 'everyday_relevance'],
+  required: ['headline', 'body', 'category', 'event_type', 'tickers', 'everyday_relevance', 'detail'],
 };
 
 export function createGeminiSummarizer(opts: {
@@ -100,7 +110,7 @@ export function createGeminiSummarizer(opts: {
           contents: [{ role: 'user', parts: [{ text: buildPrompt(input) }] }],
           generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 400,
+            maxOutputTokens: 1200,                // card + detail (sum-v3)
             responseMimeType: 'application/json',
             responseSchema: RESPONSE_SCHEMA,
           },

@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { categoryName, clampHeadline, eventLabel, relativeTime } from '../lib/format';
 import { cardLabels, shareAlikeCredit } from '../lib/labels';
+import { OPEN_DETAIL_HINT, cardDetail } from '../lib/detail';
 import { usePalette } from '../lib/useTheme';
 import type { Palette } from '../lib/theme';
 import { fonts } from '../lib/theme';
@@ -20,6 +21,7 @@ interface Props {
   config: AppConfig | null;
   categories: Category[];
   onShowSources: (card: BlurbCard) => void;
+  onOpenDetail?: (card: BlurbCard) => void; // tap on the card body
   onNext?: () => void;
   wide?: boolean;
   compact?: boolean; // short screens: smaller type so the card fits
@@ -43,7 +45,8 @@ function metaLine(card: BlurbCard, categories: Category[]): string {
   return parts.join(' · ');
 }
 
-export function Card({ card, config, categories, onShowSources, onNext, wide, compact, reaction, onReact }: Props) {
+export function Card({ card, config, categories, onShowSources, onOpenDetail, onNext, wide, compact, reaction, onReact }: Props) {
+  const hasDetail = cardDetail(card) !== null;
   const p = usePalette();
   const labels = cardLabels(card, config);
   const credit = shareAlikeCredit(card, config);
@@ -64,8 +67,15 @@ export function Card({ card, config, categories, onShowSources, onNext, wide, co
       </View>
 
       {/* Only this middle part may shrink (and clip); the source row, AI label and
-          disclaimer below never do, so they are always visible. */}
-      <View style={[styles.middle, wide && { gap: 18 }]}>
+          disclaimer below never do, so they are always visible. Tapping it opens the
+          detail sheet (the source row and the buttons below keep their own actions). */}
+      <Pressable
+        onPress={onOpenDetail ? () => onOpenDetail(card) : undefined}
+        disabled={!onOpenDetail}
+        accessibilityRole={onOpenDetail ? 'button' : undefined}
+        accessibilityLabel={onOpenDetail ? `${card.headline}. ${OPEN_DETAIL_HINT}` : undefined} // web ignores accessibilityHint
+        style={[styles.middle, wide && { gap: 18 }]}
+      >
         <Text
           style={[styles.headline, { color: p.ink, fontSize: headlineSize, lineHeight: headlineSize * 1.1, letterSpacing: wide ? -0.8 : -0.5 }]}
           accessibilityRole="header"
@@ -97,15 +107,27 @@ export function Card({ card, config, categories, onShowSources, onNext, wide, co
             ))}
           </View>
         ) : null}
-      </View>
-
-      <View style={styles.spacer} />
+      </Pressable>
 
       <View style={styles.sourceBlock}>
+        {onOpenDetail && hasDetail ? (
+          <Pressable
+            onPress={() => onOpenDetail(card)}
+            accessibilityRole="button"
+            accessibilityLabel={`More detail. ${OPEN_DETAIL_HINT}`}
+            hitSlop={6}
+            style={styles.more}
+          >
+            <Text style={[styles.moreText, { color: p.accentInk }]}>More detail ›</Text>
+          </Pressable>
+        ) : null}
         <SourceRow card={card} onShowAll={() => onShowSources(card)} wide={wide} />
         {credit ? <ShareAlikeLine credit={credit} cardId={card.id} /> : null}
         {labels.aiLabel ? <AiLabel text={labels.aiLabel} /> : null}
       </View>
+
+      {/* empty space collects here, so only the actions and disclaimer sit at the bottom */}
+      <View style={styles.spacer} />
 
       <View style={[styles.footer, { borderTopColor: p.divider }]}>
         {onReact ? (
@@ -183,6 +205,8 @@ const styles = StyleSheet.create({
   ticker: { fontFamily: fonts.sansMedium, fontSize: 13, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 3 },
   middle: { flexShrink: 1, minHeight: 0, overflow: 'hidden', gap: 16 },
   spacer: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0 },
+  more: { alignSelf: 'flex-start', minHeight: 28, justifyContent: 'center' },
+  moreText: { fontFamily: fonts.sansSemi, fontSize: 14 },
   sourceBlock: { gap: 8, flexShrink: 0 },
   footer: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, paddingTop: 12, flexShrink: 0 },
   footerText: { flex: 1 },

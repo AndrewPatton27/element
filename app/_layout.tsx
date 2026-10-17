@@ -45,6 +45,7 @@ export default function RootLayout() {
               <Stack.Screen name="account" />
               <Stack.Screen name="signin" />
               <Stack.Screen name="onboarding" />
+              <Stack.Screen name="reset-password" />
             </Stack>
           </AccountProvider>
         </AppDataProvider>

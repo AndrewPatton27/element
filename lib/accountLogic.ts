@@ -68,3 +68,10 @@ export function mockForYouOrder(cards: BlurbCard[], topics: string[], feedback: 
   };
   return kept.slice().sort((a, b) => score(b) - score(a) || (a.id < b.id ? -1 : 1));
 }
+
+// For you header: when none of the loaded cards is in a followed topic, the server
+// is showing top stories instead, so the header must say so (not "Tailored to X").
+export function forYouCoversTopics(cards: Pick<BlurbCard, 'category'>[], followed: string[]): boolean {
+  if (followed.length === 0 || cards.length === 0) return true;
+  return cards.some((c) => followed.includes(c.category));
+}

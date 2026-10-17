@@ -201,7 +201,7 @@ test('usgs: template card from title/mag/place/time, event URL as the source, US
   assert.equal(it.attribution, 'Credit: U.S. Geological Survey');
   const dft = usgsDraft(it);
   assert.equal(dft.headline, 'M 5.7 - 48 km WNW of Khuzdar, Pakistan');
-  assert.equal(dft.body, 'A magnitude 5.7 earthquake struck 48 km WNW of Khuzdar, Pakistan at 05:06 UTC on Oct 17. USGS alert level: yellow.');
+  assert.equal(dft.body, 'A magnitude 5.7 earthquake struck 48 km WNW of Khuzdar, Pakistan at 05:06 UTC on Oct 17. USGS alert level: yellow (its scale for expected damage, from green to red).');
   const ridge = usgsDraft((usgsToItem(f[2], DRY_NOW) as { item: RawItem }).item);
   assert.match(ridge.body!, /struck in the central Mid-Atlantic Ridge .* official tsunami warnings come from tsunami\.gov\./);
   assert.deepEqual(usgsToItem(f[0], new Date('2026-11-30T00:00:00Z')), { skip: 'too_old' });

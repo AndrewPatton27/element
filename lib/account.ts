@@ -7,11 +7,22 @@ import type { BlurbCard, FeedPage } from '../contract/types.ts';
 import type { FeedForYouParams, SetPrefsParams, TrackParams } from '../contract/account.ts';
 import { clampLimit } from './feedLogic.ts';
 import { EMPTY_PREFS, mockForYouOrder, type Feedback, type TrackEvent, type UserPrefs } from './accountLogic.ts';
-import { authErrorMessage, needsRefresh, parseSession, type AuthUser, type Session } from './session.ts';
+import {
+  RESET_RATE_LIMIT_MESSAGE,
+  SIGN_IN_AGAIN_MESSAGE,
+  authErrorMessage,
+  needsRefresh,
+  parseSession,
+  type AuthUser,
+  type RecoveryLink,
+  type Session,
+} from './session.ts';
 import { defaultStore, type KeyValueStore } from './storage.ts';
 import { parseFeedPage } from './types.ts';
 
 export type SignUpResult = { status: 'signed_in' } | { status: 'confirm_email' };
+export type EmailChangeResult = 'changed' | 'confirm_sent';
+type RecoveryTokens = Extract<RecoveryLink, { ok: true }>;
 
 export interface AccountApi {
   readonly sample: boolean;
@@ -29,6 +40,18 @@ export interface AccountApi {
   track(cardId: string, event: TrackEvent): Promise<void>;
   /** Deletes the user's prefs and events. The login stays (deleted in the dashboard). */
   deleteMyData(): Promise<void>;
+  /** Emails a reset link. Resolves the same way whether or not the email has an account. */
+  requestPasswordReset(email: string, redirectTo: string): Promise<void>;
+  /** From the emailed link: signs in with its token and sets the new password. */
+  completePasswordRecovery(link: RecoveryTokens, newPassword: string): Promise<void>;
+  /** Signed in: sets a new password for the current account. */
+  changePassword(newPassword: string): Promise<void>;
+  /** Signed in: changes the email ('changed' at once when confirmations are off). */
+  changeEmail(newEmail: string): Promise<EmailChangeResult>;
+  /** Deletes the login and everything stored for it (api.delete_account), then signs out here. */
+  deleteAccount(): Promise<void>;
+  /** Why the user was signed out without asking (an expired session), once; null otherwise. */
+  takeSignOutReason(): string | null;
 }
 
 export class AccountError extends Error {
@@ -55,6 +78,8 @@ export const ACCOUNT_RPC = {
   feedForYou: { fn: 'feed_for_you', args: (cursor: string | null, limit: number): FeedForYouParams => ({ p_cursor: cursor, p_limit: limit }) },
   track: { fn: 'track', args: (cardId: string, event: TrackEvent): TrackParams => ({ p_blurb: cardId, p_kind: event }) },
   deleteMyData: { fn: 'delete_my_data', args: () => ({}) },
+  // supabase/migrations/20261017040000_account_delete.sql
+  deleteAccount: { fn: 'delete_account', args: () => ({}) },
 } as const;
 
 const slugList = (x: unknown): string[] => (Array.isArray(x) ? [...new Set(x.filter((v): v is string => typeof v === 'string'))] : []);
@@ -115,11 +140,13 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
     for (const fn of listeners) fn(s ? s.user : null);
   }
 
-  async function authCall(path: string, body: unknown, token?: string): Promise<unknown> {
+  let signOutReason: string | null = null;
+
+  async function authCall(path: string, body: unknown, token?: string, method: 'POST' | 'PUT' = 'POST'): Promise<unknown> {
     let res: Response;
     try {
       res = await doFetch(`${opts.url}/auth/v1/${path}`, {
-        method: 'POST',
+        method,
         headers: { apikey: opts.key, 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(body),
       });
@@ -141,7 +168,10 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
       return s ? s.access_token : null;
     } catch (e) {
       // A rejected refresh token means the session is over; a network error keeps it.
-      if (e instanceof AccountError && e.status >= 400 && e.status < 500) setSession(null);
+      if (e instanceof AccountError && e.status >= 400 && e.status < 500) {
+        signOutReason = SIGN_IN_AGAIN_MESSAGE;
+        setSession(null);
+      }
       return null;
     }
   }
@@ -218,6 +248,53 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
     },
     async deleteMyData() {
       await rpc(ACCOUNT_RPC.deleteMyData.fn, ACCOUNT_RPC.deleteMyData.args());
+    },
+    async requestPasswordReset(email, redirectTo) {
+      try {
+        await authCall(`recover?redirect_to=${encodeURIComponent(redirectTo)}`, { email: email.trim() });
+      } catch (e) {
+        if (e instanceof AccountError && e.status === 429) throw new AccountError(RESET_RATE_LIMIT_MESSAGE, 429);
+        if (e instanceof AccountError && e.status === 0) throw e;
+        // Any other answer is treated as sent, so the form never reveals who has an account.
+      }
+    },
+    async completePasswordRecovery(link, newPassword) {
+      const json = await authCall('user', { password: newPassword }, link.access_token, 'PUT');
+      const user = json && typeof json === 'object' ? (json as { id?: unknown; email?: unknown }) : {};
+      if (typeof user.id !== 'string') throw new AccountError('Could not set the new password. Ask for a new link.', 500);
+      if (link.refresh_token) {
+        setSession({
+          access_token: link.access_token,
+          refresh_token: link.refresh_token,
+          expires_at: now() + (link.expires_in ?? 3600),
+          user: { id: user.id, email: typeof user.email === 'string' ? user.email : '' },
+        });
+      }
+    },
+    async changePassword(newPassword) {
+      const token = await accessToken();
+      if (!token) throw new AccountError(SIGN_IN_AGAIN_MESSAGE, 401);
+      await authCall('user', { password: newPassword }, token, 'PUT');
+    },
+    async changeEmail(newEmail) {
+      const token = await accessToken();
+      if (!token || !session) throw new AccountError(SIGN_IN_AGAIN_MESSAGE, 401);
+      const wanted = newEmail.trim();
+      const json = (await authCall('user', { email: wanted }, token, 'PUT')) as { email?: unknown } | null;
+      if (json && typeof json.email === 'string' && json.email.toLowerCase() === wanted.toLowerCase()) {
+        setSession({ ...session, user: { ...session.user, email: json.email } });
+        return 'changed';
+      }
+      return 'confirm_sent';
+    },
+    async deleteAccount() {
+      await rpc(ACCOUNT_RPC.deleteAccount.fn, ACCOUNT_RPC.deleteAccount.args());
+      setSession(null); // the login no longer exists, so there is nothing to log out on the server
+    },
+    takeSignOutReason() {
+      const r = signOutReason;
+      signOutReason = null;
+      return r;
     },
   };
 }
@@ -303,5 +380,32 @@ export function createMockAccount(cards: () => BlurbCard[], store: KeyValueStore
       delete state.feedback[u.id];
       save();
     },
+    async requestPasswordReset() {
+      await wait(null); // sample mode sends no email; the sign-in screen offers a test link
+    },
+    async completePasswordRecovery(link) {
+      // Sample links look like #access_token=mock-recovery:<email>&type=recovery
+      const m = /^mock-recovery:(.+)$/.exec(link.access_token);
+      if (!m) throw new AccountError('This reset link is invalid or has expired. Ask for a new one from the sign-in page.', 401);
+      setUser({ id: `mock-${m[1].trim().toLowerCase()}`, email: m[1].trim() });
+      await wait(null);
+    },
+    async changePassword() {
+      need();
+      await wait(null); // sample mode never stores passwords
+    },
+    async changeEmail(newEmail) {
+      const u = need();
+      setUser({ ...u, email: newEmail.trim() });
+      return wait('changed' as const);
+    },
+    async deleteAccount() {
+      const u = need();
+      delete state.prefs[u.id];
+      delete state.feedback[u.id];
+      setUser(null);
+      await wait(null);
+    },
+    takeSignOutReason: () => null,
   };
 }

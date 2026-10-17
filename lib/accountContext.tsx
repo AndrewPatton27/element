@@ -4,9 +4,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { BlurbCard } from '../contract/types.ts';
-import type { AccountApi, SignUpResult } from './account.ts';
+import type { AccountApi, EmailChangeResult, SignUpResult } from './account.ts';
 import { ViewTracker, feedbackEvent, reactionOf, type Feedback, type UserPrefs } from './accountLogic.ts';
-import type { AuthUser } from './session.ts';
+import type { AuthUser, RecoveryLink } from './session.ts';
 import { setOpenSourceListener } from './openUrl.ts';
 import { defaultStore } from './storage.ts';
 
@@ -26,6 +26,14 @@ export interface AccountState {
   trackView(card: BlurbCard): void;
   deleteMyData(): Promise<void>;
   refreshPrefs(): Promise<UserPrefs | null>;
+  /** "Please sign in again." after an expired session; cleared by clearNotice. */
+  notice: string | null;
+  clearNotice(): void;
+  requestPasswordReset(email: string, redirectTo: string): Promise<void>;
+  completePasswordRecovery(link: Extract<RecoveryLink, { ok: true }>, newPassword: string): Promise<void>;
+  changePassword(newPassword: string): Promise<void>;
+  changeEmail(newEmail: string): Promise<EmailChangeResult>;
+  deleteAccount(): Promise<void>;
 }
 
 const Ctx = createContext<AccountState | null>(null);
@@ -38,8 +46,21 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
   const [reactions, setReactions] = useState<Record<string, Feedback>>({});
   const [skipped, setSkipped] = useState(false);
   const views = useRef(new ViewTracker());
+  const [notice, setNotice] = useState<string | null>(null);
 
-  useEffect(() => account.onChange(setUser), [account]);
+  // Track the signed-in user; when the account signs us out by itself (expired
+  // session), keep its reason to show "Please sign in again."
+  useEffect(
+    () =>
+      account.onChange((u) => {
+        setUser(u);
+        if (!u) {
+          const reason = account.takeSignOutReason();
+          if (reason) setNotice(reason);
+        }
+      }),
+    [account],
+  );
 
   const refreshPrefs = useCallback(async () => {
     if (!account.currentUser()) return null;
@@ -128,8 +149,27 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
         await refreshPrefs();
       },
       refreshPrefs,
+      notice,
+      clearNotice: () => setNotice(null),
+      requestPasswordReset: (email, redirectTo) => account.requestPasswordReset(email, redirectTo),
+      async completePasswordRecovery(link, newPassword) {
+        await account.completePasswordRecovery(link, newPassword);
+        setNotice(null);
+      },
+      changePassword: (newPassword) => account.changePassword(newPassword),
+      async changeEmail(newEmail) {
+        const r = await account.changeEmail(newEmail);
+        setUser(account.currentUser());
+        return r;
+      },
+      async deleteAccount() {
+        await account.deleteAccount();
+        setReactions({});
+        views.current.reset();
+        setNotice('Your account was deleted.');
+      },
     }),
-    [account, user, prefs, skipped, reactions, refreshPrefs],
+    [account, user, prefs, skipped, reactions, refreshPrefs, notice],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

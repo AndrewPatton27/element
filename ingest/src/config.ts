@@ -26,20 +26,21 @@ export const config = {
     // mode accepts it; the prompt and schema descriptions state the limits either way.
     schemaMaxLength: false as boolean,
     reasoningEffort: 'low' as string | null,     // gpt-oss is a reasoning model; low keeps it fast. null = not sent
-    maxCompletionTokens: 1024,                   // includes reasoning tokens
+    maxCompletionTokens: 2048,                   // includes reasoning tokens; v3 output (card + detail) is about 600 tokens
     // Free-tier limits, read by Drew in the Groq console on 2026-10-17 (same for all three models).
     freeRpm: 30 as number | null,
     freeRpd: 1000 as number | null,
     freeTpm: 8000 as number | null,
     freeTpd: 200_000 as number | null,
-    // Tokens are the binding limit, so Groq gets less source text than Gemini (about 2.2k tokens per call).
+    // Tokens are the binding limit, so Groq gets less source text than Gemini. About 2.7k tokens per
+    // call since sum-v3 (prompt ~1.9k incl. 6,000 chars of source + ~0.8k output with the detail).
     sourceTextMaxChars: 6000,
-    estimatedTokensPerCall: 2200,
-    // Pacing: max(60 s / (RPM * rpmSafetyFactor) = 2.5 s, 60 s * tokensPerCall / (TPM * factor) = 20.6 s,
+    estimatedTokensPerCall: 2700,
+    // Pacing: max(60 s / (RPM * rpmSafetyFactor) = 2.5 s, 60 s * tokensPerCall / (TPM * factor) = 25.4 s,
     // this floor). The floor leaves room
     // for reasoning tokens we cannot measure offline.
     minIntervalMsFloor: 30_000,
-    // Daily cap: min(this, RPD, floor(TPD / tokensPerCall) = 90).
+    // Daily cap: min(this, RPD, floor(TPD / tokensPerCall) = 74).
     dailyCapCode: 80,
   },
   // Pacing safety margin for every AI provider: interval = ceil(60 s / (RPM * factor)).
@@ -49,12 +50,25 @@ export const config = {
   // After a 429, a provider is skipped for this long within the same run (next provider or template).
   rateLimitCooldownMs: 60_000,
   aiDailyCapCode: 600,                         // Gemini hard cap in code; effective cap = min(this, freeRpd)
-  promptVersion: 'sum-v2',                     // v2 (2026-10-17): plain 8th-grade style + everyday_relevance score
+  promptVersion: 'sum-v3',                     // v3 (2026-10-17, D-37): v2 (plain 8th-grade style + everyday_relevance) + in-depth detail
+  // Version stored on template and data cards (no AI). tpl-v2 = plain wording (2026-10-17).
+  // `--rewrite` redoes every published card whose prompt_version is neither this nor promptVersion.
+  templateVersion: 'tpl-v3',                   // v3: plain template text + a factual detail from structured fields
   providerOrder: ['gemini', 'groq', 'template'] as const, // a list on purpose: adding a provider is one entry
 
   // ---- card limits ------------------------------------------------------------
   headlineMaxChars: 90,
   headlineTargetChars: 60,                     // the prompt asks for about this many (short and plain)
+  // In-depth summary shown when a card is opened (D-37). Same validator rules as the card; if only
+  // the detail fails, the card is published with detail null.
+  detail: {
+    minParagraphs: 2,
+    maxParagraphs: 4,
+    maxWords: 180,                             // all paragraphs together
+    minKeyPoints: 3,
+    maxKeyPoints: 5,
+    keyPointMaxWords: 15,
+  },
   bodyMaxWords: 60,
   maxTickersPerCard: 5,
   maxSourcesPerCard: 8,
@@ -132,6 +146,8 @@ export const config = {
   // documents without one are skipped. Reuse permitted (1 CFR 2.6); public-domain copy limit.
   fedRegister: {
     endpoint: 'https://www.federalregister.gov/api/v1/documents.json',
+    // One document by number ({doc}), used by --rewrite to re-read a rule's abstract.
+    documentEndpoint: 'https://www.federalregister.gov/api/v1/documents/{doc}.json',
     perPage: 20,
     // Query B: final rules from agencies whose rules reach people's wallets (consumer finance, airline
     // passengers, taxes, phones and internet, energy bills, student loans). CFTC, Labor and export

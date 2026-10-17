@@ -8,6 +8,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { BlurbCard, CategorySlug } from '../contract/types.ts';
 import { useAppData } from '../lib/appData';
 import { useAccount } from '../lib/accountContext';
+import { forYouCoversTopics } from '../lib/accountLogic';
 import type { FeedTab } from '../lib/feedLogic';
 import { categoryName } from '../lib/format';
 import { defaultStore } from '../lib/storage';
@@ -21,6 +22,7 @@ import { NumbersPanel } from '../components/NumbersPanel';
 import { Shell, Wordmark } from '../components/Shell';
 import { SortToggle } from '../components/SortToggle';
 import { SourcesSheet } from '../components/SourcesSheet';
+import { DetailSheet } from '../components/DetailSheet';
 import { EmptyState, ErrorState, LoadingState } from '../components/States';
 
 const PROMPT_KEY = 'element.signin-prompt-dismissed';
@@ -36,6 +38,7 @@ export default function FeedScreen() {
   const [mode, setMode] = useState<FeedTab>(params.tab === 'for_you' ? 'for_you' : 'top');
   const [category, setCategory] = useState<CategorySlug | null>(null);
   const [sheetCard, setSheetCard] = useState<BlurbCard | null>(null);
+  const [detailCard, setDetailCard] = useState<BlurbCard | null>(null);
   const [promptHidden, setPromptHidden] = useState(() => store.get(PROMPT_KEY) === '1');
 
   // Signing out while on For you falls back to Top; arriving from onboarding opens For you.
@@ -49,6 +52,7 @@ export default function FeedScreen() {
   const forYou = mode === 'for_you';
   const { state, loadMore, retry } = useFeed(api, { mode, category: forYou ? null : category, user: acct.user?.id ?? null }, acct.account);
   const showSources = useCallback((c: BlurbCard) => setSheetCard(c), []);
+  const openDetail = useCallback((c: BlurbCard) => setDetailCard(c), []);
 
   const { noteCards, trackView, react } = acct;
   useEffect(() => {
@@ -77,6 +81,7 @@ export default function FeedScreen() {
         done={state.done}
         onEndReached={loadMore}
         onShowSources={showSources}
+        onOpenDetail={openDetail}
         wide={wide}
         reactions={signedIn ? acct.reactions : undefined}
         onReact={signedIn ? react : undefined}
@@ -94,10 +99,12 @@ export default function FeedScreen() {
 
   // Guests: one quiet line under the chips, dismissible. Never blocks the feed.
   const prompt =
-    !signedIn && !promptHidden ? (
+    !signedIn && (!promptHidden || acct.notice) ? (
       <View style={[styles.prompt, !wide && styles.promptNarrow, { backgroundColor: p.accentSoft }]}>
         <Pressable onPress={() => router.navigate('/signin' as never)} accessibilityRole="link" style={styles.promptMain}>
-          <Text style={[styles.promptText, { color: p.accentInk }]}>Sign in for a feed tailored to you →</Text>
+          <Text style={[styles.promptText, { color: p.accentInk }]}>
+            {acct.notice ? `${acct.notice} Sign in →` : 'Sign in for a feed tailored to you →'}
+          </Text>
         </Pressable>
         <Pressable
           onPress={() => {
@@ -119,7 +126,11 @@ export default function FeedScreen() {
   const forYouLine = forYou ? (
     <View style={[styles.forYouLine, !wide && styles.promptNarrow]}>
       <Text style={[styles.forYouText, { color: p.muted }]} numberOfLines={2}>
-        {followed.length ? `Tailored to ${followed.map((s) => categoryName(s, categories)).join(', ')} and your likes.` : 'Tailored to your likes.'}
+        {!forYouCoversTopics(state.items, followed)
+          ? 'No new cards in your topics yet; showing top stories.'
+          : followed.length
+            ? `Tailored to ${followed.map((s) => categoryName(s, categories)).join(', ')} and your likes.`
+            : 'Tailored to your likes.'}
       </Text>
       <Pressable onPress={() => router.navigate('/account' as never)} accessibilityRole="link" hitSlop={8}>
         <Text style={[styles.forYouEdit, { color: p.accentInk }]}>{followed.length ? 'Edit topics' : 'Pick topics'}</Text>
@@ -161,6 +172,7 @@ export default function FeedScreen() {
       {inlineError}
       <View style={[styles.fill, wide && { marginTop: 14 }]}>{body}</View>
       <SourcesSheet card={sheetCard} config={config} onClose={() => setSheetCard(null)} />
+      <DetailSheet card={detailCard} config={config} categories={categories} onClose={() => setDetailCard(null)} />
     </Shell>
   );
 }

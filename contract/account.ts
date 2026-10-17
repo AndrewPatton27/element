@@ -8,7 +8,7 @@
 import type { BlurbCard, CategorySlug, FeedPage } from './types.ts';
 
 /** What a user can record about a card (stored in core.user_events). */
-export type TrackKind = 'view' | 'open_source' | 'like' | 'dislike';
+export type TrackKind = 'view' | 'open_source' | 'open_detail' | 'like' | 'dislike' | 'dwell';
 
 /** `p_kind` of api.track: a TrackKind, or 'clear' to remove the user's like/dislike. */
 export type TrackAction = TrackKind | 'clear';
@@ -40,6 +40,9 @@ export interface SetPrefsParams {
 export interface TrackParams {
   p_blurb: string;                      // card id (uuid)
   p_kind: TrackAction;
+  /** Only for 'dwell': milliseconds the card was on screen (required there; ignored otherwise).
+   *  Under 300 is ignored; over 600000 is stored as 600000. Omit it for every other kind. */
+  p_ms?: number | null;
 }
 
 /** Response of api.track. 'ignored' = deduped or rate-limited; not an error. */
@@ -72,11 +75,19 @@ export interface DeleteMyDataResult {
   deleted_events: number;
 }
 
+/** Response of api.delete_account (body `{}`): the login and all its data are gone.
+ *  The app signs out locally right after; the old access token cannot be refreshed. */
+export interface DeleteAccountResult {
+  deleted: true;
+}
+
 /** `message` of a PostgREST error from these RPCs (HTTP status in brackets). */
 export type AccountRpcErrorMessage =
   | 'not_authenticated'                 // [401] no user in the token
   | `unknown_category: ${string}`       // [422] set_prefs
   | `category_followed_and_hidden: ${string}` // [422] set_prefs
   | 'invalid_kind'                      // [422] track
+  | 'invalid_ms'                        // [422] track: dwell without p_ms, or negative
   | 'unknown_card'                      // [422] track
-  | 'invalid_cursor';                   // [422] feed_for_you
+  | 'invalid_cursor'                    // [422] feed_for_you
+  | 'account_not_found';                // [404] delete_account called twice

@@ -65,7 +65,7 @@ export function usgsDraft(it: RawItem): SummaryDraft {
   const when = `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')} UTC on ${MON[t.getUTCMonth()]} ${t.getUTCDate()}`;
   const where = d.place ? (/^\d/.test(d.place) ? d.place : `in the ${d.place}`) : 'at an unnamed location';
   const parts = [`A magnitude ${d.mag.toFixed(1)} earthquake struck ${where} at ${when}.`];
-  if (d.alert) parts.push(`USGS alert level: ${d.alert}.`);
+  if (d.alert) parts.push(`USGS alert level: ${d.alert} (its scale for expected damage, from green to red).`);
   if (d.tsunami === 1) parts.push('It was in an ocean region; official tsunami warnings come from tsunami.gov.');
   return {
     headline: it.title.length > config.headlineMaxChars ? it.title.slice(0, config.headlineMaxChars - 1) + '…' : it.title,

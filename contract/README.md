@@ -30,6 +30,7 @@ The shared data contract between the back end (Supabase, `api` schema) and the a
 - **Every card** shows `AppConfig.disclaimer` ("Informational only · Not investment advice"). Cards with `ai.generated = true` also show `AppConfig.ai_notice` ("AI-generated summary · may contain errors"). Template cards have `ai.generated = false` and `ai.label = null`.
 - `image` is always `null` and `tickers[].quote` is always `null`: no publisher images and no stock prices.
 - `importance` is a ranking input. It is optional and is never shown.
+- `detail` is the in-depth summary shown when a card is opened: `{paragraphs: string[], key_points: string[]}` (2-4 paragraphs, at most 180 words in total; 3-5 key points of at most 15 words each), written in plain language from the same source. It is `null` (or missing from older servers) when there is none; the app then shows only the card.
 - `next_cursor` is opaque. Send it back unchanged; `null` means the end of the feed.
 - Macro values always cite the original agency (`source_name`, `source_short`), never bare "FRED".
 - Cards with a `cc_by_sa` source (Wikipedia) show their `attribution` (`Adapted from Wikipedia ("<title>") · CC BY-SA 4.0`) and link "CC BY-SA 4.0" to the `cc_by_sa` required notice URL.

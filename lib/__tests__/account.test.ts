@@ -1,7 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { authErrorMessage, needsRefresh, parseSession, passwordToggleLabel, validateCredentials } from '../session.ts';
-import { EMPTY_PREFS, ViewTracker, feedbackEvent, mockForYouOrder, needsOnboarding, nextFeedback, reactionOf, toggleTopic } from '../accountLogic.ts';
+import {
+  INVALID_RESET_LINK_MESSAGE,
+  authErrorMessage,
+  deleteConfirmed,
+  needsRefresh,
+  parseRecoveryLink,
+  parseSession,
+  passwordToggleLabel,
+  validateCredentials,
+  validateEmail,
+  validateNewPassword,
+} from '../session.ts';
+import {
+  EMPTY_PREFS,
+  ViewTracker,
+  forYouCoversTopics,
+  feedbackEvent,
+  mockForYouOrder,
+  needsOnboarding,
+  nextFeedback,
+  reactionOf,
+  toggleTopic,
+} from '../accountLogic.ts';
 import { ACCOUNT_RPC, AccountError, createMockAccount, createSupabaseAccount, parseUserPrefs } from '../account.ts';
 import { memoryStore } from '../storage.ts';
 import { card } from './helpers.ts';
@@ -211,4 +232,134 @@ test('mock account: works offline end to end and delete clears data', async () =
 test('password toggle says what pressing it will do', () => {
   assert.equal(passwordToggleLabel(false), 'Show password');
   assert.equal(passwordToggleLabel(true), 'Hide password');
+});
+
+test('new password rules: length and confirmation', () => {
+  assert.match(validateNewPassword('short', 'short') ?? '', /8 characters/);
+  assert.match(validateNewPassword('longenough', 'longenougX') ?? '', /don’t match/);
+  assert.equal(validateNewPassword('longenough', 'longenough'), null);
+  assert.equal(validateEmail(' new@x.co '), null);
+  assert.match(validateEmail('nope') ?? '', /valid email/);
+});
+
+test('recovery link: tokens from the fragment, errors and junk rejected', () => {
+  const ok = parseRecoveryLink('#access_token=abc&expires_in=3600&refresh_token=r1&token_type=bearer&type=recovery');
+  assert.deepEqual(ok, { ok: true, access_token: 'abc', refresh_token: 'r1', expires_in: 3600 });
+  const expired = parseRecoveryLink('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired');
+  assert.deepEqual(expired, { ok: false, error: INVALID_RESET_LINK_MESSAGE });
+  assert.equal(parseRecoveryLink('', '?error=access_denied&error_code=otp_expired').ok, false, 'error in the query string');
+  assert.equal(parseRecoveryLink('#access_token=abc&type=signup').ok, false, 'not a recovery link');
+  assert.equal(parseRecoveryLink('').ok, false, 'no fragment at all');
+});
+
+test('delete account needs the word DELETE', () => {
+  assert.equal(deleteConfirmed('DELETE'), true);
+  assert.equal(deleteConfirmed('  DELETE '), true);
+  assert.equal(deleteConfirmed('delete'), false);
+  assert.equal(deleteConfirmed(''), false);
+});
+
+test('account errors for email changes and reused passwords', () => {
+  assert.match(authErrorMessage(422, { error_code: 'email_exists' }), /already used/);
+  assert.match(authErrorMessage(422, { error_code: 'same_password', msg: 'New password should be different from the old password.' }), /different/);
+});
+
+test('password reset request: neutral on unknown emails, friendly on rate limit', async () => {
+  const seen: string[] = [];
+  let status = 200;
+  const { fn } = fakeFetch((url) => {
+    seen.push(url);
+    return status === 200
+      ? { status: 200, body: {} }
+      : { status, body: { error_code: 'over_email_send_rate_limit', msg: 'email rate limit exceeded' } };
+  });
+  const acct = createSupabaseAccount({ url: 'https://p', key: 'k', fetchFn: fn, store: memoryStore(), now: () => NOW });
+  await acct.requestPasswordReset(' a@b.co ', 'https://element.example/reset-password');
+  assert.equal(seen[0], 'https://p/auth/v1/recover?redirect_to=https%3A%2F%2Felement.example%2Freset-password');
+  status = 404; // some setups answer "user not found": still treated as sent
+  await acct.requestPasswordReset('nobody@b.co', 'https://x/reset-password');
+  status = 429;
+  await assert.rejects(acct.requestPasswordReset('a@b.co', 'https://x/reset-password'), /Too many reset emails/);
+});
+
+test('recovery link sets the new password and signs in', async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const { fn } = fakeFetch((url, init) => {
+    calls.push({ url, init });
+    return { status: 200, body: { id: 'u1', email: 'a@b.co' } };
+  });
+  const acct = createSupabaseAccount({ url: 'https://p', key: 'k', fetchFn: fn, store: memoryStore(), now: () => NOW });
+  await acct.completePasswordRecovery({ ok: true, access_token: 'rec-1', refresh_token: 'ref-9', expires_in: 3600 }, 'brand-new-pass');
+  assert.equal(calls[0].url, 'https://p/auth/v1/user');
+  assert.equal(calls[0].init.method, 'PUT');
+  assert.equal((calls[0].init.headers as Record<string, string>).Authorization, 'Bearer rec-1');
+  assert.deepEqual(JSON.parse(calls[0].init.body as string), { password: 'brand-new-pass' });
+  assert.equal(acct.currentUser()?.email, 'a@b.co');
+  assert.equal(await acct.accessToken(), 'rec-1');
+});
+
+test('change password and email, delete account, expired session reason', async () => {
+  const store = memoryStore();
+  store.set(
+    'element.session.v1',
+    JSON.stringify({ access_token: 'acc', refresh_token: 'r', expires_at: NOW + 3600, user: { id: 'u1', email: 'a@b.co' } }),
+  );
+  const calls: { url: string; init: RequestInit }[] = [];
+  const { fn } = fakeFetch((url, init) => {
+    calls.push({ url, init });
+    if (url.endsWith('/auth/v1/user')) {
+      const body = JSON.parse(init.body as string);
+      return { status: 200, body: { id: 'u1', email: body.email ?? 'a@b.co' } };
+    }
+    if (url.endsWith('/rpc/delete_account')) return { status: 200, body: { deleted: true } };
+    return { status: 200, body: {} };
+  });
+  const acct = createSupabaseAccount({ url: 'https://p', key: 'k', fetchFn: fn, store, now: () => NOW });
+  await acct.changePassword('another-pass-1');
+  assert.equal(calls.at(-1)!.init.method, 'PUT');
+  assert.equal(await acct.changeEmail(' new@b.co '), 'changed');
+  assert.equal(acct.currentUser()?.email, 'new@b.co');
+  assert.equal(JSON.parse(store.get('element.session.v1')!).user.email, 'new@b.co', 'saved session updated too');
+  await acct.deleteAccount();
+  assert.ok(calls.some((c) => c.url.endsWith('/rpc/delete_account')));
+  assert.equal(acct.currentUser(), null);
+  assert.equal(store.get('element.session.v1'), null, 'tokens cleared');
+  assert.equal(acct.takeSignOutReason(), null, 'a deliberate delete is not an expired session');
+
+  const expiredStore = memoryStore();
+  expiredStore.set(
+    'element.session.v1',
+    JSON.stringify({ access_token: 'old', refresh_token: 'r', expires_at: NOW - 5, user: { id: 'u1', email: 'a@b.co' } }),
+  );
+  const { fn: reject } = fakeFetch(() => ({ status: 400, body: { msg: 'Invalid Refresh Token: Refresh Token Not Found' } }));
+  const stale = createSupabaseAccount({ url: 'https://p', key: 'k', fetchFn: reject, store: expiredStore, now: () => NOW });
+  assert.equal(await stale.accessToken(), null);
+  assert.equal(stale.takeSignOutReason(), 'Please sign in again.');
+  assert.equal(stale.takeSignOutReason(), null, 'shown once');
+  await assert.rejects(stale.changePassword('another-pass-1'), /Please sign in again/);
+});
+
+test('mock account: reset link, password and email change, delete account', async () => {
+  const acct = createMockAccount(() => [card()], memoryStore());
+  await acct.requestPasswordReset('me@x.co', 'https://x/reset-password');
+  await assert.rejects(
+    acct.completePasswordRecovery({ ok: true, access_token: 'forged', refresh_token: null, expires_in: null }, 'longenough'),
+    /invalid or has expired/,
+  );
+  await acct.completePasswordRecovery({ ok: true, access_token: 'mock-recovery:me@x.co', refresh_token: null, expires_in: null }, 'longenough');
+  assert.equal(acct.currentUser()?.email, 'me@x.co');
+  await acct.changePassword('another-pass-1');
+  assert.equal(await acct.changeEmail('you@x.co'), 'changed');
+  assert.equal(acct.currentUser()?.email, 'you@x.co');
+  await acct.setPrefs(['tech']);
+  await acct.deleteAccount();
+  assert.equal(acct.currentUser(), null);
+});
+
+test('For you header admits when followed topics have no cards', () => {
+  const cards = [{ category: 'policy' }, { category: 'markets' }] as never[];
+  assert.equal(forYouCoversTopics(cards, ['energy', 'tech']), false);
+  assert.equal(forYouCoversTopics(cards, ['policy']), true);
+  assert.equal(forYouCoversTopics(cards, []), true, 'no topics followed: nothing to admit');
+  assert.equal(forYouCoversTopics([], ['energy']), true, 'still loading: no claim either way');
 });

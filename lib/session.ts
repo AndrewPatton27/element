@@ -51,6 +51,9 @@ export function authErrorMessage(status: number, body: unknown): string {
   }
   if (code === 'invalid_credentials' || /invalid login credentials/i.test(raw ?? '')) return 'Email or password is not right.';
   if (code === 'user_already_exists' || /already registered/i.test(raw ?? '')) return 'That email already has an account. Sign in instead.';
+  if (code === 'email_exists' || /email address has already been registered/i.test(raw ?? ''))
+    return 'That email is already used by another account.';
+  if (code === 'same_password') return 'Choose a password that is different from your current one.';
   if (code === 'email_not_confirmed' || /email not confirmed/i.test(raw ?? '')) return 'Check your inbox and confirm your email first.';
   if (code === 'weak_password' || /password/i.test(raw ?? '')) return raw ?? 'Choose a stronger password.';
   if (status === 429) return 'Too many tries. Wait a minute and try again.';
@@ -61,4 +64,46 @@ export function authErrorMessage(status: number, body: unknown): string {
 // Show/hide password toggle: what the button says, for screen readers and tooltips.
 export function passwordToggleLabel(visible: boolean): string {
   return visible ? 'Hide password' : 'Show password';
+}
+
+export const MIN_PASSWORD_LENGTH = 8;
+
+// New password + confirmation (sign-up uses validateCredentials; this is for reset and change).
+export function validateNewPassword(password: string, confirm: string): string | null {
+  if (password.length < MIN_PASSWORD_LENGTH) return `Use at least ${MIN_PASSWORD_LENGTH} characters for the password.`;
+  if (password !== confirm) return 'The two passwords don’t match.';
+  return null;
+}
+
+export function validateEmail(email: string): string | null {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? null : 'Enter a valid email address.';
+}
+
+// Same text whether or not the email has an account, so the form can't be used to
+// find out who has signed up.
+export const RESET_SENT_MESSAGE = 'If that email has an account, we sent a reset link.';
+export const RESET_RATE_LIMIT_MESSAGE = 'Too many reset emails were sent recently. Try again later.';
+export const SIGN_IN_AGAIN_MESSAGE = 'Please sign in again.';
+export const INVALID_RESET_LINK_MESSAGE = 'This reset link is invalid or has expired. Ask for a new one from the sign-in page.';
+
+export type RecoveryLink = { ok: true; access_token: string; refresh_token: string | null; expires_in: number | null } | { ok: false; error: string };
+
+// Reads the link Supabase emails for a password reset. Tokens arrive in the URL
+// fragment (#access_token=...&type=recovery); errors (expired, used) arrive as
+// error / error_code / error_description in the fragment or the query string.
+export function parseRecoveryLink(hash: string, search = ''): RecoveryLink {
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  const query = new URLSearchParams(search.replace(/^\?/, ''));
+  const err = params.get('error') ?? query.get('error');
+  if (err) return { ok: false, error: INVALID_RESET_LINK_MESSAGE }; // expired, already used or otherwise rejected
+  const token = params.get('access_token');
+  if (!token || params.get('type') !== 'recovery') return { ok: false, error: INVALID_RESET_LINK_MESSAGE };
+  const exp = Number(params.get('expires_in'));
+  return { ok: true, access_token: token, refresh_token: params.get('refresh_token'), expires_in: Number.isFinite(exp) && exp > 0 ? exp : null };
+}
+
+// Account deletion asks the user to type DELETE.
+export const DELETE_CONFIRM_WORD = 'DELETE';
+export function deleteConfirmed(typed: string): boolean {
+  return typed.trim() === DELETE_CONFIRM_WORD;
 }

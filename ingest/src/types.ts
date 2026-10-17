@@ -1,6 +1,6 @@
 // Internal types for the ingest pipeline (the public card shape is in contract/types.ts).
 
-import type { CategorySlug, Exchange, MacroFact, SourceKind } from '../../contract/types.ts';
+import type { CardDetail, CategorySlug, Exchange, MacroFact, SourceKind } from '../../contract/types.ts';
 
 export type LicenseClass = 'public_domain' | 'company_filing' | 'cc_by_sa';
 
@@ -40,6 +40,8 @@ export interface SummaryDraft {
   tickers: string[];
   /** AI only: 1-5, would a typical young adult notice or be affected? Not part of the card. */
   everyday_relevance?: number | null;
+  /** In-depth summary (shown when the card is opened); null = none. */
+  detail?: CardDetail | null;
 }
 
 export interface SummarizeInput {
@@ -78,6 +80,7 @@ export interface PublishPayload {
   model: string | null;
   prompt_version: string | null;
   attribution: string | null;
+  detail?: CardDetail | null;
   sources: {
     name: string;
     kind: SourceKind;
@@ -89,6 +92,31 @@ export interface PublishPayload {
     is_primary: boolean;
   }[];
 }
+
+/** One row of api.blurbs_to_revise (a published card that --rewrite may redo). */
+export interface RevisableCard {
+  id: string;
+  kind: 'summary' | 'data' | 'link_out';
+  headline: string;
+  body: string | null;
+  category: string;
+  event_type: string | null;
+  ai_generated: boolean;
+  prompt_version: string | null;
+  tickers: TickerRef[];
+  macro: MacroFact[];
+  attribution: string | null;
+  as_of: string;
+  sort_at: string;
+  dedupe_key: string;
+  sources: PublishPayload['sources'];
+  item: { source: string; external_id: string | null; url: string; title: string | null; license_class: string } | null;
+}
+
+/** Payload for api.revise_blurb. */
+export type RevisePayload =
+  | { id: string; action: 'revise'; headline: string; body: string | null; ai_generated: boolean; model: string | null; prompt_version: string; detail: CardDetail | null }
+  | { id: string; action: 'hide'; note: string };
 
 /** Payload for api.upsert_macro. */
 export interface MacroObservation {

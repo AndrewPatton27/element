@@ -33,7 +33,7 @@ test('payload: one primary source with URL, AI flag, prompt version, ticker deta
   assert.equal(p.sources[0].is_primary, true);
   assert.deepEqual(validatePublish(p).errors, []);
   const t = buildPublishPayload(item, { headline: 'H', body: null, category: 'earnings', event_type: null, tickers: [] }, { aiGenerated: false, model: null });
-  assert.equal(t.prompt_version, null);
+  assert.equal(t.prompt_version, config.templateVersion, 'template cards carry the template version');
   assert.equal(t.event_type, 'earnings', 'Item 2.02 decides the event type');
 });
 

@@ -17,7 +17,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { aiDailyCap, config } from '../config.ts';
-import { assertSummarizable, checkRelevance, checkShape, trimBodyToFit, validateDraft } from '../validate.ts';
+import { assertSummarizable, checkRelevance, checkShape, trimBodyToFit, validateDetail, validateDraft, type SourceText } from '../validate.ts';
 import { templateSummarizer } from './template.ts';
 import type { SummarizeInput, Summarizer, SummaryDraft } from '../types.ts';
 
@@ -76,6 +76,18 @@ export interface ChainResult {
   low_relevance?: boolean;           // true: below opts.minRelevance, do not publish
 }
 
+/**
+ * The card passed; now the detail. A detail that fails its checks (or is missing) is dropped
+ * (detail null) and the card is still used: the card is the product, the detail is extra.
+ */
+function finishDetail(draft: SummaryDraft, source: SourceText, provider: string, log: string[]): SummaryDraft {
+  if (draft.detail === undefined || draft.detail === null) return { ...draft, detail: null };
+  const v = validateDetail(draft.detail, source);
+  if (v.ok) return draft;
+  log.push(`${provider}: detail dropped (card kept): ${v.errors.join('; ')}`);
+  return { ...draft, detail: null };
+}
+
 export async function summarizeWithChain(
   input: SummarizeInput,
   providers: Summarizer[],
@@ -127,7 +139,7 @@ export async function summarizeWithChain(
       const v = shape.length ? { ok: false, errors: shape } : validateDraft(draft, source);
       if (v.ok) {
         log.push(`${p.name}: ok (attempt ${attempt})`);
-        return { draft, provider: p.name, ai_generated: true, model: p.model ?? null, log, relevance };   // the model that wrote it
+        return { draft: finishDetail(draft, source, p.name, log), provider: p.name, ai_generated: true, model: p.model ?? null, log, relevance };   // the model that wrote it
       }
       log.push(`${p.name}: rejected (attempt ${attempt}): ${v.errors.join('; ')}`);
       // Length-only problems: one deterministic fix (whole sentences only), then full re-validation.
@@ -137,7 +149,7 @@ export async function summarizeWithChain(
         const v2 = validateDraft(fixed, source);
         if (v2.ok) {
           log.push(`${p.name}: ok after trimming the body to whole sentences (attempt ${attempt})`);
-          return { draft: fixed, provider: p.name, ai_generated: true, model: p.model ?? null, log, relevance };
+          return { draft: finishDetail(fixed as SummaryDraft, source, p.name, log), provider: p.name, ai_generated: true, model: p.model ?? null, log, relevance };
         }
         log.push(`${p.name}: trimmed body still rejected: ${v2.errors.join('; ')}`);
       }

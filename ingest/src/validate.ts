@@ -39,6 +39,7 @@ export interface Draft {
   event_type: string | null;
   tickers: string[];
   everyday_relevance?: number | null;
+  detail?: { paragraphs?: unknown; key_points?: unknown } | null;
 }
 
 export interface SourceText {
@@ -252,6 +253,55 @@ export function validateDraft(draft: Draft, source: SourceText): Result {
     if (run > limit) errors.push(`copies ${run} consecutive words from the source (limit ${limit})`);
   }
 
+  return { ok: errors.length === 0, errors };
+}
+
+// ---- in-depth detail ----------------------------------------------------------------
+
+/** Shape and length of a detail: 2-4 paragraphs (<= 180 words together), 3-5 key points (<= 15 words each). */
+export function checkDetailShape(d: unknown): string[] {
+  const c = config.detail;
+  if (typeof d !== 'object' || d === null || Array.isArray(d)) return ['detail is not an object'];
+  const { paragraphs, key_points } = d as { paragraphs?: unknown; key_points?: unknown };
+  const e: string[] = [];
+  const strings = (x: unknown) => Array.isArray(x) && x.every((s) => typeof s === 'string' && s.trim() !== '');
+  if (!strings(paragraphs)) e.push('detail.paragraphs must be a list of non-empty strings');
+  else {
+    const p = paragraphs as string[];
+    if (p.length < c.minParagraphs || p.length > c.maxParagraphs) e.push(`detail needs ${c.minParagraphs}-${c.maxParagraphs} paragraphs (had ${p.length})`);
+    const w = countWords(p.join(' '));
+    if (w > c.maxWords) e.push(`detail longer than ${c.maxWords} words (was ${w})`);
+  }
+  if (!strings(key_points)) e.push('detail.key_points must be a list of non-empty strings');
+  else {
+    const k = key_points as string[];
+    if (k.length < c.minKeyPoints || k.length > c.maxKeyPoints) e.push(`detail needs ${c.minKeyPoints}-${c.maxKeyPoints} key points (had ${k.length})`);
+    for (const s of k) if (countWords(s) > c.keyPointMaxWords) e.push(`key point longer than ${c.keyPointMaxWords} words: "${s.slice(0, 40)}"`);
+  }
+  return e;
+}
+
+/**
+ * Full check of an AI detail against its licensed source: shape, no advice language, every number
+ * in the source, copy limit for the license (10 words filings/Wikipedia, 25 public domain).
+ */
+export function validateDetail(d: unknown, source: SourceText): Result {
+  const errors = checkDetailShape(d);
+  if (errors.length) return { ok: false, errors };
+  const { paragraphs, key_points } = d as { paragraphs: string[]; key_points: string[] };
+  const text = [...paragraphs, ...key_points].join('\n');
+  const advice = findAdvice(text);
+  if (advice.length) errors.push(`detail advice language: ${advice.join(', ')}`);
+  const srcNums = new Set(extractNumbers(source.text));
+  const missing = extractNumbers(text).filter((n) => !srcNums.has(n));
+  if (missing.length) errors.push(`detail numbers not in source: ${[...new Set(missing)].join(', ')}`);
+  const limit = config.copyLimitWords[source.licenseClass];
+  if (limit === undefined) errors.push(`no copy limit for license class ${source.licenseClass}`);
+  else {
+    // each paragraph and key point on its own, so a copied run cannot span two of them
+    const run = Math.max(...[...paragraphs, ...key_points].map((t) => longestCopiedRun(t, source.text, ITEM_TITLES)));
+    if (run > limit) errors.push(`detail copies ${run} consecutive words from the source (limit ${limit})`);
+  }
   return { ok: errors.length === 0, errors };
 }
 

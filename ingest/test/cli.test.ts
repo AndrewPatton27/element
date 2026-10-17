@@ -10,8 +10,8 @@ import { validatePublish } from '../src/validate.ts';
 import type { Summarizer } from '../src/types.ts';
 
 test('argument parsing', () => {
-  assert.deepEqual(parseArgs([]), { dryRun: false, loop: false, only: [], limit: 20, json: false });
-  assert.deepEqual(parseArgs(['--dry-run', '--only', 'sec,fed', '--limit', '3', '--json']), { dryRun: true, loop: false, only: ['sec', 'fed'], limit: 3, json: true });
+  assert.deepEqual(parseArgs([]), { dryRun: false, loop: false, only: [], limit: 20, json: false, rewrite: false });
+  assert.deepEqual(parseArgs(['--dry-run', '--only', 'sec,fed', '--limit', '3', '--json']), { dryRun: true, loop: false, only: ['sec', 'fed'], limit: 3, json: true, rewrite: false });
   assert.deepEqual(parseArgs(['--only', 'bea']).only, ['bea']);
   assert.equal(parseArgs(['--loop']).loop, true);
   assert.throws(() => parseArgs(['--only', 'guardian']), /unknown source/);

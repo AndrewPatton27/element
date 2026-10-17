@@ -8,6 +8,7 @@
 // - Frozen. Changes go through review (see README.md).
 // - Changed 2026-10-17 by PM review 2 (additive only): categories world, science, safety;
 //   license class cc_by_sa; event types world_event, recall, science.
+// - Changed 2026-10-17 (D-37, additive): BlurbCard.detail, the in-depth summary shown when a card is opened.
 
 /** Card kinds. 'link_out' is reserved and never produced in v1; the app skips it. */
 export type BlurbKind = 'summary' | 'data' | 'link_out';
@@ -95,6 +96,16 @@ export interface Source {
   is_primary: boolean;
 }
 
+/**
+ * In-depth summary shown when a card is opened. Plain language (about 8th-grade level):
+ * 2-4 short paragraphs (<= 180 words in total) and 3-5 key points (each <= 15 words).
+ * Same rules as the card: facts from the source only, no advice, no predictions.
+ */
+export interface CardDetail {
+  paragraphs: string[];
+  key_points: string[];
+}
+
 export interface BlurbCard {
   id: string;                           // uuid
   kind: BlurbKind;                      // unknown kind -> the app skips the card
@@ -121,6 +132,7 @@ export interface BlurbCard {
   is_saved: boolean;                    // always false for guests
   share_path: string;                   // "/b/<id>"
   importance?: number;                  // ranking input (about 1..20); optional, never shown
+  detail?: CardDetail | null;           // in-depth summary; null or missing = none (older servers omit it)
 }
 
 /** Response of `api.feed`. `next_cursor` null = end of feed. Treat the cursor as opaque. */

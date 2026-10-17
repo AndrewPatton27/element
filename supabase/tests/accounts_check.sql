@@ -155,7 +155,8 @@ begin
   -- view dedupe: second view inside the hour is ignored
   if api.track((ids->>'TECH')::uuid, 'view') ->> 'status' <> 'recorded' then raise exception 'FAIL: first view not recorded'; end if;
   if api.track((ids->>'TECH')::uuid, 'view') ->> 'status' <> 'ignored'  then raise exception 'FAIL: second view not ignored'; end if;
-  if api.track((ids->>'TECH')::uuid, 'open_source') ->> 'status' <> 'recorded' then raise exception 'FAIL: open_source not recorded'; end if;
+  -- (on an energy card far down, so it cannot tie with the follow-boost check below)
+  if api.track((ids->>'X1')::uuid, 'open_source') ->> 'status' <> 'recorded' then raise exception 'FAIL: open_source not recorded'; end if;
 
   -- like then dislike on the same card: only the dislike is kept; clear removes it
   perform api.track((ids->>'MKT')::uuid, 'like');

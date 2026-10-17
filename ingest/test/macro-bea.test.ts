@@ -64,7 +64,7 @@ test('gas price (weekly, usd): card at >= 1% with "week of" wording; smaller mov
   assert.equal(o.period_label, 'Week of Oct 12');
   const c = buildDataCard(o)!;
   assert.equal(c.headline, 'Average regular gas price rises to $4.33 in the week of Oct 12');
-  assert.equal(c.body, 'The average regular gas price was $4.33 in the week of Oct 12, up 1.2% from the prior week.');
+  assert.equal(c.body, 'The average regular gas price, what drivers pay per gallon across the U.S., was $4.33 in the week of Oct 12, up 1.2% from the prior week.');
   assert.equal(c.category, 'energy');
   assert.equal(c.macro[0].source_short, 'EIA via FRED');
   assert.deepEqual(validatePublish(c).errors, []);
@@ -78,7 +78,7 @@ test('jobless claims (weekly, number): card at >= 5%, "week ending" wording, cha
   assert.equal(o.move, 5.29);
   const c = buildDataCard(o)!;
   assert.equal(c.headline, 'Initial jobless claims rise to 199,000 in the week ending Oct 10');
-  assert.equal(c.body, 'Initial jobless claims were 199,000 in the week ending Oct 10, up 10,000 from the prior week.');
+  assert.equal(c.body, 'Initial jobless claims, the number of people who newly applied for unemployment benefits, were 199,000 in the week ending Oct 10, up 10,000 from the prior week.');
   assert.equal(c.sources[0].name, 'U.S. Department of Labor');
   assert.equal(buildDataCard(buildObservation('ICSA', pts(['2026-10-03', 195_000], ['2026-10-10', 199_000]))!), null, '+2% < 5%');
 });
@@ -92,11 +92,11 @@ test('monthly series: one card per new month regardless of size (retail sales, h
   assert.deepEqual([h.display_value, h.change_text], ['1.28M', '+45,000']);
   const hc = buildDataCard(h)!;
   assert.equal(hc.headline, 'Housing starts rise to 1.28M (annual rate) in August');
-  assert.equal(hc.body, 'Housing starts were 1.28M (annual rate) in August, up 45,000 from the prior month.');
+  assert.equal(hc.body, 'Housing starts, the number of new homes builders began, were 1.28M (annual rate) in August, up 45,000 from the prior month.');
 
   const p = buildObservation('PAYEMS', pts(['2026-08-01', 158_925], ['2026-09-01', 159_044]))!;
   const pc = buildDataCard(p)!;
-  assert.equal(pc.body, 'Nonfarm payroll jobs were 159.0M in September, up 119,000 from the prior month.');
+  assert.equal(pc.body, 'Nonfarm payroll jobs, the total number of U.S. jobs outside farming, were 159.0M in September, up 119,000 from the prior month.');
   assert.equal(pc.category, 'economy');
   assert.equal(pc.event_type, 'macro_release');
   // a tiny monthly move still gets its card
@@ -108,13 +108,13 @@ test('GDP (quarterly): "Q2 2026" period and "prior quarter" wording', () => {
   assert.equal(o.period_label, 'Q2 2026');
   const c = buildDataCard(o)!;
   assert.equal(c.headline, 'Real GDP growth rate rises to 2.2% in Q2 2026');
-  assert.equal(c.body, 'The real GDP growth rate was 2.2% in Q2 2026, up 0.4 points from the prior quarter.');
+  assert.equal(c.body, 'The real GDP growth rate, how fast the U.S. economy grew, at a yearly pace, was 2.2% in Q2 2026, up 0.4 points from the prior quarter.');
   assert.equal(c.macro[0].source_name, 'U.S. Bureau of Economic Analysis via FRED');
 });
 
 test('daily wording unchanged ("prior day", no date in the headline)', () => {
   const c = buildDataCard(buildObservation('DGS2', pts(['2026-10-15', 3.4], ['2026-10-16', 3.48]))!)!;
-  assert.equal(c.body, 'The 2-year Treasury yield was 3.48% on Oct 16, up 0.08 points from the prior day.');
+  assert.equal(c.body, 'The 2-year Treasury yield, the interest rate the U.S. government pays to borrow for 2 years, was 3.48% on Oct 16, up 0.08 points from the prior day.');
 });
 
 // ---- BEA RSS ------------------------------------------------------------------------

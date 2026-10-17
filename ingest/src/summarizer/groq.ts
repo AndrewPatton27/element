@@ -24,8 +24,18 @@ export const GROQ_JSON_SCHEMA = {
       event_type: { type: ['string', 'null'] },
       tickers: { type: 'array', items: { type: 'string' } },
       everyday_relevance: { type: 'integer', description: `1 to 5. ${RELEVANCE_RUBRIC}` },
+      detail: {
+        type: 'object',
+        description: `In-depth version: ${config.detail.minParagraphs}-${config.detail.maxParagraphs} short paragraphs (<= ${config.detail.maxWords} words in total) and ${config.detail.minKeyPoints}-${config.detail.maxKeyPoints} key points (<= ${config.detail.keyPointMaxWords} words each).`,
+        properties: {
+          paragraphs: { type: 'array', items: { type: 'string' } },
+          key_points: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['paragraphs', 'key_points'],
+        additionalProperties: false,
+      },
     },
-    required: ['headline', 'body', 'category', 'event_type', 'tickers', 'everyday_relevance'],
+    required: ['headline', 'body', 'category', 'event_type', 'tickers', 'everyday_relevance', 'detail'],
     additionalProperties: false,
   },
 };

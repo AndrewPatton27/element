@@ -1,7 +1,9 @@
-// CLI.  node src/main.ts [--dry-run] [--once | --loop] [--only sec,fed,bea,fedreg,macro] [--limit N] [--json]
+// CLI.  node src/main.ts [--dry-run] [--once | --loop | --rewrite] [--only sec,fed,...] [--limit N] [--json]
 //   --dry-run  read fixtures from src/fixtures, no network, no keys, publish nothing
 //   --once     one run (default)
 //   --loop     run every config.pollIntervalMinutes until stopped (Ctrl+C)
+//   --rewrite  redo published cards written with an older prompt/template version, in place
+//              (--limit = max cards; with --dry-run: the cards in src/fixtures/rewrite-cards.json)
 //   --only     comma-separated subset of sources (macro, fed, bea, fedreg, sec, wiki, cpsc, usgs, nasa)
 //   --limit    max news items summarized per run (default 20)
 //   --json     with --dry-run: print the card payloads as JSON
@@ -12,6 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { fetchAllowed } from './allowlist.ts';
 import { config, describeEnv, fedRegisterUrls, readEnv } from './config.ts';
 import { runOnce, SOURCE_NAMES, type Deps, type SourceName } from './pipeline.ts';
+import { runRewrite } from './rewrite.ts';
+import type { RevisableCard } from './types.ts';
 import { createDryRunPublisher, createSupabasePublisher } from './publish.ts';
 import { fileCounter, memoryCounter } from './summarizer/chain.ts';
 import { buildProviders } from './summarizer/providers.ts';
@@ -25,16 +29,18 @@ export interface Args {
   only: SourceName[];
   limit: number;
   json: boolean;
+  rewrite: boolean;
 }
 
 export function parseArgs(argv: string[]): Args {
-  const a: Args = { dryRun: false, loop: false, only: [], limit: 20, json: false };
+  const a: Args = { dryRun: false, loop: false, only: [], limit: 20, json: false, rewrite: false };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--dry-run') a.dryRun = true;
     else if (k === '--once') a.loop = false;
     else if (k === '--loop') a.loop = true;
     else if (k === '--json') a.json = true;
+    else if (k === '--rewrite') a.rewrite = true;
     else if (k === '--only') {
       const v = (argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
       for (const s of v) if (!(SOURCE_NAMES as readonly string[]).includes(s)) throw new Error(`--only: unknown source "${s}" (use ${SOURCE_NAMES.join(', ')})`);
@@ -110,8 +116,9 @@ export async function main(argv: string[]): Promise<number> {
   const args = parseArgs(argv);
   const log = (s: string) => console.log(s);
 
+  if (args.rewrite && args.loop) throw new Error('--rewrite cannot be combined with --loop');
   if (args.dryRun) {
-    const dry = createDryRunPublisher();
+    const dry = createDryRunPublisher(args.rewrite ? (JSON.parse(fixture('rewrite-cards.json')) as { cards: RevisableCard[] }).cards : []);
     const deps: Deps = {
       fetchText: fixtureFetcher(),
       publisher: dry.publisher,
@@ -121,6 +128,12 @@ export async function main(argv: string[]): Promise<number> {
       now: DRY_NOW,                                           // fixtures are from this day
       log,
     };
+    if (args.rewrite) {
+      const rs = await runRewrite(deps, { limit: args.limit });
+      log(`dry run rewrite: ${JSON.stringify(rs)}`);
+      if (args.json) console.log(JSON.stringify(dry.revisions, null, 2));
+      return 0;
+    }
     const stats = await runOnce(deps, { only: args.only, limit: args.limit });
     log(`dry run: ${JSON.stringify(stats)}`);
     if (args.json) console.log(JSON.stringify({ cards: dry.cards, macro: dry.macro }, null, 2));
@@ -141,6 +154,11 @@ export async function main(argv: string[]): Promise<number> {
     now: new Date(),
     log,
   };
+  if (args.rewrite) {
+    const rs = await runRewrite(deps, { limit: args.limit });
+    log(`rewrite finished: ${JSON.stringify(rs)}`);
+    return 0;
+  }
   do {
     deps.now = new Date();
     const stats = await runOnce(deps, { only: args.only, limit: args.limit });
