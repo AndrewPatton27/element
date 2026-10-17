@@ -8,11 +8,11 @@ The shared data contract between the back end (Supabase, `api` schema) and the a
 |---|---|
 | `types.ts` | TypeScript types for every response the app reads: `BlurbCard`, `FeedPage`, `MacroFact`, `AppConfig`, `RequiredNotice`, `Category`, `Source`, `Ticker`, `FeedMode`, `FeedParams`. Erasable TypeScript only (no enums or namespaces), so it can be imported with `import type` from Node scripts and the Expo app. |
 | `fixtures/feed.page1.json` | `FeedPage`: first page of the `top` feed (22 cards, all 9 categories, summary and data cards) with a `next_cursor`. |
-| `fixtures/feed.page2.json` | `FeedPage`: the following page, `next_cursor: null` (end of feed). |
+| `fixtures/feed.page2.json` | `FeedPage`: the following page, `next_cursor: null` (end of feed). Includes one sample card each for World (a Wikipedia-style `cc_by_sa` card with its attribution), Recalls & Safety and Science & Space. |
 | `fixtures/feed.empty.json` | `FeedPage` with no cards. |
 | `fixtures/numbers_to_know.json` | `MacroFact[]` for the six series (DGS2, DGS10, DFF, CPIAUCSL, UNRATE, DCOILWTICO). |
 | `fixtures/app_config.json` | `AppConfig`: disclaimer, AI notice, required notices, feature flags. |
-| `fixtures/categories.json` | `Category[]`: the 9 category slugs with display names. |
+| `fixtures/categories.json` | `Category[]`: the 12 category slugs with display names, in display order. The live `api.categories` returns only categories that have at least one published card. |
 
 ## Where the data comes from
 
@@ -32,6 +32,8 @@ The shared data contract between the back end (Supabase, `api` schema) and the a
 - `importance` is a ranking input. It is optional and is never shown.
 - `next_cursor` is opaque. Send it back unchanged; `null` means the end of the feed.
 - Macro values always cite the original agency (`source_name`, `source_short`), never bare "FRED".
+- Cards with a `cc_by_sa` source (Wikipedia) show their `attribution` (`Adapted from Wikipedia ("<title>") · CC BY-SA 4.0`) and link "CC BY-SA 4.0" to the `cc_by_sa` required notice URL.
+- Display names can change without a contract change (2026-10-17: policy = Government, personal-finance = Money, markets = Business); slugs never change.
 
 ## Fixtures are samples
 

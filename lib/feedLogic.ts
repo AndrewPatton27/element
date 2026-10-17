@@ -3,8 +3,12 @@
 import type { BlurbCard, CategorySlug, FeedMode, FeedPage } from '../contract/types.ts';
 import { isBlurbCard } from './types.ts';
 
+// The feed tabs. 'for_you' is the signed-in personal feed (api.feed_for_you).
+export type FeedTab = FeedMode | 'for_you';
+
 export interface FeedQuery {
-  mode: FeedMode;
+  mode: FeedTab;
+  user?: string | null; // for_you depends on who is signed in
   category: CategorySlug | null;
 }
 
@@ -24,7 +28,7 @@ export type FeedAction =
   | { type: 'fail'; key: string; error: string };
 
 export function feedKey(q: FeedQuery): string {
-  return `${q.mode}|${q.category ?? 'all'}`;
+  return `${q.mode}|${q.category ?? 'all'}${q.mode === 'for_you' ? `|${q.user ?? ''}` : ''}`;
 }
 
 export function initialFeedState(key: string): FeedState {

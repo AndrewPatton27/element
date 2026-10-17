@@ -3,6 +3,7 @@
 
 import { fetchAllowed, type FetchLike } from './allowlist.ts';
 import { config } from './config.ts';
+import { resolveSecClassification } from './sources/sec.ts';
 import type { MacroObservation, PublishPayload, RawItem, SummaryDraft } from './types.ts';
 
 export interface Publisher {
@@ -49,7 +50,7 @@ export function createSupabasePublisher(opts: { url: string; key: string; fetchI
     upsertItem: (item) => rpc('upsert_item', { p: itemPayload(item) }),
     setItemStatus: async (id, status, note) => { await rpc('set_item_status', { p_id: id, p_status: status, p_note: note }); },
     publishBlurb: (p) => rpc('publish_blurb', { p }),
-    upsertMacro: async (o) => { await rpc('upsert_macro', { p: o }); },
+    upsertMacro: async ({ move: _move, ...o }) => { await rpc('upsert_macro', { p: o }); },   // move is not stored
   };
 }
 
@@ -102,14 +103,22 @@ export function buildPublishPayload(
   const tickers = draft.tickers
     .map((s) => known.get(s.toUpperCase()) ?? { symbol: s.toUpperCase(), name: s.toUpperCase(), exchange: null })
     .slice(0, config.maxTickersPerCard);
+  // SEC cards: category and event_type come from the 8-K items; the draft is only a tiebreak.
+  // Fed press releases keep the AI's choice. Every other source (BEA, Federal Register, Wikipedia,
+  // CPSC, USGS, NASA) has category and event_type fixed in code; the AI never chooses them.
+  const cls = item.source === 'sec_8k'
+    ? resolveSecClassification(item.items ?? [], draft)
+    : item.source === 'fed_rss'
+      ? { category: draft.category, event_type: draft.event_type ?? item.event_type }
+      : { category: item.category, event_type: item.event_type };
   return {
     dedupe_key: item.url,
     item_id: meta.itemId,
     kind: 'summary',
     headline: draft.headline.trim(),
     body: draft.body?.trim() || null,
-    category: draft.category,
-    event_type: draft.event_type ?? item.event_type,
+    category: cls.category,
+    event_type: cls.event_type,
     ai_generated: meta.aiGenerated,
     tickers: tickers.length ? tickers : item.tickers,
     macro: [],
@@ -117,10 +126,10 @@ export function buildPublishPayload(
     sort_at: item.published_at,
     model: meta.model,
     prompt_version: meta.aiGenerated ? config.promptVersion : null,
-    attribution: null,
+    attribution: item.attribution ?? null,
     sources: [{
       name: item.source_name, kind: item.source_kind, doc_label: item.doc_label, url: item.url,
-      published_at: item.published_at, license_class: item.license_class, attribution: null, is_primary: true,
+      published_at: item.published_at, license_class: item.license_class, attribution: item.attribution ?? null, is_primary: true,
     }],
   };
 }

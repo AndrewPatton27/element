@@ -23,8 +23,10 @@ export default function AboutScreen() {
       </Text>
       <View style={[styles.card, { backgroundColor: p.surface, borderColor: p.border }]}>
         <Text style={text}>
-          Short, plain-language cards about business and the economy, built from public sources: SEC company filings, Federal Reserve releases, and
-          government data published through FRED and the U.S. Treasury. Every card links to its original source.
+          A short daily briefing in plain language: business, the economy, government, the world, science and safety. Cards are built from public
+          sources: SEC company filings, Federal Reserve releases, government data published through FRED and the U.S. Treasury, federal agency notices
+          such as product recalls, science agencies, and Wikipedia’s “In the news” (adapted under CC BY-SA 4.0). Every card links to its original
+          source.
         </Text>
         <Text style={[styles.strong, { color: p.ink }]}>{disclaimerText(config)}</Text>
         <Text style={text}>

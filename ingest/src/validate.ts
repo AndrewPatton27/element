@@ -4,12 +4,19 @@
 
 import { config } from './config.ts';
 
-export const CATEGORY_SLUGS = [
+/**
+ * Categories the AI may choose (Gemini/Groq schema enum, SEC tiebreak). The original 9 business
+ * slugs only, so an undecided 8-K can never land in world, science or safety.
+ */
+export const AI_CATEGORY_SLUGS = [
   'markets', 'earnings', 'economy', 'policy', 'tech', 'deals', 'energy', 'insider', 'personal-finance',
 ] as const;
 
-/** License classes whose text may be sent to the AI in this build. */
-export const SUMMARIZABLE = ['public_domain', 'company_filing'] as const;
+/** Every publishable category (contract CategorySlug). New sources set world/science/safety in code. */
+export const CATEGORY_SLUGS = [...AI_CATEGORY_SLUGS, 'world', 'science', 'safety'] as const;
+
+/** License classes whose text may be sent to the AI in this build. cc_by_sa = Wikipedia (credit + license link). */
+export const SUMMARIZABLE = ['public_domain', 'company_filing', 'cc_by_sa'] as const;
 
 export class NotSummarizableError extends Error {
   constructor(licenseClass: string) {
@@ -31,6 +38,7 @@ export interface Draft {
   category: string;
   event_type: string | null;
   tickers: string[];
+  everyday_relevance?: number | null;
 }
 
 export interface SourceText {
@@ -139,12 +147,12 @@ export function checkShape(obj: unknown): string[] {
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return ['output is not a JSON object'];
   const d = obj as Record<string, unknown>;
   if (typeof d.headline !== 'string' || d.headline.trim() === '') e.push('headline missing');
-  else if (d.headline.length > config.headlineMaxChars) e.push(`headline longer than ${config.headlineMaxChars} chars`);
+  else if (d.headline.length > config.headlineMaxChars) e.push(`headline longer than ${config.headlineMaxChars} chars (was ${d.headline.length})`);
   if (d.body !== null && typeof d.body !== 'string') e.push('body must be a string or null');
-  else if (typeof d.body === 'string' && d.body.trim().split(/\s+/).length > config.bodyMaxWords) {
-    e.push(`body longer than ${config.bodyMaxWords} words`);
+  else if (typeof d.body === 'string' && countWords(d.body) > config.bodyMaxWords) {
+    e.push(`body longer than ${config.bodyMaxWords} words (was ${countWords(d.body)})`);
   }
-  if (typeof d.category !== 'string' || !(CATEGORY_SLUGS as readonly string[]).includes(d.category)) {
+  if (typeof d.category !== 'string' || !(AI_CATEGORY_SLUGS as readonly string[]).includes(d.category)) {
     e.push('category is not one of the 9 slugs');
   }
   if (d.event_type !== null && d.event_type !== undefined && typeof d.event_type !== 'string') {
@@ -153,6 +161,61 @@ export function checkShape(obj: unknown): string[] {
   if (!Array.isArray(d.tickers) || d.tickers.some((t) => typeof t !== 'string')) e.push('tickers must be an array of strings');
   else if (d.tickers.length > config.maxTickersPerCard) e.push(`more than ${config.maxTickersPerCard} tickers`);
   return e;
+}
+
+/**
+ * everyday_relevance check: when present it must be a whole number from 1 to 5. AI drafts in the
+ * pipeline must carry it (required = true); template drafts never do.
+ */
+export function checkRelevance(d: { everyday_relevance?: unknown }, required: boolean): string[] {
+  const v = d.everyday_relevance;
+  if (v === undefined || v === null) return required ? ['everyday_relevance missing (whole number 1-5)'] : [];
+  return Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 5 ? [] : ['everyday_relevance must be a whole number from 1 to 5'];
+}
+
+export const countWords = (s: string): number => (s.trim() ? s.trim().split(/\s+/).length : 0);
+
+/** Validator errors that are only about length (the safety net in trimBodyToFit may fix the body one). */
+export const isLengthError = (e: string): boolean => /^(headline longer than|body longer than)/.test(e);
+
+// A period after these is not a sentence end ("U.S.", "Inc.", "Jan.", "No. 5").
+const ABBREV = /(?:\b[A-Z]\.)+$|\b(?:Inc|Corp|Co|Ltd|LLC|Mr|Mrs|Ms|Dr|Jr|Sr|St|No|vs|approx|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.$/;
+
+/** Splits text into sentences on . ! ? followed by space; skips common abbreviations and decimals. */
+export function splitSentences(text: string): string[] {
+  const out: string[] = [];
+  let start = 0;
+  const re = /[.!?]["'”’)]?(?=\s+)/g;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    const end = m.index + m[0].length;
+    if (ABBREV.test(text.slice(start, end))) continue;
+    out.push(text.slice(start, end).trim());
+    start = end;
+  }
+  const rest = text.slice(start).trim();
+  if (rest) out.push(rest);
+  return out.filter(Boolean);
+}
+
+/**
+ * Deterministic safety net for a draft whose ONLY problem is length. Never cuts inside a
+ * sentence and never touches the headline: a headline over the limit means reject (null).
+ * Returns the draft with the body cut after the last whole sentence that fits, or null.
+ */
+export function trimBodyToFit(draft: Draft, errors: string[]): Draft | null {
+  if (!errors.length || !errors.every(isLengthError)) return null;
+  if (errors.some((e) => e.startsWith('headline'))) return null;
+  if (typeof draft.body !== 'string') return null;
+  const sentences = splitSentences(draft.body);
+  const kept: string[] = [];
+  for (const s of sentences) {
+    if (countWords([...kept, s].join(' ')) > config.bodyMaxWords) break;
+    kept.push(s);
+  }
+  if (!kept.length || kept.length === sentences.length) return null;
+  const last = kept[kept.length - 1];
+  if (!/[.!?]["'”’)]?$/.test(last)) return null;   // must end on a real sentence end
+  return { ...draft, body: kept.join(' ') };
 }
 
 /** Full validation of a draft against the licensed source text it came from. */

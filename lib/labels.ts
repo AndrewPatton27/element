@@ -77,3 +77,27 @@ export function howMadeText(card: Pick<BlurbCard, 'kind' | 'ai'>): string {
   }
   return 'Written from the filing’s details with a fixed template. No AI was used. Read the source for the full picture.';
 }
+
+// ---- Share-alike (Wikipedia, CC BY-SA 4.0) ----
+
+export const CC_BY_SA_LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/';
+export const CC_BY_SA_MARK = 'CC BY-SA 4.0';
+
+export interface ShareAlikeCredit {
+  text: string; // 'Adapted from Wikipedia ("Title") · CC BY-SA 4.0'
+  articleUrl: string; // the adapted article (attribution link)
+  licenseUrl: string; // the license (from the cc_by_sa notice, else the constant)
+}
+
+// Any card with a cc_by_sa source must show its credit line and a license link.
+export function shareAlikeCredit(
+  card: Pick<BlurbCard, 'sources' | 'attribution'>,
+  config: Pick<AppConfig, 'required_notices'> | null | undefined,
+): ShareAlikeCredit | null {
+  const src = card.sources.find((s) => (s.license_class as string) === 'cc_by_sa');
+  if (!src) return null;
+  const notice = (config?.required_notices ?? []).find((n) => n.key === 'cc_by_sa');
+  const raw = card.attribution || src.attribution || `Adapted from ${src.name}`;
+  const text = raw.includes(CC_BY_SA_MARK) ? raw : `${raw} · ${CC_BY_SA_MARK}`;
+  return { text, articleUrl: src.url, licenseUrl: notice?.url || CC_BY_SA_LICENSE_URL };
+}

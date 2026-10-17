@@ -7,6 +7,7 @@ import { FlatList, Platform, StyleSheet, View, type FlatListProps, type LayoutCh
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { usePalette } from '../lib/useTheme';
 import { Card } from './Card';
+import type { Feedback } from '../lib/accountLogic';
 import { LoadingState } from './States';
 
 interface Props {
@@ -18,12 +19,27 @@ interface Props {
   onEndReached: () => void;
   onShowSources: (card: BlurbCard) => void;
   wide?: boolean;
+  reactions?: Record<string, Feedback>;
+  onReact?: (card: BlurbCard, pressed: Feedback) => void;
+  onActiveCard?: (card: BlurbCard) => void; // the card now on screen (for view tracking)
 }
 
 // Below this page height the card switches to smaller type so it fits.
 const COMPACT_BELOW = 640;
 
-export function FeedPager({ items, config, categories, loadingMore, done, onEndReached, onShowSources, wide }: Props) {
+export function FeedPager({
+  items,
+  config,
+  categories,
+  loadingMore,
+  done,
+  onEndReached,
+  onShowSources,
+  wide,
+  reactions,
+  onReact,
+  onActiveCard,
+}: Props) {
   const p = usePalette();
   const list = useRef<FlatList<BlurbCard>>(null);
   const [height, setHeight] = useState(0);
@@ -49,6 +65,11 @@ export function FeedPager({ items, config, categories, loadingMore, done, onEndR
     [items.length, onEndReached],
   );
   const next = useCallback(() => goTo(indexRef.current + 1), [goTo]);
+
+  const active = items[index];
+  useEffect(() => {
+    if (active && onActiveCard) onActiveCard(active);
+  }, [active, onActiveCard]);
 
   // New filter -> new list: jump back to the first card.
   const firstId = items[0]?.id;
@@ -88,13 +109,15 @@ export function FeedPager({ items, config, categories, loadingMore, done, onEndR
             onNext={last ? undefined : next}
             wide={wide}
             compact={compact}
+            reaction={reactions?.[item.id]}
+            onReact={onReact}
           />
           {/* the edge of the next card peeking out below, as in the design */}
           <View style={[styles.stack, { backgroundColor: p.surface, borderColor: p.border, opacity: last ? 0 : 1 }]} />
         </View>
       );
     },
-    [height, config, categories, onShowSources, next, wide, compact, items.length, done, p],
+    [height, config, categories, onShowSources, next, wide, compact, items.length, done, p, reactions, onReact],
   );
 
   return (

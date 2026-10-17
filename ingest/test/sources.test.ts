@@ -110,7 +110,7 @@ test('FRED JSON: "." dropped, oldest first; DGS10 observation formatted', () => 
   const pts = parseFredObservations(fx('fred-DGS10-observations.json'));
   assert.deepEqual(pts.map((p) => p.date), ['2026-10-14', '2026-10-15', '2026-10-16']);
   const o = buildObservation('DGS10', pts)!;
-  assert.deepEqual(o, { series_id: 'DGS10', obs_date: '2026-10-16', value: 5.09, display_value: '5.09%', change_text: '-0.01 pts', direction: 'down', period_label: null });
+  assert.deepEqual(o, { series_id: 'DGS10', obs_date: '2026-10-16', value: 5.09, display_value: '5.09%', change_text: '-0.01 pts', direction: 'down', period_label: null, move: 0.01 });
   assert.equal(buildDataCard(o), null, 'a 0.01-point move stays in the numbers panel');
 });
 

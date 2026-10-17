@@ -9,6 +9,7 @@ export const RANK_DEFAULTS = {
   authority: { government: 1.25, filing: 1.0, news: 0.8 } as Record<string, number>,
   eventWeights: {
     fed: 8, macro_release: 8, earnings: 5, deal: 4, exec_change: 3, insider: 2, default: 2,
+    world_event: 6, recall: 5, science: 3,          // broad topics (20261017020000_broad_topics.sql)
   } as Record<string, number>,
 };
 

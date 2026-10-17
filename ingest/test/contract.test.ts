@@ -13,7 +13,8 @@ const CARD_KEYS = [
   'is_saved', 'share_path', 'importance',
 ];
 const MACRO_KEYS = ['series_id', 'label', 'value', 'change', 'direction', 'period', 'as_of', 'source_name', 'source_short', 'source_url', 'sort_order'];
-const SLUGS = ['markets', 'earnings', 'economy', 'policy', 'tech', 'deals', 'energy', 'insider', 'personal-finance'];
+const SLUGS = ['markets', 'earnings', 'economy', 'policy', 'tech', 'deals', 'energy', 'insider', 'personal-finance', 'world', 'science', 'safety'];
+const BUSINESS_SLUGS = SLUGS.slice(0, 9);   // page 1 covers the original 9; the 3 broad-topic samples are on page 2
 const ISO = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2}))?$/;
 
 const config = read<AppConfig>('app_config.json');
@@ -78,7 +79,7 @@ test('every feed card follows the contract and the project rules', () => {
 
 test('page 1 has 20+ cards, all 9 categories, summary + data + template cards', () => {
   assert.ok(page1.items.length >= 20);
-  assert.deepEqual([...new Set(page1.items.map((c) => c.category))].sort(), [...SLUGS].sort());
+  assert.deepEqual([...new Set(page1.items.map((c) => c.category))].sort(), [...BUSINESS_SLUGS].sort());
   assert.ok(page1.items.some((c) => c.kind === 'data'));
   assert.ok(page1.items.some((c) => c.kind === 'summary' && c.ai.generated));
   assert.ok(page1.items.some((c) => c.kind === 'summary' && !c.ai.generated));
@@ -99,8 +100,23 @@ test('numbers_to_know has the six series in order, each citing its agency via FR
   for (const r of rows) assert.match(r.source_name, /^(Board of Governors of the Federal Reserve System \(US\)|U\.S\. Bureau of Labor Statistics|U\.S\. Energy Information Administration) via FRED$/);
 });
 
-test('categories.json has the 9 slugs in sort order', () => {
+test('categories.json has the 12 slugs in the PM review 2 order with the new display names', () => {
   const cats = read<Category[]>('categories.json');
-  assert.deepEqual(cats.map((c) => c.slug), SLUGS);
-  assert.deepEqual(cats.map((c) => c.sort_order), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(cats.map((c) => c.slug), ['world', 'policy', 'economy', 'personal-finance', 'markets', 'tech', 'science', 'safety', 'earnings', 'deals', 'energy', 'insider']);
+  assert.deepEqual(cats.map((c) => c.sort_order), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  assert.deepEqual([...cats.map((c) => c.slug)].sort(), [...SLUGS].sort());
+  const name = Object.fromEntries(cats.map((c) => [c.slug, c.name]));
+  assert.deepEqual([name.policy, name['personal-finance'], name.markets, name.world, name.science, name.safety],
+    ['Government', 'Money', 'Business', 'World', 'Science & Space', 'Recalls & Safety']);
+});
+
+test('page 2 has one [SAMPLE] card per new category; the Wikipedia card carries the exact CC BY-SA attribution', () => {
+  for (const slug of ['world', 'science', 'safety']) assert.ok(page2.items.some((c) => c.category === slug), slug);
+  const w = page2.items.find((c) => c.sources[0].license_class === 'cc_by_sa')!;
+  assert.match(w.attribution!, /^Adapted from Wikipedia \("[^"]+"\) · CC BY-SA 4\.0$/);
+  assert.equal(w.sources[0].attribution, w.attribution);
+  assert.equal(w.sources[0].kind, 'news');
+  assert.equal(w.ai.generated, true);
+  const cc = config.required_notices.find((n) => n.key === 'cc_by_sa');
+  assert.equal(cc?.url, 'https://creativecommons.org/licenses/by-sa/4.0/');
 });

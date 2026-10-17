@@ -72,9 +72,28 @@ export function shortDate(iso: string): string {
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
+// Display names used only when api.categories has not loaded or lacks the slug.
+// The API's names always win (they carry the renames: Business, Government, Money).
+const CATEGORY_FALLBACK_NAMES: Record<string, string> = {
+  markets: 'Business',
+  earnings: 'Earnings',
+  economy: 'Economy',
+  policy: 'Government',
+  tech: 'Tech',
+  deals: 'Deals',
+  energy: 'Energy',
+  insider: 'Insider trades',
+  'personal-finance': 'Money',
+  world: 'World',
+  health: 'Health',
+  science: 'Science & Space',
+  safety: 'Recalls & Safety',
+};
+
 export function categoryName(slug: string, categories: Category[] | null | undefined): string {
   const hit = categories?.find((c) => c.slug === slug);
   if (hit) return hit.name;
+  if (CATEGORY_FALLBACK_NAMES[slug]) return CATEGORY_FALLBACK_NAMES[slug];
   return slug
     .split('-')
     .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
@@ -88,6 +107,10 @@ const EVENT_LABELS: Record<string, string> = {
   insider: 'Insider filing',
   macro_release: 'Data release',
   fed: 'Federal Reserve',
+  world_event: 'World',
+  recall: 'Recall',
+  health: 'Health',
+  science: 'Science',
 };
 
 // Unknown event types are allowed by the contract; show nothing rather than a raw code.

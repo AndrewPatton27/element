@@ -2,11 +2,11 @@
 
 import type { CategorySlug, Exchange, MacroFact, SourceKind } from '../../contract/types.ts';
 
-export type LicenseClass = 'public_domain' | 'company_filing';
+export type LicenseClass = 'public_domain' | 'company_filing' | 'cc_by_sa';
 
 /** One collected item, ready for summarizing. */
 export interface RawItem {
-  source: 'sec_8k' | 'fed_rss';
+  source: 'sec_8k' | 'fed_rss' | 'bea_rss' | 'fedreg' | 'wiki_itn' | 'cpsc' | 'usgs' | 'nasa';
   external_id: string;
   url: string;                       // the page we cite (and may fetch: allowlisted hosts only)
   title: string;
@@ -19,8 +19,10 @@ export interface RawItem {
   source_kind: SourceKind;
   doc_label: string;                 // "Form 8-K", "Press release"
   company?: string;                  // SEC only, display name
+  agency?: string;                   // Federal Register only: issuing (sub-)agency
   items?: { number: string; title: string }[];   // SEC 8-K items
   summary_text: string;              // short licensed text from the feed itself
+  attribution?: string;              // credit line shown on the card (BEA: "Source: U.S. Bureau of Economic Analysis")
 }
 
 export interface TickerRef {
@@ -36,6 +38,8 @@ export interface SummaryDraft {
   category: string;
   event_type: string | null;
   tickers: string[];
+  /** AI only: 1-5, would a typical young adult notice or be affected? Not part of the card. */
+  everyday_relevance?: number | null;
 }
 
 export interface SummarizeInput {
@@ -48,6 +52,12 @@ export interface Summarizer {
   name: string;
   /** true if this provider sends text to an AI model (counts toward the daily cap) */
   usesAi: boolean;
+  /** model ID this provider calls (recorded on the card); null/undefined for non-AI */
+  model?: string | null;
+  /** max calls per UTC day for this provider (AI providers) */
+  dailyCap?: number;
+  /** min gap between two calls to this provider, in ms (its requests-per-minute limit) */
+  minIntervalMs?: number;
   summarize(input: SummarizeInput): Promise<SummaryDraft>;
 }
 
@@ -89,4 +99,6 @@ export interface MacroObservation {
   change_text: string | null;
   direction: 'up' | 'down' | 'flat' | null;
   period_label: string | null;
+  /** size of the change in the threshold unit (points for rates, % for dollars and counts); not stored */
+  move?: number | null;
 }

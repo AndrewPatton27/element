@@ -14,6 +14,7 @@ import { InstrumentSans_500Medium } from '@expo-google-fonts/instrument-sans/500
 import { InstrumentSans_600SemiBold } from '@expo-google-fonts/instrument-sans/600SemiBold';
 import { getApi } from '../lib/api';
 import { AppDataProvider } from '../lib/appData';
+import { AccountProvider } from '../lib/accountContext';
 import { light, paletteFor } from '../lib/theme';
 import { ConfigErrorScreen } from '../components/States';
 
@@ -36,11 +37,16 @@ export default function RootLayout() {
       <StatusBar style={p === light ? 'dark' : 'light'} />
       {result.ok ? (
         <AppDataProvider api={result.api}>
-          <Stack screenOptions={{ headerShown: false, animation: 'none', contentStyle: { backgroundColor: p.bg } }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="numbers" />
-            <Stack.Screen name="about" />
-          </Stack>
+          <AccountProvider account={result.account}>
+            <Stack screenOptions={{ headerShown: false, animation: 'none', contentStyle: { backgroundColor: p.bg } }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="numbers" />
+              <Stack.Screen name="about" />
+              <Stack.Screen name="account" />
+              <Stack.Screen name="signin" />
+              <Stack.Screen name="onboarding" />
+            </Stack>
+          </AccountProvider>
         </AppDataProvider>
       ) : (
         <ConfigErrorScreen error={result.error} />

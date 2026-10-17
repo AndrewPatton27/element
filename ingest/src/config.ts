@@ -11,12 +11,50 @@ export const config = {
     freeRpd: 500 as number | null,
     freeRpm: 15,
   },
-  aiDailyCapCode: 600,                         // hard cap in code; effective cap = min(this, freeRpd)
-  promptVersion: 'sum-v1',
-  providerOrder: ['gemini', 'template'] as const, // a list on purpose: adding a provider is one entry
+  // Groq (free tier, OpenAI-compatible API). Used when Gemini is capped, rate limited,
+  // failing, timing out, missing its key, or its drafts fail validation twice.
+  groq: {
+    // gpt-oss-120b: best quality of the Groq text models on the account, same free limits as 20b
+    // and qwen3.8-27b, and Groq supports structured JSON output (json_schema) for it.
+    model: 'openai/gpt-oss-120b',
+    alternativeModel: 'openai/gpt-oss-20b',      // not used; faster, same limits
+    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+    // 'json_schema' (constrained output) or 'json_object' (JSON mode). If Groq answers 400 to
+    // json_schema, the adapter retries that call once in json_object mode.
+    responseFormat: 'json_schema' as 'json_schema' | 'json_object',
+    // Add JSON-schema maxLength to the headline in json_schema mode. UNVERIFIED whether Groq's strict
+    // mode accepts it; the prompt and schema descriptions state the limits either way.
+    schemaMaxLength: false as boolean,
+    reasoningEffort: 'low' as string | null,     // gpt-oss is a reasoning model; low keeps it fast. null = not sent
+    maxCompletionTokens: 1024,                   // includes reasoning tokens
+    // Free-tier limits, read by Drew in the Groq console on 2026-10-17 (same for all three models).
+    freeRpm: 30 as number | null,
+    freeRpd: 1000 as number | null,
+    freeTpm: 8000 as number | null,
+    freeTpd: 200_000 as number | null,
+    // Tokens are the binding limit, so Groq gets less source text than Gemini (about 2.2k tokens per call).
+    sourceTextMaxChars: 6000,
+    estimatedTokensPerCall: 2200,
+    // Pacing: max(60 s / (RPM * rpmSafetyFactor) = 2.5 s, 60 s * tokensPerCall / (TPM * factor) = 20.6 s,
+    // this floor). The floor leaves room
+    // for reasoning tokens we cannot measure offline.
+    minIntervalMsFloor: 30_000,
+    // Daily cap: min(this, RPD, floor(TPD / tokensPerCall) = 90).
+    dailyCapCode: 80,
+  },
+  // Pacing safety margin for every AI provider: interval = ceil(60 s / (RPM * factor)).
+  // 0.8 -> Gemini 15 RPM paced at 12/min (5 s). Calling at exactly 15/min (4 s) hit a 429 on
+  // 2026-10-17 because validator retries and clock jitter also count as requests.
+  rpmSafetyFactor: 0.8,
+  // After a 429, a provider is skipped for this long within the same run (next provider or template).
+  rateLimitCooldownMs: 60_000,
+  aiDailyCapCode: 600,                         // Gemini hard cap in code; effective cap = min(this, freeRpd)
+  promptVersion: 'sum-v2',                     // v2 (2026-10-17): plain 8th-grade style + everyday_relevance score
+  providerOrder: ['gemini', 'groq', 'template'] as const, // a list on purpose: adding a provider is one entry
 
   // ---- card limits ------------------------------------------------------------
   headlineMaxChars: 90,
+  headlineTargetChars: 60,                     // the prompt asks for about this many (short and plain)
   bodyMaxWords: 60,
   maxTickersPerCard: 5,
   maxSourcesPerCard: 8,
@@ -24,6 +62,7 @@ export const config = {
   copyLimitWords: {
     company_filing: 10,
     public_domain: 25,
+    cc_by_sa: 10,                               // Wikipedia: treated like filings (PM review 2)
   } as Record<string, number>,
 
   // Phrases that read as investment advice. Matched case-insensitively on word boundaries.
@@ -43,7 +82,14 @@ export const config = {
   // Full pages may only be downloaded from these hosts.
   pageHosts: ['www.sec.gov', 'www.federalreserve.gov', 'www.bls.gov'],
   // Data APIs (JSON/CSV endpoints, not pages). The Supabase host is added at runtime.
-  apiHosts: ['api.stlouisfed.org', 'home.treasury.gov', 'generativelanguage.googleapis.com'],
+  // apps.bea.gov serves only the BEA release RSS here (feed text, never pages).
+  // www.federalregister.gov serves only its JSON documents API here (never pages).
+  // data.sec.gov serves only the per-company submissions JSON here (filing lists, never pages).
+  apiHosts: ['api.stlouisfed.org', 'home.treasury.gov', 'generativelanguage.googleapis.com', 'api.groq.com', 'apps.bea.gov',
+    'www.federalregister.gov', 'data.sec.gov',
+    // Broad topics (feed/API text only, never pages): Wikipedia REST featured feed, CPSC recalls API,
+    // USGS earthquake GeoJSON, NASA news-release RSS.
+    'en.wikipedia.org', 'www.saferproducts.gov', 'earthquake.usgs.gov', 'www.nasa.gov'],
   maxRequestsPerSecond: 5,                     // SEC allows 10/s; we stay at half
   maxRedirects: 3,
   fetchTimeoutMs: 20_000,
@@ -58,29 +104,181 @@ export const config = {
       'https://www.federalreserve.gov/feeds/press_monetary.xml',
       'https://www.federalreserve.gov/feeds/press_all.xml',
     ],
+    beaRss: 'https://apps.bea.gov/rss/rss.xml',
     fredObservations: 'https://api.stlouisfed.org/fred/series/observations',
     treasuryCsv: 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/{year}/all?type=daily_treasury_yield_curve&field_tdr_date_value={year}&page&_format=csv',
   },
-  macroSeries: ['DGS2', 'DGS10', 'DFF', 'CPIAUCSL', 'UNRATE', 'DCOILWTICO'],
-  // A data card is published only for a new observation that moved at least this much.
-  // Monthly series (CPI, unemployment) always get a card when a new month arrives.
+  macroSeries: ['DGS2', 'DGS10', 'DFF', 'CPIAUCSL', 'UNRATE', 'DCOILWTICO',
+    'GASREGW', 'ICSA', 'RSAFS', 'HOUST', 'PAYEMS', 'A191RL1Q225SBEA'],
+  // FRED series that must never be fetched or shown (not public domain). MORTGAGE30US: Freddie Mac copyright.
+  forbiddenSeries: ['MORTGAGE30US'],
+  // A data card is published only for a new observation that moved at least this much
+  // (daily and weekly series). Monthly and quarterly series (CPI, unemployment, retail sales,
+  // housing starts, payrolls, GDP) always get one card per new period.
   dataCardMinMove: {
     DGS2: 0.05,          // percentage points
     DGS10: 0.05,
     DFF: 0.05,
     DCOILWTICO: 2.0,     // percent
+    GASREGW: 1.0,        // percent, weekly
+    ICSA: 5.0,           // percent, weekly
   } as Record<string, number>,
   fredLookbackDays: 500,                       // enough history for CPI year-over-year
   fedMaxAgeDays: 7,                            // ignore older press releases
+  // BEA releases come 2-5 a week; on 2026-10-17 the newest was 11 days old, so 7 days would show none.
+  beaMaxAgeDays: 30,
+  beaAttribution: 'Source: U.S. Bureau of Economic Analysis',
+  // Federal Register final rules (JSON API, no key). The AI sees only each document's `abstract`;
+  // documents without one are skipped. Reuse permitted (1 CFR 2.6); public-domain copy limit.
+  fedRegister: {
+    endpoint: 'https://www.federalregister.gov/api/v1/documents.json',
+    perPage: 20,
+    // Query B: final rules from agencies whose rules reach people's wallets (consumer finance, airline
+    // passengers, taxes, phones and internet, energy bills, student loans). CFTC, Labor and export
+    // controls were dropped (2026-10-17): mostly institutional rules. The AI's everyday_relevance score
+    // filters what is left; template cards are never published for Federal Register rules.
+    agencies: ['consumer-financial-protection-bureau', 'transportation-department', 'federal-trade-commission',
+      'internal-revenue-service', 'treasury-department', 'federal-reserve-system', 'securities-and-exchange-commission',
+      'federal-communications-commission', 'energy-department', 'education-department'],
+    // Query A: significant final rules from any agency. Off since 2026-10-17: it surfaced park hunting
+    // rules, staff appraisals and immigration penalties. false = only query B.
+    significantQuery: false,
+    fields: ['title', 'abstract', 'html_url', 'publication_date', 'agencies', 'document_number', 'type'],
+    maxAgeDays: 14,
+    category: 'policy',                        // fixed in code; event_type stays null (ranking 'default')
+    attributionPrefix: 'Source: Federal Register (National Archives)',
+    // No published rate limit: poll at most hourly (2 requests per run). Not enforced; the CLI is run by hand.
+    minPollMinutes: 60,
+  },
   secTickersUrl: 'https://www.sec.gov/files/company_tickers_exchange.json',
+  // Per-company filing list (JSON, data.sec.gov, API host list). {cik} = 10-digit CIK.
+  secSubmissionsUrl: 'https://data.sec.gov/submissions/CIK{cik}.json',
+  secLookbackDays: 10,                         // per-company 8-Ks filed within this many days
+  // Household-name US public companies (by ticker), weighted toward brands college students and young
+  // adults know and use. SEC cards are only made for these. CIKs are resolved from the SEC ticker list
+  // at run time; a ticker missing from that list is logged and skipped. Left out on purpose:
+  // Spotify (foreign filer, files 6-K not 8-K), Electronic Arts and Walgreens (taken private; not in
+  // the SEC ticker list on 2026-10-17).
+  watchCompanies: [
+    'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'NVDA', 'TSLA', 'NFLX', 'SNAP', 'RDDT', 'RBLX', 'TTWO', 'PINS', 'MTCH', 'BMBL', 'DUOL', 'ADBE', 'CRM', 'ORCL', 'INTC', 'AMD', 'QCOM', 'AVGO', 'IBM', 'DELL',
+    'DIS', 'WBD', 'PSKY', 'ROKU', 'SIRI', 'LYV', 'AMC', 'CMCSA', 'CHTR', 'VZ', 'T', 'TMUS',
+    'UBER', 'LYFT', 'DASH', 'ABNB', 'BKNG', 'EXPE', 'ETSY', 'EBAY', 'CVNA', 'W', 'CHWY', 'PTON', 'GME',
+    'HOOD', 'SOFI', 'COIN', 'PYPL', 'XYZ', 'V', 'MA', 'AXP', 'AFRM', 'SLM', 'NNI', 'COF', 'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'SCHW', 'SYF',
+    'WMT', 'TGT', 'COST', 'HD', 'LOW', 'BBY', 'KR', 'DG', 'DLTR', 'TJX', 'ROST', 'GAP', 'ANF', 'AEO', 'URBN', 'LULU', 'NKE', 'CROX', 'DECK', 'UAA', 'ELF', 'ULTA',
+    'CMG', 'SBUX', 'MCD', 'YUM', 'DPZ', 'WING', 'CAVA', 'SHAK', 'DRI', 'KO', 'PEP', 'KDP', 'MNST', 'CELH', 'PG', 'HSY',
+    'F', 'GM', 'RIVN', 'LCID', 'DAL', 'UAL', 'AAL', 'LUV', 'JBLU', 'ALK', 'MAR', 'HLT', 'CCL', 'RCL', 'NCLH',
+    'CVS', 'UNH', 'PFE', 'MRNA', 'JNJ', 'LLY', 'ABBV', 'MRK', 'BMY', 'AMGN', 'GILD', 'HIMS',
+    'BA', 'XOM', 'CVX', 'UPS', 'FDX', 'BRK-B',
+    'Z', 'RKT', 'CHGG', 'COUR', 'PGR', 'ALL', 'EFX', 'TRU', 'FICO', 'HRB', 'INTU',
+  ],
+  // 8-K items that may become a card for a watch-list company: earnings, CEO/CFO changes, big deals,
+  // layoffs/restructuring, cyber incidents, restatements, bankruptcy. Anything else is skipped.
+  watchItems: ['1.01', '1.03', '1.05', '2.01', '2.02', '2.05', '4.02', '5.02'],
+  // A filing whose only card item is 5.02 is kept only if the Item 5.02 text names one of these roles
+  // together with a change word (routine director-only changes and pay plans are skipped).
+  topRolePattern: /\b(chief executive officer|chief financial officer|ceo|cfo|chair|chairman|chairwoman|chairperson|(?<!vice )president)\b/i,
+  roleChangePattern: /\b(resign\w*|retire\w*|appoint\w*|depart\w*|step(?:s|ped)? down|succeed\w*|successor|named|terminat\w*|separat\w*|transition\w*)\b/i,
+  // Template cards (no AI, so no relevance score) only for these items of watch-list companies.
+  templateSecItems: ['2.02', '5.02', '1.05', '4.02', '2.05'],
+  // AI everyday_relevance score (1-5) below this: the card is not published (logged as low_relevance).
+  minEverydayRelevance: 3,
+  // Optional boost for watch-list cards. NOT applied: importance is computed only in the ranking SQL
+  // (core.refresh_rank), and the task said to skip the boost if it touches that SQL.
+  watchCompanyBoost: 1.5,
   // 8-K items we turn into cards.
-  sec8kItems: ['1.01', '1.02', '2.01', '2.02', '2.05', '2.06', '3.01', '4.02', '5.02', '7.01', '8.01'],
+  sec8kItems: ['1.01', '1.02', '1.03', '1.05', '2.01', '2.02', '2.05', '2.06', '3.01', '4.01', '4.02', '5.02', '7.01', '8.01'],
+  // Low-value items: a filing whose items are only these (Reg FD, other events, exhibits) is
+  // skipped before any page fetch or AI call, unless it also has a substantive tracked item.
+  sec8kLowValueItems: ['7.01', '8.01', '9.01'],
+  // When the 8-K items do not decide an SEC card's event_type, the AI's choice is kept only
+  // if it is one of these (all known to core.rank_event_weights); otherwise null ('default').
+  secAiEventTypes: ['earnings', 'deal', 'exec_change', 'insider'],
   pollIntervalMinutes: 10,                     // for `--loop`
+
+  // ---- broad topics (PM review 2, D-32) ---------------------------------------------
+  // Wikipedia "In the news" -> world. Today's UTC date only (the news list exists only for the
+  // current date); a missing `news` key = 0 items. AI text = story sentence + links[0].extract.
+  wiki: {
+    featuredUrl: 'https://en.wikipedia.org/api/rest_v1/feed/featured/{yyyy}/{mm}/{dd}',
+    aiTextMaxChars: 1500,
+    category: 'world',
+    eventType: 'world_event',
+    // Wikimedia User-Agent policy: "<client>/<version> (<contact>) <library>". The contact is taken
+    // from SEC_USER_AGENT at run time; it is never hard-coded.
+    clientName: 'Element/0.1',
+    library: 'node-fetch',
+  },
+  // CPSC recalls -> safety / recall. JSON API, no key. License PARTLY verified (17 U.S.C. 105;
+  // the CPSC policy page could not be read). AI text = Title + Description + Hazards + Remedies.
+  cpsc: {
+    url: 'https://www.saferproducts.gov/RestWebServices/Recall?format=json&RecallDateStart={start}',
+    lookbackDays: 14,
+    maxPerRun: 5,                               // recalls can flood the feed (PM review 2)
+    category: 'safety',
+    eventType: 'recall',
+    sourceName: 'U.S. Consumer Product Safety Commission',
+    attribution: 'Source: U.S. Consumer Product Safety Commission',
+  },
+  // NASA news releases -> science. RSS, no key; only links under linkPrefix (drops APOD and image
+  // articles); AI text = the release text in content:encoded without figures or captions.
+  nasa: {
+    feedUrl: 'https://www.nasa.gov/news-release/feed/',
+    linkPrefix: 'https://www.nasa.gov/news-release/',
+    maxAgeDays: 7,
+    category: 'science',
+    eventType: 'science',
+    attribution: 'Source: NASA',
+  },
+  // USGS significant earthquakes -> science. Template card, no AI.
+  usgs: {
+    url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson',
+    maxAgeDays: 7,
+    category: 'science',
+    eventType: 'science',
+    sourceName: 'U.S. Geological Survey',
+    attribution: 'Credit: U.S. Geological Survey',
+  },
 } as const;
+
+/** Federal Register query URLs: [query B (agencies), query A (significant, if enabled)]. */
+export function fedRegisterUrls(f: {
+  endpoint: string; perPage: number; agencies: readonly string[]; significantQuery: boolean; fields: readonly string[];
+} = config.fedRegister): string[] {
+  const common = [`per_page=${f.perPage}`, 'order=newest', 'conditions[type][]=RULE'];
+  const fields = f.fields.map((x) => `fields[]=${x}`);
+  const b = [...common, ...f.agencies.map((a) => `conditions[agencies][]=${a}`), ...fields];
+  const urls = [`${f.endpoint}?${b.join('&')}`];
+  if (f.significantQuery) urls.push(`${f.endpoint}?${[...common, 'conditions[significant]=1', ...fields].join('&')}`);
+  return urls;
+}
 
 /** Effective daily AI call cap: min(code cap, verified free requests per day). */
 export function aiDailyCap(freeRpd: number | null = config.gemini.freeRpd): number {
   return freeRpd == null ? config.aiDailyCapCode : Math.min(config.aiDailyCapCode, freeRpd);
+}
+
+/** Effective Groq daily cap: min(code cap, RPD, floor(TPD / estimated tokens per call)). */
+export function groqDailyCap(g: {
+  dailyCapCode: number; freeRpd: number | null; freeTpd: number | null; estimatedTokensPerCall: number;
+} = config.groq): number {
+  let cap = g.dailyCapCode;
+  if (g.freeRpd != null) cap = Math.min(cap, g.freeRpd);
+  if (g.freeTpd != null) cap = Math.min(cap, Math.floor(g.freeTpd / g.estimatedTokensPerCall));
+  return cap;
+}
+
+/** Groq pacing in ms: the largest of the RPM gap, the TPM gap for one estimated call, and the floor. */
+export function groqMinIntervalMs(g: {
+  freeRpm: number | null; freeTpm: number | null; estimatedTokensPerCall: number; minIntervalMsFloor: number;
+} = config.groq, factor: number = config.rpmSafetyFactor): number {
+  const rpmGap = g.freeRpm ? Math.ceil(60_000 / (g.freeRpm * factor)) : 0;
+  const tpmGap = g.freeTpm ? Math.ceil((60_000 * g.estimatedTokensPerCall) / (g.freeTpm * factor)) : 0;
+  return Math.max(rpmGap, tpmGap, g.minIntervalMsFloor);
+}
+
+/** Minimum gap between calls to one provider, from its requests-per-minute limit and the safety factor. */
+export function minIntervalMs(freeRpm: number | null, whenUnknown: number, factor: number = config.rpmSafetyFactor): number {
+  return freeRpm == null || freeRpm <= 0 ? whenUnknown : Math.ceil(60_000 / (freeRpm * factor));
 }
 
 // ---- environment ----------------------------------------------------------------
@@ -89,6 +287,7 @@ export interface Env {
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
   geminiApiKey: string | null;
+  groqApiKey: string | null;
   fredApiKey: string | null;
   secUserAgent: string;
 }
@@ -97,6 +296,7 @@ export const ENV_NAMES = [
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
   'GEMINI_API_KEY',
+  'GROQ_API_KEY',
   'FRED_API_KEY',
   'SEC_USER_AGENT',
 ] as const;
@@ -132,6 +332,7 @@ export function readEnv(env: Record<string, string | undefined>, opts: { dryRun?
     supabaseUrl: supabaseUrl.replace(/\/$/, ''),
     supabaseServiceRoleKey: key,
     geminiApiKey: get('GEMINI_API_KEY') || null,
+    groqApiKey: get('GROQ_API_KEY') || null,
     fredApiKey: get('FRED_API_KEY') || null,
     secUserAgent: ua,
   };
@@ -143,6 +344,7 @@ export function describeEnv(e: Env): string {
     `SUPABASE_URL=${e.supabaseUrl}`,
     `SUPABASE_SERVICE_ROLE_KEY=${e.supabaseServiceRoleKey ? '[set]' : '[missing]'}`,
     `GEMINI_API_KEY=${e.geminiApiKey ? '[set]' : '[missing]'}`,
+    `GROQ_API_KEY=${e.groqApiKey ? '[set]' : '[missing]'}`,
     `FRED_API_KEY=${e.fredApiKey ? '[set]' : '[missing]'}`,
     `SEC_USER_AGENT=${e.secUserAgent ? '[set]' : '[missing]'}`,
   ].join(' ');

@@ -6,6 +6,8 @@
 // - Keys are snake_case, exactly as returned by the `api` RPCs and views.
 // - Import with `import type { ... } from '.../contract/types.ts'`.
 // - Frozen. Changes go through review (see README.md).
+// - Changed 2026-10-17 by PM review 2 (additive only): categories world, science, safety;
+//   license class cc_by_sa; event types world_event, recall, science.
 
 /** Card kinds. 'link_out' is reserved and never produced in v1; the app skips it. */
 export type BlurbKind = 'summary' | 'data' | 'link_out';
@@ -22,7 +24,10 @@ export type CategorySlug =
   | 'deals'
   | 'energy'
   | 'insider'
-  | 'personal-finance';
+  | 'personal-finance'
+  | 'world'
+  | 'science'
+  | 'safety';
 
 /** Row of `api.categories`. */
 export interface Category {
@@ -36,7 +41,8 @@ export type LicenseClass =
   | 'company_filing'
   | 'guardian_noncomm'
   | 'link_out'
-  | 'iex_hist';
+  | 'iex_hist'
+  | 'cc_by_sa';                          // Wikipedia text (attribution + license link required)
 
 export type Exchange = 'NYSE' | 'Nasdaq' | 'NYSE American' | 'Cboe';
 
@@ -49,7 +55,10 @@ export type EventType =
   | 'deal'
   | 'insider'
   | 'macro_release'
-  | 'fed';
+  | 'fed'
+  | 'world_event'
+  | 'recall'
+  | 'science';
 
 /** One number for the "numbers to know" panel, also used inside data cards. */
 export interface MacroFact {

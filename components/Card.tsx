@@ -4,14 +4,15 @@
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
-import { categoryName, clampHeadline, relativeTime } from '../lib/format';
-import { cardLabels } from '../lib/labels';
+import { categoryName, clampHeadline, eventLabel, relativeTime } from '../lib/format';
+import { cardLabels, shareAlikeCredit } from '../lib/labels';
 import { usePalette } from '../lib/useTheme';
 import type { Palette } from '../lib/theme';
 import { fonts } from '../lib/theme';
 import { DataFacts } from './DataCard';
-import { ChevronUpIcon, NumbersIcon, SparkleIcon } from './Icons';
-import { AiLabel, Disclaimer } from './Labels';
+import { ChevronUpIcon, NumbersIcon, SparkleIcon, ThumbDownIcon, ThumbUpIcon } from './Icons';
+import type { Feedback } from '../lib/accountLogic';
+import { AiLabel, Disclaimer, ShareAlikeLine } from './Labels';
 import { SourceRow } from './SourceChip';
 
 interface Props {
@@ -22,6 +23,8 @@ interface Props {
   onNext?: () => void;
   wide?: boolean;
   compact?: boolean; // short screens: smaller type so the card fits
+  reaction?: Feedback; // signed in: this user's like/dislike
+  onReact?: (card: BlurbCard, pressed: Feedback) => void; // signed in only
 }
 
 function badgeFor(card: BlurbCard, p: Palette): { text: string; bg: string; fg: string; Icon: typeof SparkleIcon | null } {
@@ -30,9 +33,20 @@ function badgeFor(card: BlurbCard, p: Palette): { text: string; bg: string; fg: 
   return { text: 'From the source', bg: p.surfaceMuted, fg: p.inkSoft, Icon: null };
 }
 
-export function Card({ card, config, categories, onShowSources, onNext, wide, compact }: Props) {
+// "World · 2 h ago", or "Recalls & Safety · Recall · 2 h ago" when the event adds something.
+function metaLine(card: BlurbCard, categories: Category[]): string {
+  const category = categoryName(card.category, categories);
+  const event = eventLabel(card.event_type);
+  const parts = [category];
+  if (event && !category.toLowerCase().includes(event.toLowerCase())) parts.push(event);
+  parts.push(relativeTime(card.as_of));
+  return parts.join(' · ');
+}
+
+export function Card({ card, config, categories, onShowSources, onNext, wide, compact, reaction, onReact }: Props) {
   const p = usePalette();
   const labels = cardLabels(card, config);
+  const credit = shareAlikeCredit(card, config);
   const badge = badgeFor(card, p);
   // Design size is 32 (42 on wide); long headlines and short screens step down so the body fits.
   const headlineSize = wide ? 42 : compact ? 26 : card.headline.length > 60 ? 28 : 32;
@@ -45,9 +59,7 @@ export function Card({ card, config, categories, onShowSources, onNext, wide, co
         </View>
         <View style={styles.metaRight}>
           {card.updated_at ? <Text style={[styles.updated, { color: p.dataInk, borderColor: p.dataInk }]}>Updated</Text> : null}
-          <Text style={[styles.metaText, wide && { fontSize: 14 }, { color: p.muted }]}>
-            {categoryName(card.category, categories)} · {relativeTime(card.as_of)}
-          </Text>
+          <Text style={[styles.metaText, wide && { fontSize: 14 }, { color: p.muted }]}>{metaLine(card, categories)}</Text>
         </View>
       </View>
 
@@ -91,13 +103,21 @@ export function Card({ card, config, categories, onShowSources, onNext, wide, co
 
       <View style={styles.sourceBlock}>
         <SourceRow card={card} onShowAll={() => onShowSources(card)} wide={wide} />
+        {credit ? <ShareAlikeLine credit={credit} cardId={card.id} /> : null}
         {labels.aiLabel ? <AiLabel text={labels.aiLabel} /> : null}
       </View>
 
       <View style={[styles.footer, { borderTopColor: p.divider }]}>
-        <View style={styles.footerText}>
-          <Disclaimer text={labels.disclaimer} />
-        </View>
+        {onReact ? (
+          <View style={styles.reactRow}>
+            <ReactButton kind="like" on={reaction === 'like'} onPress={() => onReact(card, 'like')} />
+            <ReactButton kind="dislike" on={reaction === 'dislike'} onPress={() => onReact(card, 'dislike')} />
+          </View>
+        ) : (
+          <View style={styles.footerText}>
+            <Disclaimer text={labels.disclaimer} />
+          </View>
+        )}
         {onNext ? (
           <Pressable onPress={onNext} accessibilityRole="button" accessibilityLabel="Next card" hitSlop={8} style={styles.next}>
             {wide ? null : <ChevronUpIcon color={p.muted} />}
@@ -105,11 +125,48 @@ export function Card({ card, config, categories, onShowSources, onNext, wide, co
           </Pressable>
         ) : null}
       </View>
+      {onReact ? (
+        <View style={styles.disclaimerAlone}>
+          <Disclaimer text={labels.disclaimer} />
+        </View>
+      ) : null}
     </View>
   );
 }
 
+// "More like this" / "Less like this". Pressed state = filled chip + check mark
+// + accessibilityState, never colour alone. Pressing again undoes it.
+function ReactButton({ kind, on, onPress }: { kind: Feedback; on: boolean; onPress: () => void }) {
+  const p = usePalette();
+  const like = kind === 'like';
+  const Icon = like ? ThumbUpIcon : ThumbDownIcon;
+  const color = on ? p.accentInk : p.inkSoft;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={like ? 'More like this' : 'Less like this'}
+      accessibilityState={{ selected: on }}
+      hitSlop={6}
+      style={({ pressed }) => [
+        styles.react,
+        { borderColor: on ? p.accent : p.borderStrong, backgroundColor: on ? p.accentSoft : 'transparent', opacity: pressed ? 0.7 : 1 },
+      ]}
+    >
+      <Icon color={color} size={16} />
+      <Text style={[styles.reactText, { color }]}>
+        {like ? 'More' : 'Less'}
+        {on ? ' ✓' : ''}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  reactRow: { flex: 1, flexDirection: 'row', gap: 8 },
+  react: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1 },
+  reactText: { fontFamily: fonts.sansSemi, fontSize: 13 },
+  disclaimerAlone: { flexShrink: 0, marginTop: -6 },
   card: { flex: 1, borderWidth: 1, borderRadius: 24, padding: 24, gap: 16, overflow: 'hidden' },
   cardWide: { padding: 32, gap: 18 },
   meta: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },

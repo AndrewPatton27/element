@@ -18,7 +18,7 @@ function wait<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), MOCK_DELAY_MS));
 }
 
-function allCards(): BlurbCard[] {
+export function allCards(): BlurbCard[] {
   const seen = new Set<string>();
   const out: BlurbCard[] = [];
   for (const page of [page1, page2]) {

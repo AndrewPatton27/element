@@ -3,7 +3,8 @@
 
 import type { AppConfig, Category, CategorySlug, FeedMode, FeedPage, MacroFact } from '../contract/types.ts';
 import { resolveApiConfig, readEnv, type ApiConfig } from './config.ts';
-import { createMockApi } from './api.mock.ts';
+import { allCards, createMockApi } from './api.mock.ts';
+import { createMockAccount, createSupabaseAccount, type AccountApi } from './account.ts';
 import { createSupabaseApi } from './api.supabase.ts';
 
 export interface FeedRequest {
@@ -22,14 +23,15 @@ export interface Api {
   appConfig(): Promise<AppConfig>;
 }
 
-export type ApiResult = { ok: true; api: Api } | { ok: false; error: string };
+export type ApiResult = { ok: true; api: Api; account: AccountApi } | { ok: false; error: string };
 
 let cached: ApiResult | null = null;
 
 export function buildApi(config: ApiConfig): ApiResult {
   if (!config.ok) return { ok: false, error: config.error };
-  if (config.mode === 'mock') return { ok: true, api: createMockApi() };
-  return { ok: true, api: createSupabaseApi({ url: config.url, key: config.key }) };
+  if (config.mode === 'mock') return { ok: true, api: createMockApi(), account: createMockAccount(allCards) };
+  const account = createSupabaseAccount({ url: config.url, key: config.key });
+  return { ok: true, api: createSupabaseApi({ url: config.url, key: config.key, getToken: () => account.accessToken() }), account };
 }
 
 // A config error is returned, not hidden: the root layout shows it full screen.

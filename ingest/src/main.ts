@@ -1,8 +1,8 @@
-// CLI.  node src/main.ts [--dry-run] [--once | --loop] [--only sec,fed,macro] [--limit N] [--json]
+// CLI.  node src/main.ts [--dry-run] [--once | --loop] [--only sec,fed,bea,fedreg,macro] [--limit N] [--json]
 //   --dry-run  read fixtures from src/fixtures, no network, no keys, publish nothing
 //   --once     one run (default)
 //   --loop     run every config.pollIntervalMinutes until stopped (Ctrl+C)
-//   --only     comma-separated subset of sources
+//   --only     comma-separated subset of sources (macro, fed, bea, fedreg, sec, wiki, cpsc, usgs, nasa)
 //   --limit    max news items summarized per run (default 20)
 //   --json     with --dry-run: print the card payloads as JSON
 
@@ -10,13 +10,14 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchAllowed } from './allowlist.ts';
-import { config, describeEnv, readEnv } from './config.ts';
-import { runOnce, type Deps, type SourceName } from './pipeline.ts';
+import { config, describeEnv, fedRegisterUrls, readEnv } from './config.ts';
+import { runOnce, SOURCE_NAMES, type Deps, type SourceName } from './pipeline.ts';
 import { createDryRunPublisher, createSupabasePublisher } from './publish.ts';
 import { fileCounter, memoryCounter } from './summarizer/chain.ts';
-import { createGeminiSummarizer } from './summarizer/gemini.ts';
+import { buildProviders } from './summarizer/providers.ts';
 import { templateSummarizer } from './summarizer/template.ts';
-import type { Summarizer } from './types.ts';
+import { cpscUrl } from './sources/cpsc.ts';
+import { wikimediaUserAgent, wikiFeedUrl } from './sources/wiki.ts';
 
 export interface Args {
   dryRun: boolean;
@@ -36,7 +37,7 @@ export function parseArgs(argv: string[]): Args {
     else if (k === '--json') a.json = true;
     else if (k === '--only') {
       const v = (argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-      for (const s of v) if (!['sec', 'fed', 'macro'].includes(s)) throw new Error(`--only: unknown source "${s}" (use sec, fed, macro)`);
+      for (const s of v) if (!(SOURCE_NAMES as readonly string[]).includes(s)) throw new Error(`--only: unknown source "${s}" (use ${SOURCE_NAMES.join(', ')})`);
       a.only = v as SourceName[];
     } else if (k === '--limit') {
       const n = Number(argv[++i]);
@@ -50,14 +51,25 @@ export function parseArgs(argv: string[]): Args {
 // ---- dry-run fixtures ----------------------------------------------------------------
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
+/** The dry run's clock: the fixtures are from this day. */
+export const DRY_NOW = new Date('2026-10-17T21:00:00Z');
 const fixture = (name: string) => readFileSync(new URL(name, FIXTURES), 'utf8');
 
 /** Maps live URLs to local fixture files. Unknown URLs fail like a network error. */
 export function fixtureFetcher(): Deps['fetchText'] {
   return async (url) => {
     if (url === config.feeds.sec8k) return fixture('sec-8k-feed.atom.xml');
-    if (url === config.secTickersUrl) return fixture('sec-company-tickers-exchange.json');
+    if (url === config.secTickersUrl) return fixture('sec-company-tickers-watch.json');
+    if (url === config.secSubmissionsUrl.replace('{cik}', '0000320193')) return fixture('sec-submissions-CIK0000320193.json');
     if ((config.feeds.fedRss as readonly string[]).includes(url)) return fixture('fed-press-monetary.rss.xml');
+    if (url === config.feeds.beaRss) return fixture('bea-releases.rss.xml');
+    if (url === wikiFeedUrl(DRY_NOW)) return fixture('wiki-featured-2026-10-17.json');
+    if (url === cpscUrl(DRY_NOW)) return fixture('cpsc-recalls-2026-10-03.json');
+    if (url === config.usgs.url) return fixture('usgs-significant-week.geojson');
+    if (url === config.nasa.feedUrl) return fixture('nasa-news-release.rss.xml');
+    const fr = fedRegisterUrls();
+    if (url === fr[0]) return fixture('fedreg-agencies.json');
+    if (url === fr[1]) return fixture('fedreg-significant.json');
     if (/www\.sec\.gov\/Archives\/.+-index\.htm$/.test(url)) return fixture('sec-filing-index.html');
     if (/www\.sec\.gov\/Archives\/.+\/primary-8k\.htm$/.test(url)) return fixture('sec-primary-8k.html');
     if (/www\.federalreserve\.gov\/newsevents\/pressreleases\//.test(url)) return fixture('fed-press-release.html');
@@ -71,10 +83,12 @@ export function fixtureFetcher(): Deps['fetchText'] {
 // ---- live fetcher -----------------------------------------------------------------------
 
 function liveFetcher(userAgent: string, supabaseHost: string): Deps['fetchText'] {
+  // Wikimedia requires its own User-Agent format; the contact comes from SEC_USER_AGENT.
+  const wikiUa = wikimediaUserAgent(userAgent) ?? userAgent;
   return async (url, kind, ttl) => {
     const r = await fetchAllowed(url, {
       kind,
-      userAgent,
+      userAgent: new URL(url).hostname === 'en.wikipedia.org' ? wikiUa : userAgent,
       extraHosts: [supabaseHost],
       cacheTtlMinutes: kind === 'page' ? ttl : 0,          // API responses (with keys in URLs) are never cached to disk
     });
@@ -104,7 +118,7 @@ export async function main(argv: string[]): Promise<number> {
       providers: [templateSummarizer],                       // no keys in a dry run: template cards only
       counter: memoryCounter(),
       fredApiKey: 'dry-run',                                  // fixture fetcher ignores it
-      now: new Date('2026-10-17T21:00:00Z'),                  // fixtures are from this day
+      now: DRY_NOW,                                           // fixtures are from this day
       log,
     };
     const stats = await runOnce(deps, { only: args.only, limit: args.limit });
@@ -116,11 +130,8 @@ export async function main(argv: string[]): Promise<number> {
   loadDotEnv();
   const env = readEnv(process.env);
   log(`ingest starting: ${describeEnv(env)}`);
-  const providers: Summarizer[] = [];
-  for (const name of config.providerOrder) {
-    if (name === 'gemini' && env.geminiApiKey) providers.push(createGeminiSummarizer({ apiKey: env.geminiApiKey }));
-    if (name === 'template') providers.push(templateSummarizer);
-  }
+  const { providers, skipped } = buildProviders(env);
+  log(`summarizers: ${providers.map((p) => p.name).join(' -> ')}${skipped.length ? `; skipped: ${skipped.join(', ')}` : ''}`);
   const deps: Deps = {
     fetchText: liveFetcher(env.secUserAgent, new URL(env.supabaseUrl).hostname),
     publisher: createSupabasePublisher({ url: env.supabaseUrl, key: env.supabaseServiceRoleKey }),

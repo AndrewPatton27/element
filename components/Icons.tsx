@@ -126,3 +126,56 @@ export function DocumentIcon(p: IconProps) {
     </Icon>
   );
 }
+
+// Person: the design's "Me" icon, used for the Account nav item.
+export function PersonIcon(p: IconProps) {
+  return (
+    <Icon {...p}>
+      <Circle cx={12} cy={8} r={4} />
+      <Path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" />
+    </Icon>
+  );
+}
+
+// Thumbs for "More like this" / "Less like this" (same stroke style as the design icons).
+const THUMB = 'M7 11l4-7a2 2 0 0 1 3.4 1.9L13.6 10H19a2 2 0 0 1 2 2.4l-1.3 6A2 2 0 0 1 17.7 20H7z';
+
+export function ThumbUpIcon(p: IconProps) {
+  return (
+    <Icon size={18} {...p}>
+      <Path d="M3 11h4v9H3z" />
+      <Path d={THUMB} />
+    </Icon>
+  );
+}
+
+export function ThumbDownIcon(p: IconProps) {
+  return (
+    <Icon size={18} {...p}>
+      <Path d="M3 11h4v9H3z" transform="rotate(180 12 12)" />
+      <Path d={THUMB} transform="rotate(180 12 12)" />
+    </Icon>
+  );
+}
+
+// Eye / eye-off for the show-password toggle (same stroke style as the design icons).
+const EYE = 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z';
+
+export function EyeIcon(p: IconProps) {
+  return (
+    <Icon size={20} {...p}>
+      <Path d={EYE} />
+      <Circle cx={12} cy={12} r={3} />
+    </Icon>
+  );
+}
+
+export function EyeOffIcon(p: IconProps) {
+  return (
+    <Icon size={20} {...p}>
+      <Path d={EYE} />
+      <Circle cx={12} cy={12} r={3} />
+      <Path d="M3 3l18 18" />
+    </Icon>
+  );
+}

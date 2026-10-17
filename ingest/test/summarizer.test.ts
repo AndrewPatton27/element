@@ -45,9 +45,10 @@ test('template cards pass the validator (SEC 2.02, SEC 5.02, Fed)', () => {
     assert.deepEqual(v.errors, [], d.headline);
     assert.ok(d.headline.length <= 90);
   }
-  assert.equal(templateDraft({ item: gopro, text: '' }).headline, 'GoPro, Inc. files 8-K: Item 2.02, results of operations');
+  assert.equal(templateDraft({ item: gopro, text: '' }).headline, 'GoPro, Inc. shares its latest financial results');
   assert.equal(templateDraft({ item: gopro, text: '' }).body,
-    'GoPro, Inc. filed a Form 8-K under Item 2.02, which covers quarterly or annual results, plus Items 4.02 and 8.01. Open the filing for details.');
+    'GoPro, Inc. sent the SEC a report on its latest results, like sales and profit. Open the filing to see the numbers.');
+  assert.equal(templateDraft({ item: costco, text: '' }).headline, 'Costco Wholesale Corp reports a change in its top leaders');
 });
 
 test('license gate: link_out / dev_only text never reaches any provider', async () => {

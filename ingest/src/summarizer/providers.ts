@@ -1,0 +1,29 @@
+// Builds the provider list from config.providerOrder and the environment.
+// An AI provider whose key is missing is skipped cleanly (the next one is used).
+
+import { config } from '../config.ts';
+import type { FetchLike } from '../allowlist.ts';
+import { createGeminiSummarizer } from './gemini.ts';
+import { createGroqSummarizer } from './groq.ts';
+import { templateSummarizer } from './template.ts';
+import type { Summarizer } from '../types.ts';
+
+export function buildProviders(
+  keys: { geminiApiKey: string | null; groqApiKey: string | null },
+  opts: { fetchImpl?: FetchLike; minIntervalMs?: number } = {},
+): { providers: Summarizer[]; skipped: string[] } {
+  const providers: Summarizer[] = [];
+  const skipped: string[] = [];
+  for (const name of config.providerOrder) {
+    if (name === 'gemini') {
+      if (keys.geminiApiKey) providers.push(createGeminiSummarizer({ apiKey: keys.geminiApiKey, ...opts }));
+      else skipped.push('gemini (GEMINI_API_KEY not set)');
+    } else if (name === 'groq') {
+      if (keys.groqApiKey) providers.push(createGroqSummarizer({ apiKey: keys.groqApiKey, ...opts }));
+      else skipped.push('groq (GROQ_API_KEY not set)');
+    } else if (name === 'template') {
+      providers.push(templateSummarizer);
+    }
+  }
+  return { providers, skipped };
+}

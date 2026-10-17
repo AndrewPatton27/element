@@ -1,6 +1,6 @@
 // Page frame shared by every screen. Phones: content, then a bottom nav bar.
 // Wide web: a left rail with the wordmark and nav, the content, and an optional
-// right rail. Nav holds only Feed, Numbers and About (hackathon scope).
+// right rail. Nav: Feed, Numbers, About, and Account ("Sign in" for guests).
 // The SAMPLE DATA banner sits on top in mock mode.
 
 import type { ReactNode } from 'react';
@@ -9,22 +9,30 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { APP_NAME } from '../lib/config';
 import { useAppData } from '../lib/appData';
+import { useAccount } from '../lib/accountContext';
 import { usePalette, useWide } from '../lib/useTheme';
 import { ASIDE_WIDTH, fonts, RAIL_WIDTH } from '../lib/theme';
 import type { Palette } from '../lib/theme';
-import { FeedIcon, InfoIcon, NumbersIcon } from './Icons';
+import { FeedIcon, InfoIcon, NumbersIcon, PersonIcon } from './Icons';
 import { SampleBanner } from './SampleBanner';
 
-export type Tab = 'feed' | 'numbers' | 'about';
+export type Tab = 'feed' | 'numbers' | 'about' | 'account';
+type Href = '/' | '/numbers' | '/about' | '/account' | '/signin';
+type NavItem = { key: Tab; label: string; href: Href; Icon: typeof FeedIcon };
 
-const TABS: { key: Tab; label: string; href: '/' | '/numbers' | '/about'; Icon: typeof FeedIcon }[] = [
-  { key: 'feed', label: 'Feed', href: '/', Icon: FeedIcon },
-  { key: 'numbers', label: 'Numbers', href: '/numbers', Icon: NumbersIcon },
-  { key: 'about', label: 'About', href: '/about', Icon: InfoIcon },
-];
+function navItems(signedIn: boolean): NavItem[] {
+  return [
+    { key: 'feed', label: 'Feed', href: '/', Icon: FeedIcon },
+    { key: 'numbers', label: 'Numbers', href: '/numbers', Icon: NumbersIcon },
+    { key: 'about', label: 'About', href: '/about', Icon: InfoIcon },
+    signedIn
+      ? { key: 'account', label: 'Account', href: '/account', Icon: PersonIcon }
+      : { key: 'account', label: 'Sign in', href: '/signin', Icon: PersonIcon },
+  ];
+}
 
-function go(href: '/' | '/numbers' | '/about') {
-  router.navigate(href);
+function go(href: Href) {
+  router.navigate(href as never); // typed routes regenerate on the next `expo start`
 }
 
 export function Wordmark({ size = 24 }: { size?: number }) {
@@ -36,10 +44,10 @@ export function Wordmark({ size = 24 }: { size?: number }) {
   );
 }
 
-function BottomNav({ active, p }: { active: Tab; p: Palette }) {
+function BottomNav({ active, p, items }: { active: Tab; p: Palette; items: NavItem[] }) {
   return (
     <View style={[styles.bottomNav, { backgroundColor: p.surface, borderTopColor: p.navBorder }]} accessibilityRole="tablist">
-      {TABS.map(({ key, label, href, Icon }) => {
+      {items.map(({ key, label, href, Icon }) => {
         const on = key === active;
         const color = on ? p.accent : p.muted;
         return (
@@ -53,13 +61,13 @@ function BottomNav({ active, p }: { active: Tab; p: Palette }) {
   );
 }
 
-function SideRail({ active, p }: { active: Tab; p: Palette }) {
+function SideRail({ active, p, items, email }: { active: Tab; p: Palette; items: NavItem[]; email: string | null }) {
   return (
     <View style={styles.rail} accessibilityRole="tablist">
       <View style={styles.railBrand}>
         <Wordmark size={30} />
       </View>
-      {TABS.map(({ key, label, href, Icon }) => {
+      {items.map(({ key, label, href, Icon }) => {
         const on = key === active;
         return (
           <Pressable
@@ -74,7 +82,9 @@ function SideRail({ active, p }: { active: Tab; p: Palette }) {
           </Pressable>
         );
       })}
-      <Text style={[styles.railNote, { color: p.muted }]}>Business news from public sources, in two-minute cards.</Text>
+      <Text style={[styles.railNote, { color: p.muted }]}>
+        {email ? `Signed in as ${email}` : 'A two-minute daily briefing from public sources. Sign in for a feed tailored to you.'}
+      </Text>
     </View>
   );
 }
@@ -90,6 +100,8 @@ export function Shell({ active, children, aside, scroll }: ShellProps) {
   const p = usePalette();
   const wide = useWide();
   const { api } = useAppData();
+  const { user } = useAccount();
+  const items = navItems(user !== null);
 
   const content = scroll ? (
     <ScrollView style={styles.fill} contentContainerStyle={wide ? styles.scrollWide : styles.scrollNarrow}>
@@ -104,7 +116,7 @@ export function Shell({ active, children, aside, scroll }: ShellProps) {
       <SafeAreaView style={[styles.fill, { backgroundColor: p.bg }]}>
         {api.sample ? <SampleBanner /> : null}
         <View style={styles.wideRow}>
-          <SideRail active={active} p={p} />
+          <SideRail active={active} p={p} items={items} email={user?.email ?? null} />
           <View style={styles.main}>{content}</View>
           {aside ? (
             <ScrollView style={styles.aside} contentContainerStyle={styles.asideContent}>
@@ -120,7 +132,7 @@ export function Shell({ active, children, aside, scroll }: ShellProps) {
     <SafeAreaView style={[styles.fill, { backgroundColor: p.bg }]} edges={['top', 'bottom']}>
       {api.sample ? <SampleBanner /> : null}
       {content}
-      <BottomNav active={active} p={p} />
+      <BottomNav active={active} p={p} items={items} />
     </SafeAreaView>
   );
 }

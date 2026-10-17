@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { Api } from './api.ts';
+import type { AccountApi } from './account.ts';
 import { FEED_PAGE_SIZE } from './config.ts';
 import { canLoadMore, feedKey, feedReducer, initialFeedState, type FeedQuery, type FeedState } from './feedLogic.ts';
 
@@ -16,7 +17,7 @@ function message(err: unknown): string {
   return err instanceof Error ? err.message : 'Something went wrong.';
 }
 
-export function useFeed(api: Api, query: FeedQuery): UseFeed {
+export function useFeed(api: Api, query: FeedQuery, account?: AccountApi): UseFeed {
   const key = feedKey(query);
   const [state, dispatch] = useReducer(feedReducer, key, initialFeedState);
   const stateRef = useRef(state);
@@ -30,7 +31,10 @@ export function useFeed(api: Api, query: FeedQuery): UseFeed {
       inflight.current = tag;
       dispatch({ type: 'request', key: k });
       try {
-        const page = await api.feed({ mode: query.mode, category: query.category, cursor, limit: FEED_PAGE_SIZE });
+        const page =
+          query.mode === 'for_you'
+            ? await (account as AccountApi).feedForYou(cursor, FEED_PAGE_SIZE)
+            : await api.feed({ mode: query.mode, category: query.category, cursor, limit: FEED_PAGE_SIZE });
         dispatch({ type: 'page', key: k, page });
       } catch (err) {
         dispatch({ type: 'fail', key: k, error: message(err) });
@@ -38,7 +42,7 @@ export function useFeed(api: Api, query: FeedQuery): UseFeed {
         if (inflight.current === tag) inflight.current = null;
       }
     },
-    [api, query.mode, query.category],
+    [api, account, query.mode, query.category],
   );
 
   useEffect(() => {

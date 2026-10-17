@@ -4,7 +4,7 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, BlurbCard } from '../contract/types.ts';
 import { hostOf, relativeTime } from '../lib/format';
-import { disclaimerText, howMadeText, primarySource } from '../lib/labels';
+import { CC_BY_SA_MARK, disclaimerText, howMadeText, primarySource, shareAlikeCredit } from '../lib/labels';
 import { usePalette } from '../lib/useTheme';
 import { MAX_COLUMN_WIDTH } from '../lib/config';
 import { fonts } from '../lib/theme';
@@ -16,6 +16,7 @@ export function SourcesSheet({ card, config, onClose }: { card: BlurbCard | null
   const p = usePalette();
   const hidden = card ? card.source_count - card.sources.length : 0;
   const primary = card ? primarySource(card) : null;
+  const credit = card ? shareAlikeCredit(card, config) : null;
   return (
     <Modal visible={card !== null} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, { backgroundColor: p.overlay }]} onPress={onClose} accessibilityLabel="Close sources" />
@@ -39,7 +40,7 @@ export function SourcesSheet({ card, config, onClose }: { card: BlurbCard | null
             {card?.sources.map((s) => (
               <Pressable
                 key={s.url}
-                onPress={() => openUrl(s.url)}
+                onPress={() => openUrl(s.url, card.id)}
                 accessibilityRole="link"
                 accessibilityLabel={`${s.name}${s.doc_label ? ', ' + s.doc_label : ''}, ${relativeTime(s.published_at)}. Opens the original.`}
                 style={({ pressed }) => [styles.row, { borderColor: p.navBorder, opacity: pressed ? 0.75 : 1 }]}
@@ -59,6 +60,15 @@ export function SourcesSheet({ card, config, onClose }: { card: BlurbCard | null
                     {[s.doc_label, hostOf(s.url), relativeTime(s.published_at)].filter(Boolean).join(' · ')}
                   </Text>
                   {s.attribution ? <Text style={[styles.rowMeta, { color: p.muted }]}>{s.attribution}</Text> : null}
+                  {(s.license_class as string) === 'cc_by_sa' && credit ? (
+                    <Text
+                      style={[styles.rowMeta, styles.licenseLink, { color: p.accentInk }]}
+                      onPress={() => openUrl(credit.licenseUrl)}
+                      accessibilityRole="link"
+                    >
+                      License: {CC_BY_SA_MARK}
+                    </Text>
+                  ) : null}
                 </View>
                 <ExternalIcon color={p.muted} />
               </Pressable>
@@ -77,7 +87,7 @@ export function SourcesSheet({ card, config, onClose }: { card: BlurbCard | null
           </ScrollView>
           {primary ? (
             <Pressable
-              onPress={() => openUrl(primary.url)}
+              onPress={() => openUrl(primary.url, card?.id)}
               accessibilityRole="link"
               style={({ pressed }) => [styles.primary, { backgroundColor: p.accent, opacity: pressed ? 0.85 : 1 }]}
             >
@@ -114,6 +124,7 @@ const styles = StyleSheet.create({
   rowIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1, gap: 2 },
   rowName: { fontFamily: fonts.sansSemi, fontSize: 16 },
+  licenseLink: { textDecorationLine: 'underline' },
   rowMeta: { fontFamily: fonts.sans, fontSize: 14 },
   how: { gap: 6, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14 },
   howTitle: { fontFamily: fonts.sansSemi, fontSize: 14 },

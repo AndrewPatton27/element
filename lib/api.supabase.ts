@@ -10,6 +10,7 @@ export interface SupabaseOptions {
   url: string; // https://<project>.supabase.co, no trailing slash
   key: string; // publishable key
   fetchFn?: typeof fetch;
+  getToken?: () => Promise<string | null>; // signed-in user's access token, if any
 }
 
 export class ApiError extends Error {
@@ -28,8 +29,16 @@ export interface PlannedRequest {
 
 // The api schema is selected per request with Accept-Profile (reads) and
 // Content-Profile (RPC calls), so the project only needs `api` exposed.
-export function planRequest(base: string, key: string, op: 'feed' | 'categories' | 'numbers' | 'config', req?: FeedRequest): PlannedRequest {
+export function planRequest(
+  base: string,
+  key: string,
+  op: 'feed' | 'categories' | 'numbers' | 'config',
+  req?: FeedRequest,
+  token?: string | null,
+): PlannedRequest {
   const headers: Record<string, string> = { apikey: key, Accept: 'application/json', 'Accept-Profile': 'api' };
+  // Signed in: send the user's token so the server knows who is reading.
+  if (token) headers.Authorization = `Bearer ${token}`;
   if (op === 'feed') {
     const body = {
       p_mode: req?.mode ?? 'top',
@@ -76,7 +85,7 @@ export function createSupabaseApi(opts: SupabaseOptions): Api {
 
   return {
     sample: false,
-    feed: async (req) => parseFeedPage(await call(planRequest(opts.url, opts.key, 'feed', req))),
+    feed: async (req) => parseFeedPage(await call(planRequest(opts.url, opts.key, 'feed', req, opts.getToken ? await opts.getToken() : null))),
     categories: async () => parseCategories(await call(planRequest(opts.url, opts.key, 'categories'))),
     numbersToKnow: async () => parseMacroFacts(await call(planRequest(opts.url, opts.key, 'numbers'))),
     appConfig: async () => parseAppConfig(await call(planRequest(opts.url, opts.key, 'config'))),
