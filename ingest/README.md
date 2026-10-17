@@ -1,0 +1,48 @@
+# ingest
+
+A TypeScript script run from a laptop. It fetches public filings and releases (SEC 8-K, Federal Reserve press releases, FRED and Treasury numbers), turns them into short cards, checks every card, and publishes it to Supabase.
+
+**Status:** complete for the hackathon scope and tested offline (`npm test`, `npm run dry-run`). Live runs against SEC, Fed, FRED, Gemini and Supabase have not been tried yet. Full description: `ingest.md`.
+
+## Requirements
+
+Run `node -v` first. If it is below 22.18, install Node 24 LTS. There are no runtime dependencies, so `npm install` is not needed. TypeScript runs directly on Node (type stripping), so the code uses only erasable syntax and `.ts` import extensions.
+
+## Commands
+
+```sh
+cd ingest
+npm test                  # offline tests, no network, no keys
+npm run dry-run           # whole pipeline on fixtures, publishes nothing
+npm run ingest            # one live run (needs .env)
+node src/main.ts --once --only sec --limit 3
+```
+
+## Environment variables
+
+Put these in a git-ignored `.env` file. Never commit real values.
+
+| Name | What |
+|---|---|
+| `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase now calls this the **secret** key (the other one is the "publishable" key). The secret key goes in this variable; the name is kept for consistency. Script only, never in app code. |
+| `GEMINI_API_KEY` | Google AI Studio key (free tier, no billing) |
+| `FRED_API_KEY` | FRED API key |
+| `SEC_USER_AGENT` | `"<app name> <contact email>"`, required by the SEC |
+
+The script refuses to start if `SUPABASE_URL` is missing or still a placeholder, and it never prints a key (only `[set]` / `[missing]`).
+
+## Files
+
+| File | What it does |
+|---|---|
+| `src/config.ts` | Every tunable value: model ID, daily AI cap (`min(600, free requests per day)`), card limits, copy limits, advice blocklist, ticker cap, allowed hosts, feed URLs, poll interval. Also reads and checks the environment. |
+| `src/allowlist.ts` | `fetchAllowed()`: every outbound request goes through it. Full pages only from `www.sec.gov`, `www.federalreserve.gov`, `www.bls.gov`; data APIs only from FRED, Treasury, Gemini and the project's Supabase host. Each redirect hop is re-checked. https only, no credentials in URLs, about 5 requests per second, optional local file cache. |
+| `src/validate.ts` | Checks a draft card: JSON shape, headline <= 90 chars, body <= 60 words, category, no advice language, every number must appear in the source, every ticker must appear in the source, copy limit (<= 10 consecutive words from a filing, <= 25 from public-domain government text; numbers and 8-K item titles do not count). `assertSummarizable()` refuses any text that is not public domain or a company filing before it can reach the AI. `validatePublish()` refuses cards with no source link, `dev_only` sources or `link_out` kind. |
+| `src/dedupe.ts` | Skips an item whose URL was already seen and caps cards at 3 per ticker within 24 hours. The database enforces the same rules again. |
+| `src/ranking.ts` | A TypeScript copy of the database ranking formula, used by tests only. |
+| `test/*.test.ts` | Offline tests for all of the above plus a check of the shared contract fixtures. |
+
+## How publishing will work
+
+The script writes only through service-role RPCs in the `api` schema (`upsert_item`, `set_item_status`, `publish_blurb`, `upsert_macro`). Those functions are revoked from the anonymous and signed-in roles. `publish_blurb` ranks the card itself, so the private schemas never need to be exposed.

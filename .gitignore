@@ -1,0 +1,35 @@
+# Private project context: never push
+CLAUDE.md
+context/
+docs/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and builds
+node_modules/
+.expo/
+dist/
+web-build/
+.wrangler/
+supabase/.temp/
+*.log
+.DS_Store
+
+# Claude Code agents and local settings (reference private docs)
+.claude/
+
+# Expo extras
+expo-env.d.ts
+.metro-health-check*
+*.tsbuildinfo
+/ios
+/android
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem

@@ -1,0 +1,16 @@
+<!-- RECONSTRUCTED from live fetch of https://www.federalreserve.gov/feeds/press_monetary.xml on 2026-10-17: values real, XML re-assembled (not byte-exact). Item values real; channel title/description are ASSUMED (not read). Apostrophes encoded as &#39; as in the live feed. -->
+<rss version="2.0">
+<channel>
+<title>FRB: Press Release - Monetary Policy</title>
+<link>https://www.federalreserve.gov/feeds/feeds.htm</link>
+<description>Monetary policy press releases from the Federal Reserve Board</description>
+<item>
+<title>Minutes of the Board&#39;s discount rate meetings on August 17, September 9, and September 16, 2026</title>
+<link>https://www.federalreserve.gov/newsevents/pressreleases/monetary20261013a.htm</link>
+<description>Minutes of the Board&#39;s discount rate meetings on August 17, September 9, and September 16, 2026</description>
+<category>Monetary Policy</category>
+<pubDate>Tue, 13 Oct 2026 18:00:00 GMT</pubDate>
+<guid>https://www.federalreserve.gov/newsevents/pressreleases/monetary20261013a.htm</guid>
+</item>
+</channel>
+</rss>

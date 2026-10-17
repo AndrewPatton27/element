@@ -1,0 +1,9 @@
+{
+  "_comment": "SYNTHETIC: hand-made in the shape of SEC's company_tickers_exchange.json (fields + data rows; shape UNVERIFIED, not fetched). Two real listings from the 8-K fixtures plus one made-up OTC company to test filtering.",
+  "fields": ["cik", "name", "ticker", "exchange"],
+  "data": [
+    [1500435, "GoPro, Inc.", "GPRO", "Nasdaq"],
+    [909832, "COSTCO WHOLESALE CORP /NEW", "COST", "Nasdaq"],
+    [9999901, "EXAMPLE OTC HOLDINGS INC", "EXOTQ", "OTC"]
+  ]
+}

@@ -1,0 +1,80 @@
+[
+  {
+    "series_id": "DGS2",
+    "label": "2-yr Treasury",
+    "value": "3.48%",
+    "change": "+0.03 pts",
+    "direction": "up",
+    "period": null,
+    "as_of": "2026-10-16",
+    "source_name": "Board of Governors of the Federal Reserve System (US) via FRED",
+    "source_short": "Federal Reserve via FRED",
+    "source_url": "https://fred.stlouisfed.org/series/DGS2",
+    "sort_order": 1
+  },
+  {
+    "series_id": "DGS10",
+    "label": "10-yr Treasury",
+    "value": "4.02%",
+    "change": "+0.06 pts",
+    "direction": "up",
+    "period": null,
+    "as_of": "2026-10-16",
+    "source_name": "Board of Governors of the Federal Reserve System (US) via FRED",
+    "source_short": "Federal Reserve via FRED",
+    "source_url": "https://fred.stlouisfed.org/series/DGS10",
+    "sort_order": 2
+  },
+  {
+    "series_id": "DFF",
+    "label": "Fed funds rate",
+    "value": "3.88%",
+    "change": "0.00 pts",
+    "direction": "flat",
+    "period": null,
+    "as_of": "2026-10-16",
+    "source_name": "Board of Governors of the Federal Reserve System (US) via FRED",
+    "source_short": "Federal Reserve via FRED",
+    "source_url": "https://fred.stlouisfed.org/series/DFF",
+    "sort_order": 3
+  },
+  {
+    "series_id": "CPIAUCSL",
+    "label": "CPI inflation (yearly)",
+    "value": "2.9%",
+    "change": "-0.1 pts",
+    "direction": "down",
+    "period": "Sep 2026",
+    "as_of": "2026-10-15",
+    "source_name": "U.S. Bureau of Labor Statistics via FRED",
+    "source_short": "BLS via FRED",
+    "source_url": "https://fred.stlouisfed.org/series/CPIAUCSL",
+    "sort_order": 4
+  },
+  {
+    "series_id": "UNRATE",
+    "label": "Unemployment rate",
+    "value": "4.4%",
+    "change": "+0.1 pts",
+    "direction": "up",
+    "period": "Sep 2026",
+    "as_of": "2026-10-02",
+    "source_name": "U.S. Bureau of Labor Statistics via FRED",
+    "source_short": "BLS via FRED",
+    "source_url": "https://fred.stlouisfed.org/series/UNRATE",
+    "sort_order": 5
+  },
+  {
+    "series_id": "DCOILWTICO",
+    "label": "WTI crude oil",
+    "value": "$61.40",
+    "change": "-0.8%",
+    "direction": "down",
+    "period": null,
+    "as_of": "2026-10-13",
+    "source_name": "U.S. Energy Information Administration via FRED",
+    "source_short": "EIA via FRED",
+    "source_url": "https://fred.stlouisfed.org/series/DCOILWTICO",
+    "sort_order": 6
+  }
+]

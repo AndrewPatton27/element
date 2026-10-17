@@ -1,0 +1,139 @@
+// Vertical one-card-per-screen pager. FlatList with paging and snap. The card's
+// footer hint ("Swipe up" / "Next: press ↓ or scroll") is a Next button, and on
+// web the arrow keys, PageUp/PageDown and j/k move between cards too.
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { FlatList, Platform, StyleSheet, View, type FlatListProps, type LayoutChangeEvent } from 'react-native';
+import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
+import { usePalette } from '../lib/useTheme';
+import { Card } from './Card';
+import { LoadingState } from './States';
+
+interface Props {
+  items: BlurbCard[];
+  config: AppConfig | null;
+  categories: Category[];
+  loadingMore: boolean;
+  done: boolean;
+  onEndReached: () => void;
+  onShowSources: (card: BlurbCard) => void;
+  wide?: boolean;
+}
+
+// Below this page height the card switches to smaller type so it fits.
+const COMPACT_BELOW = 640;
+
+export function FeedPager({ items, config, categories, loadingMore, done, onEndReached, onShowSources, wide }: Props) {
+  const p = usePalette();
+  const list = useRef<FlatList<BlurbCard>>(null);
+  const [height, setHeight] = useState(0);
+  const [index, setIndex] = useState(0);
+  const indexRef = useRef(0);
+  indexRef.current = index;
+
+  const onLayout = (e: LayoutChangeEvent) => setHeight(Math.round(e.nativeEvent.layout.height));
+
+  const onViewable = useRef<NonNullable<FlatListProps<BlurbCard>['onViewableItemsChanged']>>(({ viewableItems }) => {
+    const first = viewableItems.find((v) => v.isViewable && typeof v.index === 'number');
+    if (first && typeof first.index === 'number') setIndex(first.index);
+  }).current;
+
+  const goTo = useCallback(
+    (i: number) => {
+      if (items.length === 0) return;
+      const target = Math.max(0, Math.min(items.length - 1, i));
+      list.current?.scrollToIndex({ index: target, animated: true });
+      setIndex(target);
+      if (target >= items.length - 2) onEndReached();
+    },
+    [items.length, onEndReached],
+  );
+  const next = useCallback(() => goTo(indexRef.current + 1), [goTo]);
+
+  // New filter -> new list: jump back to the first card.
+  const firstId = items[0]?.id;
+  useEffect(() => {
+    setIndex(0);
+    list.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [firstId]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (['ArrowDown', 'PageDown', 'j'].includes(e.key)) {
+        e.preventDefault();
+        goTo(indexRef.current + 1);
+      } else if (['ArrowUp', 'PageUp', 'k'].includes(e.key)) {
+        e.preventDefault();
+        goTo(indexRef.current - 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [goTo]);
+
+  const compact = !wide && height > 0 && height < COMPACT_BELOW;
+  const renderItem = useCallback(
+    ({ item, index: i }: { item: BlurbCard; index: number }) => {
+      const last = i === items.length - 1 && done;
+      return (
+        <View style={[styles.page, wide && styles.pageWide, { height }]}>
+          <Card
+            card={item}
+            config={config}
+            categories={categories}
+            onShowSources={onShowSources}
+            onNext={last ? undefined : next}
+            wide={wide}
+            compact={compact}
+          />
+          {/* the edge of the next card peeking out below, as in the design */}
+          <View style={[styles.stack, { backgroundColor: p.surface, borderColor: p.border, opacity: last ? 0 : 1 }]} />
+        </View>
+      );
+    },
+    [height, config, categories, onShowSources, next, wide, compact, items.length, done, p],
+  );
+
+  return (
+    <View style={styles.fill} onLayout={onLayout}>
+      {height > 0 ? (
+        <FlatList
+          ref={list}
+          data={items}
+          keyExtractor={(c) => c.id}
+          renderItem={renderItem}
+          pagingEnabled
+          snapToInterval={height}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          showsVerticalScrollIndicator={false}
+          getItemLayout={(_, i) => ({ length: height, offset: height * i, index: i })}
+          onEndReached={onEndReached}
+          onEndReachedThreshold={2}
+          onViewableItemsChanged={onViewable}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+          windowSize={5}
+          initialNumToRender={2}
+          removeClippedSubviews={Platform.OS !== 'web'}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ height: 80 }}>
+                <LoadingState label="Loading more…" />
+              </View>
+            ) : undefined
+          }
+        />
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  page: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
+  pageWide: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 12 },
+  stack: { height: 10, marginHorizontal: 28, borderWidth: 1, borderTopWidth: 0, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
+});

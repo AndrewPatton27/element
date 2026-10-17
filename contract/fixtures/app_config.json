@@ -1,0 +1,20 @@
+{
+  "disclaimer": "Informational only · Not investment advice",
+  "ai_notice": "AI-generated summary · may contain errors",
+  "required_notices": [
+    {
+      "key": "fred",
+      "text": "This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.",
+      "url": "https://fred.stlouisfed.org/",
+      "placements": [
+        "numbers_panel",
+        "data_card",
+        "share",
+        "about"
+      ]
+    }
+  ],
+  "min_supported_app_version": "1.0.0",
+  "quotes_enabled": false,
+  "linkout_cards": false
+}

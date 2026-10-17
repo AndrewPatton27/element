@@ -1,0 +1,42 @@
+# contract
+
+The shared data contract between the back end (Supabase, `api` schema) and the app.
+
+## Files
+
+| File | What it is |
+|---|---|
+| `types.ts` | TypeScript types for every response the app reads: `BlurbCard`, `FeedPage`, `MacroFact`, `AppConfig`, `RequiredNotice`, `Category`, `Source`, `Ticker`, `FeedMode`, `FeedParams`. Erasable TypeScript only (no enums or namespaces), so it can be imported with `import type` from Node scripts and the Expo app. |
+| `fixtures/feed.page1.json` | `FeedPage`: first page of the `top` feed (22 cards, all 9 categories, summary and data cards) with a `next_cursor`. |
+| `fixtures/feed.page2.json` | `FeedPage`: the following page, `next_cursor: null` (end of feed). |
+| `fixtures/feed.empty.json` | `FeedPage` with no cards. |
+| `fixtures/numbers_to_know.json` | `MacroFact[]` for the six series (DGS2, DGS10, DFF, CPIAUCSL, UNRATE, DCOILWTICO). |
+| `fixtures/app_config.json` | `AppConfig`: disclaimer, AI notice, required notices, feature flags. |
+| `fixtures/categories.json` | `Category[]`: the 9 category slugs with display names. |
+
+## Where the data comes from
+
+| Call | PostgREST request (header `Accept-Profile: api` / `Content-Profile: api`) | Type |
+|---|---|---|
+| `feed` | `POST /rest/v1/rpc/feed` with body `FeedParams` | `FeedPage` |
+| `numbers_to_know` | `GET /rest/v1/numbers_to_know?order=sort_order` | `MacroFact[]` |
+| `app_config` | `GET /rest/v1/app_config` (one row) | `AppConfig[]` |
+| `categories` | `GET /rest/v1/categories?order=sort_order` | `Category[]` |
+
+## Rules
+
+- **Keys are snake_case**, exactly as the database returns them.
+- **Forward compatibility.** Unknown `kind` -> skip the card. Unknown `category`, `event_type`, `license_class` or source `kind` -> render normally with a fallback. `link_out` is a reserved kind that is never produced in this version; the app skips it.
+- **Every card** shows `AppConfig.disclaimer` ("Informational only · Not investment advice"). Cards with `ai.generated = true` also show `AppConfig.ai_notice` ("AI-generated summary · may contain errors"). Template cards have `ai.generated = false` and `ai.label = null`.
+- `image` is always `null` and `tickers[].quote` is always `null`: no publisher images and no stock prices.
+- `importance` is a ranking input. It is optional and is never shown.
+- `next_cursor` is opaque. Send it back unchanged; `null` means the end of the feed.
+- Macro values always cite the original agency (`source_name`, `source_short`), never bare "FRED".
+
+## Fixtures are samples
+
+Every fixture card is fictional. Company names, tickers, numbers and links are made up, and every headline starts with `[SAMPLE]` so a build running on fixtures can never be mistaken for real news. The `numbers_to_know` values are also sample values.
+
+## Changing the contract
+
+The contract is frozen. Any change to `types.ts` or the fixture shapes needs review and must be made on both sides (database functions and app) in the same change.

@@ -1,0 +1,15 @@
+{
+  "name": "element-ingest",
+  "private": true,
+  "type": "module",
+  "description": "Fetches public filings and releases, summarizes them, validates and publishes cards to Supabase.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test \"test/*.test.ts\"",
+    "dry-run": "node src/main.ts --dry-run",
+    "ingest": "node src/main.ts --once",
+    "ingest:loop": "node src/main.ts --loop"
+  }
+}

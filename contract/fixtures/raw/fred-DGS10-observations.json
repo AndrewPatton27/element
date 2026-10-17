@@ -1,0 +1,21 @@
+{
+  "_comment": "SYNTHETIC: hand-made in the documented FRED series/observations JSON shape (needs an API key, none available 2026-10-17). Values copied from the real Treasury 10 Yr column for 10/14-10/16/2026; 10/12 uses '.' to show a missing value. Not a real FRED response.",
+  "realtime_start": "2026-10-17",
+  "realtime_end": "2026-10-17",
+  "observation_start": "2026-10-12",
+  "observation_end": "9999-12-31",
+  "units": "lin",
+  "output_type": 1,
+  "file_type": "json",
+  "order_by": "observation_date",
+  "sort_order": "asc",
+  "count": 4,
+  "offset": 0,
+  "limit": 100000,
+  "observations": [
+    { "realtime_start": "2026-10-17", "realtime_end": "2026-10-17", "date": "2026-10-12", "value": "." },
+    { "realtime_start": "2026-10-17", "realtime_end": "2026-10-17", "date": "2026-10-14", "value": "5.19" },
+    { "realtime_start": "2026-10-17", "realtime_end": "2026-10-17", "date": "2026-10-15", "value": "5.10" },
+    { "realtime_start": "2026-10-17", "realtime_end": "2026-10-17", "date": "2026-10-16", "value": "5.09" }
+  ]
+}

@@ -1,0 +1,47 @@
+[
+  {
+    "slug": "markets",
+    "name": "Markets",
+    "sort_order": 1
+  },
+  {
+    "slug": "earnings",
+    "name": "Earnings",
+    "sort_order": 2
+  },
+  {
+    "slug": "economy",
+    "name": "Economy",
+    "sort_order": 3
+  },
+  {
+    "slug": "policy",
+    "name": "Policy",
+    "sort_order": 4
+  },
+  {
+    "slug": "tech",
+    "name": "Tech",
+    "sort_order": 5
+  },
+  {
+    "slug": "deals",
+    "name": "Deals",
+    "sort_order": 6
+  },
+  {
+    "slug": "energy",
+    "name": "Energy",
+    "sort_order": 7
+  },
+  {
+    "slug": "insider",
+    "name": "Insider trades",
+    "sort_order": 8
+  },
+  {
+    "slug": "personal-finance",
+    "name": "Personal finance",
+    "sort_order": 9
+  }
+]

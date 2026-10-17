@@ -1,0 +1,341 @@
+{
+  "items": [
+    {
+      "id": "92bec19f-f15a-5730-bd1e-db60b71befbf",
+      "kind": "summary",
+      "headline": "[SAMPLE] Coho Vineyard files 8-K: Item 3.01, notice of listing rule deficiency",
+      "body": "Coho Vineyard filed a Form 8-K under Item 3.01, which covers notices that a company no longer meets an exchange listing rule. Open the filing for details.",
+      "category": "markets",
+      "event_type": null,
+      "tickers": [
+        {
+          "symbol": "COHO",
+          "name": "Coho Vineyard Ltd",
+          "exchange": "Nasdaq",
+          "quote": null
+        }
+      ],
+      "macro": [],
+      "sources": [
+        {
+          "name": "SEC",
+          "kind": "filing",
+          "doc_label": "Form 8-K",
+          "url": "https://www.sec.gov/Archives/edgar/data/9990013/000999001326000021/0009990013-26-000021-index.htm",
+          "published_at": "2026-10-17T05:00:00Z",
+          "license_class": "company_filing",
+          "attribution": null,
+          "is_primary": true
+        }
+      ],
+      "source_count": 1,
+      "as_of": "2026-10-17T05:00:00Z",
+      "published_at": "2026-10-17T05:10:00Z",
+      "sort_at": "2026-10-17T05:00:00Z",
+      "updated_at": null,
+      "revision": 1,
+      "freshness": {
+        "delayed_hours": null
+      },
+      "ai": {
+        "generated": false,
+        "label": null
+      },
+      "attribution": null,
+      "image": null,
+      "is_saved": false,
+      "share_path": "/b/92bec19f-f15a-5730-bd1e-db60b71befbf",
+      "importance": 2.0
+    },
+    {
+      "id": "0f8512ef-8ba6-57eb-aa46-6520ac186bc5",
+      "kind": "data",
+      "headline": "[SAMPLE] 2-year Treasury yield rises to 3.48%",
+      "body": "The 2-year Treasury yield was 3.48% on Oct 16, up 0.03 points from the prior day.",
+      "category": "markets",
+      "event_type": "macro_release",
+      "tickers": [],
+      "macro": [
+        {
+          "series_id": "DGS2",
+          "label": "2-yr Treasury",
+          "value": "3.48%",
+          "change": "+0.03 pts",
+          "direction": "up",
+          "period": null,
+          "as_of": "2026-10-16",
+          "source_name": "Board of Governors of the Federal Reserve System (US) via FRED",
+          "source_short": "Federal Reserve via FRED",
+          "source_url": "https://fred.stlouisfed.org/series/DGS2",
+          "sort_order": 1
+        }
+      ],
+      "sources": [
+        {
+          "name": "Federal Reserve Board",
+          "kind": "government",
+          "doc_label": "H.15 release",
+          "url": "https://www.federalreserve.gov/releases/h15/",
+          "published_at": "2026-10-16T05:00:00Z",
+          "license_class": "public_domain",
+          "attribution": null,
+          "is_primary": true
+        }
+      ],
+      "source_count": 1,
+      "as_of": "2026-10-16T05:00:00Z",
+      "published_at": "2026-10-16T05:10:00Z",
+      "sort_at": "2026-10-16T05:00:00Z",
+      "updated_at": null,
+      "revision": 1,
+      "freshness": {
+        "delayed_hours": null
+      },
+      "ai": {
+        "generated": false,
+        "label": null
+      },
+      "attribution": null,
+      "image": null,
+      "is_saved": false,
+      "share_path": "/b/0f8512ef-8ba6-57eb-aa46-6520ac186bc5",
+      "importance": 10.0
+    },
+    {
+      "id": "98394d0f-ac55-5455-b642-bc80a044aa42",
+      "kind": "summary",
+      "headline": "[SAMPLE] Lucerne Publishing files 8-K: Item 4.02, non-reliance on prior financials",
+      "body": "Lucerne Publishing filed a Form 8-K under Item 4.02, which means earlier financial statements can no longer be relied on. Open the filing for the periods affected.",
+      "category": "markets",
+      "event_type": null,
+      "tickers": [
+        {
+          "symbol": "LUCP",
+          "name": "Lucerne Publishing Group",
+          "exchange": "NYSE American",
+          "quote": null
+        }
+      ],
+      "macro": [],
+      "sources": [
+        {
+          "name": "SEC",
+          "kind": "filing",
+          "doc_label": "Form 8-K",
+          "url": "https://www.sec.gov/Archives/edgar/data/9990015/000999001526000033/0009990015-26-000033-index.htm",
+          "published_at": "2026-10-16T23:00:00Z",
+          "license_class": "company_filing",
+          "attribution": null,
+          "is_primary": true
+        }
+      ],
+      "source_count": 1,
+      "as_of": "2026-10-16T23:00:00Z",
+      "published_at": "2026-10-16T23:10:00Z",
+      "sort_at": "2026-10-16T23:00:00Z",
+      "updated_at": null,
+      "revision": 1,
+      "freshness": {
+        "delayed_hours": null
+      },
+      "ai": {
+        "generated": false,
+        "label": null
+      },
+      "attribution": null,
+      "image": null,
+      "is_saved": false,
+      "share_path": "/b/98394d0f-ac55-5455-b642-bc80a044aa42",
+      "importance": 2.0
+    },
+    {
+      "id": "7feceb74-facf-5234-8a58-e72bbf2cec3c",
+      "kind": "summary",
+      "headline": "[SAMPLE] VanArsdel names new board chair after founder steps back",
+      "body": "VanArsdel Ltd said its founder will step down as board chair at year end and stay on as a director. The board picked a current independent director as the next chair.",
+      "category": "markets",
+      "event_type": "exec_change",
+      "tickers": [
+        {
+          "symbol": "VANA",
+          "name": "VanArsdel Ltd",
+          "exchange": "NYSE",
+          "quote": null
+        }
+      ],
+      "macro": [],
+      "sources": [
+        {
+          "name": "SEC",
+          "kind": "filing",
+          "doc_label": "Form 8-K",
+          "url": "https://www.sec.gov/Archives/edgar/data/9990016/000999001626000052/0009990016-26-000052-index.htm",
+          "published_at": "2026-10-16T17:00:00Z",
+          "license_class": "company_filing",
+          "attribution": null,
+          "is_primary": true
+        }
+      ],
+      "source_count": 1,
+      "as_of": "2026-10-16T17:00:00Z",
+      "published_at": "2026-10-16T17:10:00Z",
+      "sort_at": "2026-10-16T17:00:00Z",
+      "updated_at": null,
+      "revision": 1,
+      "freshness": {
+        "delayed_hours": null
+      },
+      "ai": {
+        "generated": true,
+        "label": "AI-generated summary · may contain errors"
+      },
+      "attribution": null,
+      "image": null,
+      "is_saved": false,
+      "share_path": "/b/7feceb74-facf-5234-8a58-e72bbf2cec3c",
+      "importance": 3.0
+    },
+    {
+      "id": "383fbdd7-f8a5-5353-b04d-6a132d4c55a8",
+      "kind": "summary",
+      "headline": "[SAMPLE] Margie's Travel bookings rise 6% as international trips recover",
+      "body": "Margie's Travel said gross bookings grew 6% in the third quarter, led by trips abroad. Operating costs rose faster than revenue because of higher marketing spending, so profit was flat.",
+      "category": "earnings",
+      "event_type": "earnings",
+      "tickers": [
+        {
+          "symbol": "MGTV",
+          "name": "Margie's Travel Inc",
+          "exchange": "Nasdaq",
+          "quote": null
+        }
+      ],
+      "macro": [],
+      "sources": [
+        {
+          "name": "SEC",
+          "kind": "filing",
+          "doc_label": "Form 8-K",
+          "url": "https://www.sec.gov/Archives/edgar/data/9990017/000999001726000120/0009990017-26-000120-index.htm",
+          "published_at": "2026-10-16T09:00:00Z",
+          "license_class": "company_filing",
+          "attribution": null,
+          "is_primary": true
+        }
+      ],
+      "source_count": 1,
+      "as_of": "2026-10-16T09:00:00Z",
+      "published_at": "2026-10-16T09:10:00Z",
+      "sort_at": "2026-10-16T09:00:00Z",
+      "updated_at": null,
+      "revision": 1,
+      "freshness": {
+        "delayed_hours": null
+      },
+      "ai": {
+        "generated": true,
+        "label": "AI-generated summary · may contain errors"
+      },
+      "attribution": null,
+      "image": null,
+      "is_saved": false,
+      "share_path": "/b/383fbdd7-f8a5-5353-b04d-6a132d4c55a8",
+      "importance": 5.0
+    },
+    {
+      "id": "053ca88b-bb5a-5aef-9fca-77709936d6f1",
+      "kind": "summary",
+      "headline": "[SAMPLE] Humongous Insurance CFO reports share purchase in Form 4",
+      "body": "Humongous Insurance's chief financial officer reported purchasing 5,000 shares, according to a Form 4 filing. Open the filing for the price paid.",
+      "category": "insider",
+      "event_type": "insider",
+      "tickers": [
+        {
+          "symbol": "HMGI",
+          "name": "Humongous Insurance Co",
+          "exchange": "NYSE",
+          "quote": null
+        }
+      ],
+      "macro": [],
+      "sources": [
+        {
+          "name": "SEC",
+          "kind": "filing",
+          "doc_label": "Form 4",
+          "url": "https://www.sec.gov/Archives/edgar/data/9990018/000999001826000004/0009990018-26-000004-index.htm",
+          "published_at": "2026-10-16T15:00:00Z",
+          "license_class": "company_filing",
+          "attribution": null,
+          "is_primary": true
+        }
+      ],
+      "source_count": 1,
+      "as_of": "2026-10-16T15:00:00Z",
+      "published_at": "2026-10-16T15:10:00Z",
+      "sort_at": "2026-10-16T15:00:00Z",
+      "updated_at": null,
+      "revision": 1,
+      "freshness": {
+        "delayed_hours": null
+      },
+      "ai": {
+        "generated": false,
+        "label": null
+      },
+      "attribution": null,
+      "image": null,
+      "is_saved": false,
+      "share_path": "/b/053ca88b-bb5a-5aef-9fca-77709936d6f1",
+      "importance": 2.0
+    },
+    {
+      "id": "a327baee-b4b7-55ae-955a-9900106400ed",
+      "kind": "summary",
+      "headline": "[SAMPLE] Proseware names former finance chief as chief executive",
+      "body": "Proseware Inc appointed its former chief financial officer as chief executive, effective Nov 1. The outgoing CEO will stay as an adviser through the end of the year, the company said in an 8-K.",
+      "category": "tech",
+      "event_type": "exec_change",
+      "tickers": [
+        {
+          "symbol": "PRSW",
+          "name": "Proseware Inc",
+          "exchange": "Nasdaq",
+          "quote": null
+        }
+      ],
+      "macro": [],
+      "sources": [
+        {
+          "name": "SEC",
+          "kind": "filing",
+          "doc_label": "Form 8-K",
+          "url": "https://www.sec.gov/Archives/edgar/data/9990019/000999001926000088/0009990019-26-000088-index.htm",
+          "published_at": "2026-10-16T01:00:00Z",
+          "license_class": "company_filing",
+          "attribution": null,
+          "is_primary": true
+        }
+      ],
+      "source_count": 1,
+      "as_of": "2026-10-16T01:00:00Z",
+      "published_at": "2026-10-16T01:10:00Z",
+      "sort_at": "2026-10-16T01:00:00Z",
+      "updated_at": null,
+      "revision": 1,
+      "freshness": {
+        "delayed_hours": null
+      },
+      "ai": {
+        "generated": true,
+        "label": "AI-generated summary · may contain errors"
+      },
+      "attribution": null,
+      "image": null,
+      "is_saved": false,
+      "share_path": "/b/a327baee-b4b7-55ae-955a-9900106400ed",
+      "importance": 3.0
+    }
+  ],
+  "next_cursor": null
+}
