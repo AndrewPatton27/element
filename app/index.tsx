@@ -22,6 +22,8 @@ import type { FeedTab } from '../lib/feedLogic';
 import { topicParam } from '../lib/briefLogic';
 import { categoryName } from '../lib/format';
 import { defaultStore } from '../lib/storage';
+import { FOR_YOU_SEEN_MS, forYouProgress, readSeen, recordSeen } from '../lib/forYouGate';
+import { ForYouWarmup } from '../components/ForYouWarmup';
 import { useFeed } from '../lib/useFeed';
 import { usePalette, useWide } from '../lib/useTheme';
 import { MOBILE_HEADER_HEIGHT, fonts } from '../lib/theme';
@@ -101,10 +103,23 @@ export default function FeedScreen() {
     [hidden, hiddenSources],
   );
   const local = acct.localPrefs;
+  // For you stays locked until 10 stories across 4 topics have been read or reacted to.
+  const [seenList, setSeenList] = useState(() => readSeen(store));
+  const gate = forYouProgress({
+    reacted: Object.entries(local.reactions).map(([id, v]) => ({ id, category: v.topic })),
+    seen: seenList,
+  });
+  const locked = forYou && !gate.ready;
+  const seenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onSeenCandidate = useCallback((c: BlurbCard) => {
+    if (seenTimer.current) clearTimeout(seenTimer.current);
+    seenTimer.current = setTimeout(() => setSeenList(recordSeen(store, c)), FOR_YOU_SEEN_MS);
+  }, []);
+  useEffect(() => () => { if (seenTimer.current) clearTimeout(seenTimer.current); }, []);
   const rankPage = useCallback((cards: BlurbCard[]) => rankLocal(cards, local), [local]);
   const { state, loadMore, retry, rerank } = useFeed(
     api,
-    { mode, category: forYou ? null : category, user: acct.user?.id ?? null },
+    { mode: locked ? 'top' : mode, category: forYou ? null : category, user: acct.user?.id ?? null },
     acct.account,
     visible,
     signedIn ? undefined : rankPage,
@@ -191,6 +206,13 @@ export default function FeedScreen() {
     },
     [trackView, sendDwell],
   );
+  const onActiveBoth = useCallback(
+    (c: BlurbCard) => {
+      onSeenCandidate(c);
+      if (signedIn) onActiveCard(c);
+    },
+    [onSeenCandidate, onActiveCard, signedIn],
+  );
   useEffect(() => {
     const t = dwell.current;
     if (focused) t.resume('away', Date.now());
@@ -227,12 +249,13 @@ export default function FeedScreen() {
     dwell.current.finish(Date.now());
   }, [acct.user?.id]);
   useEffect(() => {
-    if (forYou) noteCards(state.items);
-  }, [forYou, state.items, noteCards]);
+    if (forYou && !locked) noteCards(state.items);
+  }, [forYou, locked, state.items, noteCards]);
 
   const first = items.length === 0;
   let body;
-  if (first && state.error) body = <ErrorState message={state.error} onRetry={retry} />;
+  if (locked) body = <ForYouWarmup progress={gate} onBack={() => setMode('top')} />;
+  else if (first && state.error) body = <ErrorState message={state.error} onRetry={retry} />;
   else if (first && (state.loading || !state.done)) body = <LoadingState label="Loading the feed…" />;
   else if (first) {
     body = (
@@ -259,7 +282,7 @@ export default function FeedScreen() {
         onQueuePosition={(i) => { queuePosition.current = i; }}
         followedTopics={followedTopics}
         onToggleTopicFollow={toggleCardFollow}
-        onActiveCard={signedIn && focused ? onActiveCard : undefined}
+        onActiveCard={focused ? onActiveBoth : undefined}
         active={focused && sheetCard === null && detailCard === null && menuCard === null}
         onMore={setMenuCard}
       />
