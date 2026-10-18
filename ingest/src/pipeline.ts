@@ -24,6 +24,7 @@ import { secFilingPageText } from './sec-text.ts';
 import { createChainState, summarizeWithChain, type ChainState, type UsageCounter } from './summarizer/chain.ts';
 import type { RawItem, Summarizer } from './types.ts';
 import { hasFigures, requiresFigures, validatePublish } from './validate.ts';
+import { createTopicFilterState, filterTopic, recordTopic, type TopicFilterState } from './topicFilter.ts';
 
 export type SourceName = 'macro' | 'fed' | 'bea' | 'fedreg' | 'sec' | 'wiki' | 'cpsc' | 'usgs' | 'nasa';
 export const SOURCE_NAMES: readonly SourceName[] = ['macro', 'fed', 'bea', 'fedreg', 'sec', 'wiki', 'cpsc', 'usgs', 'nasa'];
@@ -63,6 +64,7 @@ interface RunCtx {
   guard: ReturnType<typeof createGuard>;
   chain: ChainState;
 }
+let topicFilterState: TopicFilterState = createTopicFilterState();
 
 /**
  * One ingest run. Sources run in a fixed order (macro, fed, bea, fedreg, sec, wiki, cpsc, usgs,
@@ -78,6 +80,7 @@ export async function runOnce(deps: Deps, opts: RunOptions = {}): Promise<RunSta
     guard: createGuard(),
     chain: createChainState(),                       // provider cooldowns after a 429 last for this run
   };
+  topicFilterState = createTopicFilterState();
 
   if (only.has('macro')) await runMacro(deps, stats);
   if (only.has('fed')) await runFed(deps, ctx);
@@ -372,6 +375,12 @@ async function processItems(
     const cand = { url: it.url, tickers: it.tickers.map((t) => t.symbol), sortAt: new Date(it.published_at) };
     const d = guard.check(cand);
     if (!d.ok) { deps.log(`skip ${d.reason}: ${it.title}`); stats.skipped++; continue; }
+    const topicReject = filterTopic(it, topicFilterState);
+    if (topicReject) {
+      stats.skipped++;
+      deps.log(`skip ${topicReject}: ${it.title.slice(0, 100)}`);
+      continue;
+    }
     const group = limits.group?.of(it) ?? null;
     if (group !== null && limits.group && (perGroup.get(group) ?? 0) >= limits.group.max) {
       stats.skipped++;
@@ -382,6 +391,7 @@ async function processItems(
     const row = await deps.publisher.upsertItem(it);
     if (!row.is_new && row.status !== 'new') { stats.skipped++; alreadyHandled++; continue; }   // handled in an earlier run
     fresh++;
+    recordTopic(it, topicFilterState);
     if (group !== null) perGroup.set(group, (perGroup.get(group) ?? 0) + 1);
 
     let text = it.summary_text;

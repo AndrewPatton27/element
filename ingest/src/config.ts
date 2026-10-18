@@ -66,6 +66,24 @@ export const config = {
   templateVersion: 'tpl-v5',
   providerOrder: ['gemini', 'groq', 'template'] as const, // a list on purpose: adding a provider is one entry
 
+  // Deterministic editorial gate, before any model call. Per-run narrow-source diversity cap.
+  reportCard: {
+    narrowSourceMaxPerRun: 2,
+    narrowSources: ['faa_airworthiness_directive'] as readonly string[],
+    denyTitlePatterns: [
+      /\bform\s*144\b/i,
+      /\b(form|schedule)\s+(?:8-k|10-q|10-k)\b.*\b(amendment|exhibit|supplement)\b/i,
+      /\b(exhibit|amendment|supplement)\b.*\b(sec|filing)\b/i,
+      /\b(arrested|shooting|robbery|homicide|crash|murder)\b/i,
+    ] as readonly RegExp[],
+    allowBusinessContextPatterns: [
+      /\b(revenue|sales|earnings|jobs|workers|cost|price|recall|business|company|market|industry|billion|million|regulator|federal|economy)\b/i,
+    ] as readonly RegExp[],
+    scorePromptVersion: 'report-card-v1',
+    recentCardDays: 7,
+    auditHideMaxFraction: 0.4,
+  },
+
   // ---- card limits ------------------------------------------------------------
   headlineMaxChars: 90,
   headlineTargetChars: 60,                     // the prompt asks for about this many (short and plain)
