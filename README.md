@@ -1,99 +1,30 @@
-# Element
+﻿# Element
 
-**The news that touches your life, in plain words.** Element turns public records—company filings, Federal Reserve decisions, government economic releases, product recalls, earthquakes, space news, and major world events—into short, verifiable cards in a swipe feed. Every card links to its primary source, and every number on it is verified against that source text in code before publishing.
+**The news that touches your life, in plain words, with a source on every card.** Element is a business and public-interest news app for the web and phones. It turns public records and data into readable cards, with links back to the source.
 
 > Informational only · Not investment advice
 
-- **Live site:** https://element-news.pages.dev
+- **Live:** https://element-news.pages.dev
 - **Code:** https://github.com/AndrewPatton27/element
-- **Video:** VIDEO_URL <!-- [CHECK: Replace VIDEO_URL with the final Devpost/YouTube submission demo link] -->
-- Built for the **Lehigh Valley Hackathon (Fall 2026)**, *Open Reimagination* track.
+- **License:** MIT
 
----
+## What you can do
 
-## What It Is
+- **Swipe feed:** Trending, Latest and For you. React with a right/left swipe on phones or Like/Dislike buttons everywhere. For you adapts to reactions. **[CHECK: confirm five-card reveal and queued prefetch on the current build.]**
+- **Follow:** Follow a topic from any card; Following shows newer relevant stories, explains why they appear, and links updates and different angles in a story.
+- **Search:** Search any matching word, related words and common typos; results are ranked by trending. Try “fed rate,” “recall,” “treasury yields,” or “earthquake.”
+- **Daily and weekly Brief:** Read a roughly 250-word AI summary in paragraphs, a separate Markets section, deeper sections for leading topics, and Numbers with green, red or gray direction arrows. Use See all to expand a topic.
+- **Numbers:** Open the ticker to see economic indicators and their sources.
+- **Email brief sign-up:** “Stay up to date” lets readers choose Daily, Weekly or Both and a delivery time. Confirmation and one-click unsubscribe are built. Sending requires an email-service key; it has only been dry-run tested, and emails are not currently being sent.
+- **First-run tour:** Animated lessons and practice buttons demonstrate reactions and navigation. Practice saves nothing.
+- **No account required:** Preferences and For you ranking work on the device while signed out; choices merge on sign-in.
+- **Trust on every card:** Source links, the informational disclaimer and the AI-generated-summary label. Every card shows an AI label and the informational disclaimer. A validator checks generated claims against source text, copy limits and advice language.
 
-Market and public news is dense, scattered, and often wrapped in hype, speculation, or paywalls. Primary documents (SEC filings, Federal Reserve releases, agency data) are public and reliable, but written for specialists.
+## How it is built
 
-Element reimagines public record ingestion into an honest, fast mobile/web feed:
-- **Concise:** A headline of ~60 characters and 2–3 plain-language sentences written at an accessible reading level.
-- **Deep when needed:** Tap any card to open a "More detail" sheet with key bullet points, short background paragraphs, and direct links to the raw public record.
-- **Auditable & Honest:** Summaries are verified by code against the source text, strictly labeled, and banned from giving financial advice.
+One Expo and React Native codebase serves web and mobile. Supabase provides the database and API; Cloudflare Pages hosts the web app. Gemini Flash-Lite writes summaries, with Groq as a fallback. The app and services use free tiers. Ingestion runs from a laptop; it is not an automatic live newswire. **[CHECK: verify the exact production model/provider configuration before submission.]**
 
----
-
-## Key Features
-
-- **Swipe Feed with 3-Mode Ranking & For-You Personalization:**
-  - **Trending:** Orders stories by objective importance (event weight × source authority) with an 8-hour half-life decay, cold-start spread, and distinct-reader engagement boosts.
-  - **Latest:** Real-time chronological ordering.
-  - **For You:** Dynamic personalization factoring in reader dwell time, explicit likes/dislikes, followed topics, skip penalty signals, and a shared-taste ranking helper.
-- **Daily & Weekly Brief:**
-  - Executive briefings breaking down the day or week into structured sections, top story rows, macroeconomic indicators, and market movers—each item complete with source links and required labels.
-- **Debounced Search & Topic Discovery:**
-  - Real-time search across filings, releases, and categories with debounced input, saved recent searches, and browseable topic categories.
-- **Following Hub:**
-  - Follow specific topics, companies, and government sources into a dedicated feed with clear explanations of why each story was delivered.
-- **Macro Numbers to Know & Data Cards:**
-  - Daily, weekly, monthly, and quarterly economic numbers (Treasury yields, fed funds rate, CPI, unemployment rate, WTI oil, retail sales, GDP growth) with agency attribution, FRED notices, trend direction, and automated data cards for significant indicator moves.
-
----
-
-## How It Stays Trustworthy
-
-Trust in Element is enforced by code, automated tests, and database constraints, not promises:
-
-1. **Strict Source Gate & Allowlist:** Full web pages may only be fetched from approved government hosts (`www.sec.gov`, `www.federalreserve.gov`, `www.bls.gov`). All other data comes strictly from authorized public APIs. Unlicensed or paywalled web sources are refused in code.
-2. **Every Number is Checked:** The validator rejects any generated blurb containing numbers, statistics, percentages, or ticker symbols that do not appear verbatim in the source document.
-3. **No Financial Advice:** Words like "buy", "sell", "should", "target price", "outperform", and similar advice terminology cause an immediate rejection.
-4. **Short Quote Limits:** Code limits consecutive copied words to 10 from filings/Wikipedia and 25 from public-domain government releases to guarantee genuine synthesis.
-5. **Clear Disclaimers & Provenance:**
-   - Every card states: `"Informational only · Not investment advice"`.
-   - AI-generated summaries explicitly state: `"AI-generated summary · may contain errors"`.
-   - Programmatic template cards and data cards omit the AI label because no LLM touched them.
-6. **No Secrets in the Client:** The client bundle only holds the public Supabase URL and publishable key. All AI, database write, and ingestion credentials remain in git-ignored server environments.
-7. **Sample Data Transparency:** When running offline without credentials, all mock headlines are prefixed with `[SAMPLE]` and an omnipresent banner warns the reader.
-
----
-
-## Architecture & Tech Stack
-
-```mermaid
-flowchart LR
-  subgraph PublicSources["Public Sources"]
-    S1["SEC EDGAR 8-K Filings"]
-    S2["Federal Reserve & BEA"]
-    S3["FRED Economic Data"]
-    S4["CPSC Recalls, USGS, NASA, Wikipedia"]
-  end
-
-  subgraph Ingestion["Ingestion Engine (Node / TypeScript)"]
-    GATE["Allowlist & License Gate"]
-    AI["Summarizer Pipeline<br/>Gemini Flash-Lite → Groq → Template Fallback"]
-    VAL{"Validator<br/>Number check · No advice · Copy limit · Length"}
-  end
-
-  subgraph Database["Supabase (PostgreSQL)"]
-    CORE[("Private Schemas<br/>core + ingest")]
-    API["Public API Schema<br/>feed, brief, search, following, numbers"]
-  end
-
-  APP["Expo Web App<br/>(Cloudflare Pages)"]
-
-  S1 & S2 & S3 & S4 --> GATE
-  GATE --> AI --> VAL
-  VAL -- "Pass: api.publish_blurb" --> CORE
-  CORE --> API
-  APP -- "Read-only PostgREST (Publishable Key)" --> API
-```
-
-- **Frontend & App:** Expo SDK 58 (React Native Web, React 19, TypeScript) with Expo Router. Responsive design for mobile swipe cards and desktop wide-screen views with navigation rails and keyboard navigation (`j`/`k`, arrows).
-- **Backend & Database:** Supabase (PostgreSQL) with Row-Level Security (RLS) separating private ingestion tables (`core`, `ingest`) from the exposed read-only PostgREST interface (`api`).
-- **AI Pipeline:** Google Gemini Flash-Lite (free tier) with Groq (`gpt-oss-120b`) fallback. If both are unreachable, deterministic template cards are assembled directly from the record fields.
-- **Hosting:** Cloudflare Pages static export deployed via Wrangler.
-
----
-
+## Data Sources and Licenses
 ## Data Sources and Licenses
 
 | Source | Data Used | Terms / License |
@@ -108,9 +39,14 @@ flowchart LR
 | [USGS](https://earthquake.usgs.gov/earthquakes/feed/) | Significant earthquake event reports (template cards) | U.S. government public domain |
 | [NASA](https://www.nasa.gov/news-release/) | Space exploration and science releases | [NASA media guidelines](https://www.nasa.gov/nasa-brand-center/images-and-media/) |
 
-*This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.*
+*This product uses the FREDÂ® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.*
 
 ---
+
+
+## License
+
+Element's code is released under the [MIT License](LICENSE). News content keeps its own terms; see Data Sources and Licenses above.
 
 ## Running Locally
 
@@ -171,13 +107,13 @@ npx tsc --noEmit
 ## Project Structure
 
 ```
-├── app/          # Expo Router screens (Feed, Brief, Search, Following, Account, About)
-├── components/   # Pager, Cards, DetailSheet, NumbersPanel, Shell, Chips
-├── contract/     # API contracts, data types, and static mock fixtures
-├── ingest/       # Standalone Node/TS ingestion, validation, and AI pipeline
-├── lib/          # State hooks, ranking logic, search/following handlers, API client
-├── supabase/     # PostgreSQL migrations (schemas, RLS, functions, and ranking)
-└── assets/       # Icons and application graphics
+â”œâ”€â”€ app/          # Expo Router screens (Feed, Brief, Search, Following, Account, About)
+â”œâ”€â”€ components/   # Pager, Cards, DetailSheet, NumbersPanel, Shell, Chips
+â”œâ”€â”€ contract/     # API contracts, data types, and static mock fixtures
+â”œâ”€â”€ ingest/       # Standalone Node/TS ingestion, validation, and AI pipeline
+â”œâ”€â”€ lib/          # State hooks, ranking logic, search/following handlers, API client
+â”œâ”€â”€ supabase/     # PostgreSQL migrations (schemas, RLS, functions, and ranking)
+â””â”€â”€ assets/       # Icons and application graphics
 ```
 
 ---
@@ -185,3 +121,5 @@ npx tsc --noEmit
 ## License
 
 The code is released under the [MIT License](LICENSE). News content keeps its own terms: see the data sources and credits above.
+
+
