@@ -65,3 +65,11 @@ Files in `lib/__tests__/`: `account`, `api`, `detail`, `dwell`, `feedLogic`, `fi
 - `followingLogic.ts`: the three follow lists (topics, sources, tickers), parse / toggle / ticker check, which topics come from the account, the "Because you follow X" text with topic slugs turned into names. Tests: `__tests__/followingLogic.test.ts` (includes the mock search and following feed).
 - `useFollows.ts`: the follow lists for the screens (account topics when signed in, device storage otherwise).
 - `usePagedCards.ts`: pages any card list by key (search, topic, follows) with the feed's rules: a new key starts over, late answers are dropped, hidden topics and sources are skipped.
+
+## Signed-out readers (`localPrefs.ts`, `localRank.ts`)
+
+- `localPrefs.ts`: what a signed-out reader chose, on this device only (`element.local-prefs` plus the shared `element.follows`): like/dislike per card id (with topic and source, newest 200 kept), hidden topics, hidden sources, favorite (= followed) topics. `asUserPrefs` gives it the account's shape; `favoritesFirst` orders chips; `mergeIntoAccount` is the one-time, idempotent union merged into the account on sign-in (account wins conflicts; flag `element.local-migrated.<uid>`). Tests: `__tests__/localPrefs.test.ts`.
+- `localRank.ts`: signed-out For you. `rankLocal` re-orders one page of the public Trending feed: recency + importance, +24 h favorite topic, +8 h per like in the topic and +4 h per like from the source (max 3 each), the same minus for dislikes, disliked cards and hidden topics/sources dropped, then a diversity pass (6 h per same-topic card among the last 3 picked). Tests: `__tests__/localRank.test.ts`.
+- `accountContext.tsx` exposes `viewPrefs` (account prefs when signed in, device prefs when signed out) and `localPrefs`; `react`, `savePrefs`, `hideTopic`, `restoreTopics`, `hideSource`, `saveSources` write to the device when signed out and send nothing.
+- `storage.ts`: `onStoreChange(fn)` fires on every `defaultStore()` write, so the context sees a follow saved on the Following screen at once. Off web the memory store is shared app-wide.
+- `useFeed(api, query, account, filter, rankPage?)`: signed out, For you calls the same public `api.feed` as Trending and applies `rankPage` per page (earlier pages never move).

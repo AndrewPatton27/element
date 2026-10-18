@@ -29,13 +29,17 @@ export interface UseFeed {
 const SHOW_ALL: CardFilter = (cards) => cards;
 
 // `filter` removes what the reader hid (its identity may change on every render).
-export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter: CardFilter = SHOW_ALL): UseFeed {
+// `rankPage`: signed out, For you is the public Trending feed re-ordered page by page on this
+// device (lib/localRank.ts); earlier pages never move under the reader.
+export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter: CardFilter = SHOW_ALL, rankPage?: CardFilter): UseFeed {
   const key = feedKey(query);
   const [state, dispatch] = useReducer(feedReducer, key, initialFeedState);
   const stateRef = useRef(state);
   stateRef.current = state;
   const filterRef = useRef(filter);
   filterRef.current = filter;
+  const rankRef = useRef(rankPage);
+  rankRef.current = rankPage;
   // The fetch chain now running (one per key at a time). A newer chain makes an older one stop.
   const busy = useRef<{ id: number; key: string } | null>(null);
   const nextId = useRef(0);
@@ -54,10 +58,14 @@ export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter
           // From the first page nothing is known yet (the reducer resets in the same tick).
           known: cursor === null ? [] : stateRef.current.items,
           filter: (cards) => filterRef.current(cards),
-          fetchPage: (c) =>
-            query.mode === 'for_you'
-              ? (account as AccountApi).feedForYou(c, FEED_PAGE_SIZE)
-              : api.feed({ mode: query.mode, category: query.category, cursor: c, limit: FEED_PAGE_SIZE }),
+          fetchPage: async (c) => {
+            if (query.mode === 'for_you' && query.user && account) return account.feedForYou(c, FEED_PAGE_SIZE);
+            // Signed out: the same public call Trending makes; ranking happens here on the device.
+            const mode = query.mode === 'for_you' ? 'top' : query.mode;
+            const page = await api.feed({ mode, category: query.category, cursor: c, limit: FEED_PAGE_SIZE });
+            const rank = rankRef.current;
+            return query.mode === 'for_you' && rank ? { ...page, items: rank(page.items) } : page;
+          },
           onRequest: () => dispatch({ type: 'request', key: k }),
           onPage: (page) => dispatch({ type: 'page', key: k, page }),
           alive: () => busy.current?.id === id,
@@ -70,7 +78,7 @@ export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter
         if (busy.current?.id === id) busy.current = null;
       }
     },
-    [api, account, query.mode, query.category],
+    [api, account, query.mode, query.category, query.user],
   );
 
   useEffect(() => {

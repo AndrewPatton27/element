@@ -8,12 +8,31 @@ import type { AccountApi, EmailChangeResult, SignUpResult } from './account.ts';
 import { EMPTY_PREFS, ViewTracker, feedbackEvent, sameUser, unseenReactions, withTopicState, type Feedback, type UserPrefs } from './accountLogic.ts';
 import type { AuthUser, RecoveryLink } from './session.ts';
 import { setOpenSourceListener } from './openUrl.ts';
-import { defaultStore } from './storage.ts';
+import { defaultStore, onStoreChange } from './storage.ts';
+import { FOLLOWS_KEY } from './followingLogic.ts';
+import {
+  LOCAL_PREFS_KEY,
+  asUserPrefs,
+  hasLocalChoices,
+  mergeIntoAccount,
+  migratedKey,
+  reactionMap,
+  readLocal,
+  withHiddenSources,
+  withReaction,
+  withTopics,
+  writeLocal,
+  type LocalPrefs,
+} from './localPrefs.ts';
 
 export interface AccountState {
   account: AccountApi;
   user: AuthUser | null;
   prefs: UserPrefs | null; // null while loading or signed out
+  /** What screens should apply: the account's prefs when signed in, this device's when signed out. */
+  viewPrefs: UserPrefs | null;
+  /** The signed-out reader's choices on this device (also used by the local For you ranking). */
+  localPrefs: LocalPrefs;
   onboardingSkipped: boolean;
   reactions: Record<string, Feedback>;
   signIn(email: string, password: string): Promise<void>;
@@ -64,6 +83,44 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
   const noted = useRef(new Set<string>()); // cards whose my_reaction was already applied
   const [notice, setNotice] = useState<string | null>(null);
   const uid = user?.id ?? null;
+  // Signed-out choices live on this device; re-read when any screen writes them.
+  const [local, setLocal] = useState<LocalPrefs>(() => readLocal(store));
+  useEffect(
+    () =>
+      onStoreChange((k) => {
+        if (k === LOCAL_PREFS_KEY || k === FOLLOWS_KEY) setLocal(readLocal(store));
+      }),
+    [],
+  );
+  const saveLocal = useCallback((next: LocalPrefs) => {
+    writeLocal(store, next); // the listener above updates `local`
+    setLocal(next);
+  }, []);
+  const guestPrefs = useMemo(() => asUserPrefs(local), [local]);
+  const guestReactions = useMemo(() => reactionMap(local), [local]);
+
+  // Signing in: merge this device's choices into the account once per user (best effort;
+  // the merge is a union, so running it twice changes nothing).
+  const migrating = useRef<string | null>(null);
+  useEffect(() => {
+    if (!uid || !prefs || migrating.current === uid || store.get(migratedKey(uid)) === '1') return;
+    const snapshot = readLocal(store);
+    if (!hasLocalChoices(snapshot)) return;
+    migrating.current = uid;
+    const plan = mergeIntoAccount(prefs, snapshot, reactions);
+    void (async () => {
+      try {
+        if (plan.prefs) setPrefs(await account.setPrefs(plan.prefs.followed, plan.prefs.hidden, plan.prefs.hiddenSources));
+        for (const r of plan.reactions) {
+          await account.track(r.cardId, r.event);
+          setReactions((m) => (m[r.cardId] ? m : { ...m, [r.cardId]: r.event }));
+        }
+        store.set(migratedKey(uid), '1');
+      } catch {
+        migrating.current = null; // try again next time prefs load
+      }
+    })();
+  }, [uid, prefs, reactions, account]);
 
   // Track the signed-in user; when the account signs us out by itself (expired
   // session), keep its reason to show "Please sign in again."
@@ -124,19 +181,26 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
       account,
       user,
       prefs,
+      viewPrefs: user ? prefs : guestPrefs,
+      localPrefs: local,
       onboardingSkipped: skipped,
-      reactions,
+      reactions: user ? reactions : guestReactions,
       signIn: (email, password) => account.signIn(email, password),
       signUp: (email, password) => account.signUp(email, password),
       signOut: () => account.signOut(),
       async savePrefs(followed, hidden) {
+        if (!user) return saveLocal(withTopics(readLocal(store), followed, hidden ?? local.hiddenTopics));
         const p = await account.setPrefs(followed, hidden);
         setPrefs(p);
       },
       async hideTopic(slug) {
-        const before = prefs ?? EMPTY_PREFS;
+        const before = user ? (prefs ?? EMPTY_PREFS) : guestPrefs;
         const previous = { followed: before.followed, hidden: before.hidden };
         const next = withTopicState(before, slug, 'hide');
+        if (!user) {
+          saveLocal(withTopics(readLocal(store), next.followed, next.hidden));
+          return previous;
+        }
         setPrefs({ ...before, ...next }); // the topic disappears at once
         try {
           setPrefs(await account.setPrefs(next.followed, next.hidden));
@@ -147,13 +211,20 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
         return previous;
       },
       async restoreTopics(previous) {
+        if (!user) return saveLocal(withTopics(readLocal(store), previous.followed, previous.hidden));
         setPrefs(await account.setPrefs(previous.followed, previous.hidden));
       },
       async saveSources(hiddenSources) {
+        if (!user) return saveLocal(withHiddenSources(readLocal(store), hiddenSources));
         const before = prefs ?? EMPTY_PREFS;
         setPrefs(await account.setPrefs(before.followed, before.hidden, hiddenSources));
       },
       async hideSource(key) {
+        if (!user) {
+          const previous = local.hiddenSources;
+          saveLocal(withHiddenSources(readLocal(store), previous.includes(key) ? previous : [...previous, key]));
+          return previous;
+        }
         const before = prefs ?? EMPTY_PREFS;
         const previous = before.hiddenSources ?? [];
         const next = previous.includes(key) ? previous : [...previous, key];
@@ -171,7 +242,11 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
         setSkipped(true);
       },
       react(card, pressed) {
-        if (!user) return;
+        if (!user) {
+          // Signed out: kept on this device only; nothing is sent.
+          saveLocal(withReaction(readLocal(store), card, pressed));
+          return;
+        }
         const current = reactions[card.id];
         const event = feedbackEvent(current, pressed);
         // Optimistic: the button flips at once; a failed call puts it back.
@@ -235,7 +310,7 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
         setNotice('Your account was deleted.');
       },
     }),
-    [account, user, prefs, skipped, reactions, refreshPrefs, notice, noteCards],
+    [account, user, prefs, skipped, reactions, refreshPrefs, notice, noteCards, local, guestPrefs, guestReactions, saveLocal],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
