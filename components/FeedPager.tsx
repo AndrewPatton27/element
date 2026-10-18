@@ -1,17 +1,54 @@
-// Vertical one-card-per-screen pager. FlatList with paging and snap. The card's
-// footer hint ("Swipe up" / "Next: press ↓ or scroll") is a Next button, and on
-// web the arrow keys, PageUp/PageDown and j/k move between cards too.
+// Vertical one-card-per-screen pager. FlatList with paging and snap. On web the
+// arrow keys, PageUp/PageDown and j/k move between cards; wide web also shows a
+// "Next: press ↓ or scroll" button in the card footer.
+//
+// Swipe to react (touch, phone layouts, signed in): drag right = like, left =
+// dislike, the same onReact signal as the thumb buttons. The gesture locks to an
+// axis after a few px, so vertical paging and horizontal reacting never fight
+// (web: touch-action pan-y leaves vertical pans to the browser). Past 35% of the
+// width or a fast fling the card flies off, the reaction is saved, an Undo toast
+// shows and the feed moves on; otherwise it springs back. Reduced motion: no tilt
+// or fly-off, just the reaction. Pure rules: lib/swipeLogic.ts.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Platform, Text, StyleSheet, View, type FlatListProps, type LayoutChangeEvent } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  AccessibilityInfo,
+  Animated,
+  FlatList,
+  PanResponder,
+  Platform,
+  Pressable,
+  Text,
+  StyleSheet,
+  View,
+  type FlatListProps,
+  type LayoutChangeEvent,
+  type ViewStyle,
+} from 'react-native';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { usePalette } from '../lib/useTheme';
-import { fonts } from '../lib/theme';
+import { fonts, radius } from '../lib/theme';
 import { scrollToIndexFallbackOffset } from '../lib/pagerLogic';
+import {
+  MAX_TILT_DEG,
+  SWIPE_COACH_KEY,
+  SWIPE_THRESHOLD,
+  hasTouch,
+  lockAxis,
+  reactionToSend,
+  showCoach,
+  swipeDecision,
+  swipeEnabled,
+  undoPress,
+  type Axis,
+} from '../lib/swipeLogic';
+import { defaultStore } from '../lib/storage';
 import { Card } from './Card';
 import { CardErrorBoundary } from './ErrorBoundary';
 import type { Feedback } from '../lib/accountLogic';
 import { LoadingState } from './States';
+import { ThumbDownIcon, ThumbUpIcon } from './Icons';
+import { UndoToast } from './UndoToast';
 
 interface Props {
   items: BlurbCard[];
@@ -32,6 +69,126 @@ interface Props {
 
 // Below this page height the card switches to smaller type so it fits.
 const COMPACT_BELOW = 640;
+const MOUSE_SWIPE = false; // desktop mouse drag-to-react: off by default
+const coachStore = defaultStore();
+
+function detectTouch(): boolean {
+  if (Platform.OS !== 'web') return true;
+  const w = typeof window !== 'undefined' ? window : null;
+  return hasTouch({
+    native: false,
+    matchMedia: w && typeof w.matchMedia === 'function' ? (q) => w.matchMedia(q) : null,
+    maxTouchPoints: typeof navigator !== 'undefined' ? navigator.maxTouchPoints : 0,
+  });
+}
+
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    let live = true;
+    AccessibilityInfo.isReduceMotionEnabled?.()
+      .then((v) => live && setReduced(v))
+      .catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', setReduced);
+    return () => {
+      live = false;
+      sub?.remove?.();
+    };
+  }, []);
+  return reduced;
+}
+
+// "#0B6B5D" -> "#0B6B5D26" (15% tint); other colour formats are used as they are.
+function tint(hex: string): string {
+  return /^#[0-9a-f]{6}$/i.test(hex) ? `${hex}26` : hex;
+}
+
+// Wraps one card: follows the finger horizontally, tilts, shows the like / dislike
+// overlay, and on release either completes (onSwipe) or springs back.
+function SwipeCard({
+  enabled,
+  reduced,
+  width,
+  onSwipe,
+  children,
+}: {
+  enabled: boolean;
+  reduced: boolean;
+  width: number;
+  onSwipe: (r: Feedback) => boolean; // true when the feed moved on to the next card
+  children: ReactNode;
+}) {
+  const p = usePalette();
+  const drag = useRef(new Animated.Value(0)).current;
+  const axis = useRef<Axis | null>(null);
+  const live = useRef({ enabled, reduced, width, onSwipe });
+  live.current = { enabled, reduced, width, onSwipe };
+  const nativeDriver = Platform.OS !== 'web';
+
+  const responder = useMemo(() => {
+    const springBack = () => Animated.spring(drag, { toValue: 0, useNativeDriver: nativeDriver, friction: 7 }).start();
+    return PanResponder.create({
+      // Every touch starts undecided; the axis is picked once, after a few px.
+      onStartShouldSetPanResponderCapture: () => {
+        axis.current = null;
+        return false;
+      },
+      onMoveShouldSetPanResponderCapture: (_, g) => {
+        if (!live.current.enabled) return false;
+        if (axis.current === null) axis.current = lockAxis(g.dx, g.dy);
+        return axis.current === 'x';
+      },
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => drag.stopAnimation(),
+      onPanResponderMove: (_, g) => drag.setValue(g.dx),
+      onPanResponderRelease: (_, g) => {
+        axis.current = null;
+        const { width: w, reduced: still, onSwipe: done } = live.current;
+        const decision = swipeDecision(g.dx, g.vx, w);
+        if (!decision) return springBack();
+        if (still) {
+          drag.setValue(0);
+          done(decision);
+          return;
+        }
+        Animated.timing(drag, { toValue: (decision === 'like' ? 1 : -1) * w * 1.3, duration: 200, useNativeDriver: nativeDriver }).start(() => {
+          // Moved on: put the card back while it is off screen. Last card: spring back.
+          if (done(decision)) setTimeout(() => drag.setValue(0), 450);
+          else springBack();
+        });
+      },
+      onPanResponderTerminate: () => {
+        axis.current = null;
+        springBack();
+      },
+    });
+  }, [drag, nativeDriver]);
+
+  if (!enabled) return <>{children}</>;
+  const reach = Math.max(1, width * SWIPE_THRESHOLD);
+  const span = Math.max(1, width);
+  const likeOpacity = drag.interpolate({ inputRange: [0, reach], outputRange: [0, 1], extrapolate: 'clamp' });
+  const dislikeOpacity = drag.interpolate({ inputRange: [-reach, 0], outputRange: [1, 0], extrapolate: 'clamp' });
+  const rotate = drag.interpolate({ inputRange: [-span, 0, span], outputRange: [`-${MAX_TILT_DEG}deg`, '0deg', `${MAX_TILT_DEG}deg`] });
+  const motion = reduced ? null : { transform: [{ translateX: drag }, { rotate }] };
+  // Web: the browser keeps vertical pans (scrolling the feed); horizontal ones come to us.
+  const webTouch = Platform.OS === 'web' ? ({ touchAction: 'pan-y' } as unknown as ViewStyle) : null;
+  return (
+    <Animated.View style={[styles.fill, webTouch, motion]} {...responder.panHandlers}>
+      {children}
+      <Animated.View pointerEvents="none" style={[styles.overlay, { backgroundColor: tint(p.accent), opacity: likeOpacity }]}>
+        <View style={[styles.stamp, { backgroundColor: p.accent }]}>
+          <ThumbUpIcon color={p.onAccent} size={36} />
+        </View>
+      </Animated.View>
+      <Animated.View pointerEvents="none" style={[styles.overlay, { backgroundColor: tint(p.warn), opacity: dislikeOpacity }]}>
+        <View style={[styles.stamp, { backgroundColor: p.warn }]}>
+          <ThumbDownIcon color={p.onAccent} size={36} />
+        </View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
 
 export function FeedPager({
   items,
@@ -52,11 +209,40 @@ export function FeedPager({
   const p = usePalette();
   const list = useRef<FlatList<BlurbCard>>(null);
   const [height, setHeight] = useState(0);
+  const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(0);
   const indexRef = useRef(0);
   indexRef.current = index;
 
-  const onLayout = (e: LayoutChangeEvent) => setHeight(Math.round(e.nativeEvent.layout.height));
+  const onLayout = (e: LayoutChangeEvent) => {
+    setHeight(Math.round(e.nativeEvent.layout.height));
+    setWidth(Math.round(e.nativeEvent.layout.width));
+  };
+
+  const [touch] = useState(detectTouch);
+  const reduced = useReducedMotion();
+  const canReact = typeof onReact === 'function';
+  const swipeOn = swipeEnabled({ wide: !!wide, canReact, touch, mouseSwipe: MOUSE_SWIPE });
+  const [coachSeen, setCoachSeen] = useState(() => coachStore.get(SWIPE_COACH_KEY));
+  const dismissCoach = useCallback(() => {
+    coachStore.set(SWIPE_COACH_KEY, '1');
+    setCoachSeen('1');
+  }, []);
+  const coach = showCoach({ enabled: swipeOn, seen: coachSeen, index });
+  const [undo, setUndo] = useState<{ card: BlurbCard; previous: Feedback | undefined; sent: Feedback; message: string } | null>(null);
+  const reactionsRef = useRef(reactions);
+  reactionsRef.current = reactions;
+  // Thumb buttons: same signal as before, and using them counts as having seen the hint.
+  const react = useMemo(
+    () =>
+      onReact
+        ? (card: BlurbCard, pressed: Feedback) => {
+            dismissCoach();
+            onReact(card, pressed);
+          }
+        : undefined,
+    [onReact, dismissCoach],
+  );
 
   const onViewable = useRef<NonNullable<FlatListProps<BlurbCard>['onViewableItemsChanged']>>(({ viewableItems }) => {
     const first = viewableItems.find((v) => v.isViewable && typeof v.index === 'number');
@@ -74,6 +260,32 @@ export function FeedPager({
     [items.length, onEndReached],
   );
   const next = useCallback(() => goTo(indexRef.current + 1), [goTo]);
+
+  // A completed swipe: set the reaction (never toggle it off), offer Undo, move on.
+  const swiped = useCallback(
+    (card: BlurbCard, r: Feedback): boolean => {
+      dismissCoach();
+      if (!onReact) return false;
+      const previous = reactionsRef.current?.[card.id];
+      const sent = reactionToSend(previous, r);
+      if (sent) {
+        onReact(card, sent);
+        setUndo({ card, previous, sent, message: sent === 'like' ? 'Liked. More like this.' : 'Disliked. Less like this.' });
+      }
+      const i = items.findIndex((c) => c.id === card.id);
+      if (i < 0 || i >= items.length - 1) return false;
+      goTo(i + 1);
+      return true;
+    },
+    [onReact, items, goTo, dismissCoach],
+  );
+  const undoSwipe = useCallback(() => {
+    if (!undo || !onReact) return setUndo(null);
+    const press = undoPress(undo.previous, undo.sent);
+    if (press) onReact(undo.card, press);
+    setUndo(null);
+  }, [undo, onReact]);
+  const clearUndo = useCallback(() => setUndo(null), []);
 
   // Fast key-nav can target a row that isn't laid out yet, which makes scrollToIndex
   // throw "out of range". Wait one frame and retry; if it still can't, scroll to the
@@ -134,25 +346,27 @@ export function FeedPager({
       return (
         <View style={[styles.page, wide && styles.pageWide, { height }]}>
           <CardErrorBoundary resetKey={item.id}>
-            <Card
-              card={item}
-              config={config}
-              categories={categories}
-              onShowSources={onShowSources}
-              onOpenDetail={onOpenDetail}
-              onMore={onMore}
-              onNext={last ? undefined : next}
-              wide={wide}
-              compact={compact}
-              peek={!last}
-              reaction={reactions?.[item.id]}
-              onReact={onReact}
-            />
+            <SwipeCard enabled={swipeOn} reduced={reduced} width={width} onSwipe={(r) => swiped(item, r)}>
+              <Card
+                card={item}
+                config={config}
+                categories={categories}
+                onShowSources={onShowSources}
+                onOpenDetail={onOpenDetail}
+                onMore={onMore}
+                onNext={last ? undefined : next}
+                wide={wide}
+                compact={compact}
+                peek={!last}
+                reaction={reactions?.[item.id]}
+                onReact={react}
+              />
+            </SwipeCard>
           </CardErrorBoundary>
         </View>
       );
     },
-    [height, config, categories, onShowSources, onOpenDetail, onMore, next, wide, compact, items.length, done, reactions, onReact],
+    [height, width, config, categories, onShowSources, onOpenDetail, onMore, next, wide, compact, items.length, done, reactions, react, swipeOn, reduced, swiped],
   );
 
   return (
@@ -190,6 +404,21 @@ export function FeedPager({
           }
         />
       ) : null}
+      {coach ? (
+        <View style={styles.coachDock} pointerEvents="box-none">
+          <Pressable
+            onPress={dismissCoach}
+            accessibilityRole="button"
+            accessibilityLabel="Swipe right to like, left to dislike. Tap to hide this tip."
+            style={[styles.coach, { backgroundColor: p.ink }]}
+          >
+            <ThumbDownIcon color={p.bg} size={18} />
+            <Text style={[styles.coachText, { color: p.bg }]}>Swipe right to like, left to dislike</Text>
+            <ThumbUpIcon color={p.bg} size={18} />
+          </Pressable>
+        </View>
+      ) : null}
+      <UndoToast message={undo?.message ?? null} onUndo={undoSwipe} onDone={clearUndo} />
     </View>
   );
 }
@@ -201,4 +430,10 @@ const styles = StyleSheet.create({
   // Phones: the card, the next card's edge and the disclaimer line all sit inside the page.
   page: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
   pageWide: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 12 },
+  overlay: { ...StyleSheet.absoluteFill, borderRadius: radius.card, alignItems: 'center', justifyContent: 'center' },
+  stamp: { width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center' },
+  // The tip sits over the first card's lower half, clear of the source row and footer.
+  coachDock: { position: 'absolute', left: 0, right: 0, top: '52%', alignItems: 'center', paddingHorizontal: 32 },
+  coach: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 16, borderRadius: 22 },
+  coachText: { fontFamily: fonts.sansSemi, fontSize: 14 },
 });
