@@ -18,3 +18,7 @@ export function scrollToIndexFallbackOffset(info: ScrollToIndexFailedInfo, itemH
   const height = itemHeight > 0 ? itemHeight : info.averageItemLength > 0 ? info.averageItemLength : 0;
   return index * height;
 }
+
+export function nextRevealCount(position: number, revealed: number, total: number, size = 5): number {
+  return position >= revealed - 2 ? Math.min(total, revealed + size) : revealed;
+}

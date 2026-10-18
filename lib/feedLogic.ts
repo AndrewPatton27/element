@@ -25,6 +25,7 @@ export type FeedAction =
   | { type: 'reset'; key: string }
   | { type: 'request'; key: string }
   | { type: 'page'; key: string; page: FeedPage }
+  | { type: 'rerank'; key: string; items: BlurbCard[] }
   | { type: 'fail'; key: string; error: string };
 
 export function feedKey(q: FeedQuery): string {
@@ -63,6 +64,8 @@ export function feedReducer(state: FeedState, action: FeedAction): FeedState {
         done: action.page.next_cursor === null,
         loading: false,
       };
+    case 'rerank':
+      return { ...state, items: action.items };
     case 'fail':
       return { ...state, loading: false, error: action.error };
   }

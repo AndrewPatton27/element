@@ -28,7 +28,7 @@ import {
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { usePalette } from '../lib/useTheme';
 import { fonts, radius } from '../lib/theme';
-import { scrollToIndexFallbackOffset } from '../lib/pagerLogic';
+import { nextRevealCount, scrollToIndexFallbackOffset } from '../lib/pagerLogic';
 import {
   MAX_TILT_DEG,
   SWIPE_COACH_KEY,
@@ -66,6 +66,7 @@ interface Props {
   followedTopics?: string[];
   onToggleTopicFollow?: (card: BlurbCard) => void;
   onActiveCard?: (card: BlurbCard) => void; // the card now on screen (for view tracking)
+  onQueuePosition?: (index: number) => void;
   active?: boolean; // false when another screen or a sheet is on top: keys are left alone
 }
 
@@ -205,6 +206,7 @@ export function FeedPager({
   reactions,
   onReact,
   onActiveCard,
+  onQueuePosition,
   active,
   onMore,
   followedTopics,
@@ -215,6 +217,9 @@ export function FeedPager({
   const [height, setHeight] = useState(0);
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(0);
+  const [revealed, setRevealed] = useState(5);
+  const totalRef = useRef(items.length);
+  totalRef.current = items.length;
   const indexRef = useRef(0);
   indexRef.current = index;
 
@@ -250,7 +255,11 @@ export function FeedPager({
 
   const onViewable = useRef<NonNullable<FlatListProps<BlurbCard>['onViewableItemsChanged']>>(({ viewableItems }) => {
     const first = viewableItems.find((v) => v.isViewable && typeof v.index === 'number');
-    if (first && typeof first.index === 'number') setIndex(first.index);
+    if (first && typeof first.index === 'number') {
+      setIndex(first.index);
+      onQueuePosition?.(first.index);
+      setRevealed((n) => nextRevealCount(first.index!, n, totalRef.current));
+    }
   }).current;
 
   const goTo = useCallback(
@@ -323,6 +332,7 @@ export function FeedPager({
   const firstId = items[0]?.id;
   useEffect(() => {
     setIndex(0);
+    setRevealed(Math.min(5, items.length));
     list.current?.scrollToOffset({ offset: 0, animated: false });
   }, [firstId]);
 
@@ -380,7 +390,7 @@ export function FeedPager({
       {height > 0 ? (
         <FlatList
           ref={list}
-          data={items}
+          data={items.slice(0, revealed)}
           keyExtractor={(c) => c.id}
           renderItem={renderItem}
           pagingEnabled
@@ -395,7 +405,8 @@ export function FeedPager({
           onViewableItemsChanged={onViewable}
           viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
           windowSize={5}
-          initialNumToRender={2}
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
           removeClippedSubviews={Platform.OS !== 'web'}
           ListFooterComponent={
             loadingMore ? (

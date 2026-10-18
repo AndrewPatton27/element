@@ -15,6 +15,7 @@ import { useFollows } from '../lib/useFollows';
 import { forYouCoversTopics, withoutHidden } from '../lib/accountLogic';
 import { favoritesFirst } from '../lib/localPrefs';
 import { rankLocal } from '../lib/localRank';
+import { confidence, targetAhead } from '../lib/queueLogic';
 import { sourceName, withoutHiddenSources } from '../lib/sourceKeys';
 import { SIGN_IN_AGAIN_MESSAGE } from '../lib/session';
 import type { FeedTab } from '../lib/feedLogic';
@@ -101,13 +102,16 @@ export default function FeedScreen() {
   );
   const local = acct.localPrefs;
   const rankPage = useCallback((cards: BlurbCard[]) => rankLocal(cards, local), [local]);
-  const { state, loadMore, retry } = useFeed(
+  const { state, loadMore, retry, rerank } = useFeed(
     api,
     { mode, category: forYou ? null : category, user: acct.user?.id ?? null },
     acct.account,
     visible,
     signedIn ? undefined : rankPage,
+    targetAhead(confidence({ reactions: Object.keys(local.reactions).length, topics: local.follows.topics.length + (acct.viewPrefs?.followed.length ?? 0), sources: local.follows.sources.length, tickers: local.follows.tickers.length, favorites: (acct.viewPrefs?.followed.length ?? 0), accountSignals: signedIn ? Object.keys(acct.reactions).length : 0 })),
   );
+  const queuePosition = useRef(0);
+  useEffect(() => { rerank(local, queuePosition.current, signedIn); }, [local, signedIn, rerank]);
   const showSources = useCallback((c: BlurbCard) => setSheetCard(c), []);
   const openDetail = useCallback((c: BlurbCard) => setDetailCard(c), []);
 
@@ -252,6 +256,7 @@ export default function FeedScreen() {
         wide={wide}
         reactions={acct.reactions}
         onReact={react}
+        onQueuePosition={(i) => { queuePosition.current = i; }}
         followedTopics={followedTopics}
         onToggleTopicFollow={toggleCardFollow}
         onActiveCard={signedIn && focused ? onActiveCard : undefined}

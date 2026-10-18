@@ -85,3 +85,5 @@ Files in `lib/__tests__/`: `account`, `api`, `detail`, `dwell`, `feedLogic`, `fi
 
 - ccountLabel.ts: ccountInitial and shortEmail for the web top bar's signed-in pill. Tests: __tests__/accountLabel.test.ts.
 - localPrefs.ts now also exports DEVICE_DATA_KEYS and clearAll(store): removes the device choices, follows, recent searches and quick-tour flag (local only; the login session stays). Test in __tests__/localPrefs.test.ts.
+
+- Feed queue: useFeed.ts fetches 10-card API pages, maintains the cursor, prefetches when the unseen visible buffer falls below the confidence target (3–7), and reranks only the unseen tail when local preferences change. queueLogic.ts owns confidence, five-card reveal sizing and reranking; pagerLogic.ts owns five-card pager reveal windows. Tests: __tests__/queueLogic.test.ts, __tests__/pagerLogic.test.ts.

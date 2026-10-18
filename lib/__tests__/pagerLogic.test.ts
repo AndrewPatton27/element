@@ -1,8 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { scrollToIndexFallbackOffset } from '../pagerLogic.ts';
+import { nextRevealCount, scrollToIndexFallbackOffset } from '../pagerLogic.ts';
 
 const info = (index: number, averageItemLength = 0) => ({ index, highestMeasuredFrameIndex: 0, averageItemLength });
+
+test('pager reveals five-card windows as the reader approaches the end', () => {
+  assert.equal(nextRevealCount(2, 5, 20), 5);
+  assert.equal(nextRevealCount(3, 5, 20), 10);
+  assert.equal(nextRevealCount(8, 10, 12), 12);
+});
 
 test('uses the known item height: offset = index * height', () => {
   assert.equal(scrollToIndexFallbackOffset(info(5), 800), 4000);

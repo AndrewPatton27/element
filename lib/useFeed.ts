@@ -6,7 +6,8 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { Api } from './api.ts';
 import type { AccountApi } from './account.ts';
-import { FEED_PAGE_SIZE } from './config.ts';
+import { rerankQueue, shouldFetchAhead } from './queueLogic.ts';
+import type { LocalPrefs } from './localPrefs.ts';
 import { isInvalidCursor, rawDetail, userMessage } from './errors.ts';
 import {
   feedKey,
@@ -24,6 +25,7 @@ export interface UseFeed {
   state: FeedState;
   loadMore: () => void;
   retry: () => void;
+  rerank: (signals: LocalPrefs, seenCount: number, signedIn?: boolean) => void;
 }
 
 const SHOW_ALL: CardFilter = (cards) => cards;
@@ -31,7 +33,7 @@ const SHOW_ALL: CardFilter = (cards) => cards;
 // `filter` removes what the reader hid (its identity may change on every render).
 // `rankPage`: signed out, For you is the public Trending feed re-ordered page by page on this
 // device (lib/localRank.ts); earlier pages never move under the reader.
-export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter: CardFilter = SHOW_ALL, rankPage?: CardFilter): UseFeed {
+export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter: CardFilter = SHOW_ALL, rankPage?: CardFilter, aheadTarget = 3): UseFeed {
   const key = feedKey(query);
   const [state, dispatch] = useReducer(feedReducer, key, initialFeedState);
   const stateRef = useRef(state);
@@ -59,10 +61,10 @@ export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter
           known: cursor === null ? [] : stateRef.current.items,
           filter: (cards) => filterRef.current(cards),
           fetchPage: async (c) => {
-            if (query.mode === 'for_you' && query.user && account) return account.feedForYou(c, FEED_PAGE_SIZE);
+            if (query.mode === 'for_you' && query.user && account) return account.feedForYou(c, 10);
             // Signed out: the same public call Trending makes; ranking happens here on the device.
             const mode = query.mode === 'for_you' ? 'top' : query.mode;
-            const page = await api.feed({ mode, category: query.category, cursor: c, limit: FEED_PAGE_SIZE });
+            const page = await api.feed({ mode, category: query.category, cursor: c, limit: 10 });
             const rank = rankRef.current;
             return query.mode === 'for_you' && rank ? { ...page, items: rank(page.items) } : page;
           },
@@ -110,5 +112,16 @@ export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter
     }
   }, [key, load]);
 
-  return { state, loadMore, retry };
+  const rerank = useCallback((signals: LocalPrefs, seenCount: number, signedIn = false) => {
+    dispatch({ type: 'rerank', key, items: rerankQueue(stateRef.current.items, signals, seenCount, signedIn) });
+  }, [key]);
+
+  // Keep the unseen queue filled while there is still a cursor. One chain at a time;
+  // load() owns in-flight suppression and existing cursor/error handling.
+  const buffered = Math.max(0, visibleCount - 1);
+  useEffect(() => {
+    if (shouldFetchAhead(buffered, aheadTarget) && shouldLoadMore(state, key)) void load(key, state.cursor);
+  }, [buffered, aheadTarget, state, key, load]);
+
+  return { state, loadMore, retry, rerank };
 }
