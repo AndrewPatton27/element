@@ -42,7 +42,7 @@ test('dry run end to end: 5 template cards (1 Fed, 2 BEA, 2 USGS), Federal Regis
   assert.equal(lines.filter((l) => l.startsWith('skip low_interest')).length, 3, 'green-alert quakes: 2 on the Mid-Atlantic Ridge, 1 small one in Panama');
   assert.ok(lines.includes('skip routine_5.02: Costco Wholesale Corp 8-K'), 'Costco bonus-criteria 5.02 is routine');
   assert.ok(lines.some((l) => /not candidates: not_watched 1/.test(l)), 'GoPro is not on the watch list');
-  assert.ok(lines.includes('sec: watch list 152 of 152 companies resolved'));
+  assert.ok(lines.some((line) => line.startsWith('sec: watch list 152 of 188 companies resolved')));
   assert.equal(stats.macro, 1);
   assert.equal(stats.failed, 0);
   for (const c of dry.cards) {

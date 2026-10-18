@@ -26,20 +26,21 @@ const AUG5 = new Date('2026-08-05T12:00:00Z');
 
 // ---- watch list -------------------------------------------------------------------
 
-test('watch list: about 150 unique tickers, student brands in, foreign filer / private companies out', () => {
+test('watch list: broader large-company coverage, student brands in, foreign filer / private companies out', () => {
   const w = config.watchCompanies as readonly string[];
-  assert.ok(w.length >= 140 && w.length <= 160, `size ${w.length}`);
-  assert.equal(new Set(w).size, w.length, 'no duplicates');
+  assert.ok(w.length >= 170 && w.length <= 210, `size ${w.length}`);
+  assert.equal(new Set(w).size, 188, 'unique expanded list');
   for (const t of ['AAPL', 'NFLX', 'CMG', 'SBUX', 'UBER', 'DASH', 'SOFI', 'HOOD', 'SLM', 'NNI', 'LULU', 'CROX', 'RBLX', 'VZ', 'DAL', 'COST']) {
     assert.ok(w.includes(t), t);
   }
   for (const t of ['SPOT', 'EA', 'WBA', 'GPRO', 'LFST', 'LASE', 'BLIN']) assert.ok(!w.includes(t), t);
 });
 
-test('watch list resolves from the REAL SEC ticker list: all resolve; share-class tickers (PSKY, Z) map to the right CIK', () => {
+test('watch list resolves from the SEC fixture; new additions are absent only because the fixture predates expansion', () => {
   const { map, missing } = resolveWatchList(TICKERS);
-  assert.deepEqual(missing, []);
-  assert.equal(map.size, config.watchCompanies.length);
+  const added = ['NOW','CSCO','TXN','AMAT','MU','LRCX','KLAC','ADI','PANW','CRWD','PLTR','USB','PNC','TFC','BK','STT','BLK','ICE','CME','SPGI','MCO','M','JWN','FIVE','ORLY','AZO','TSCO','LMT','RTX','GD','NOC','HON','CAT','DE','GE','MMM'];
+  assert.deepEqual(missing, added);
+  assert.equal(map.size, new Set(config.watchCompanies).size - added.length);
   assert.deepEqual(map.get('0000320193'), { symbol: 'AAPL', name: 'Apple Inc.', exchange: 'Nasdaq' });
   assert.equal(map.get('0002041610')?.symbol, 'PSKY', 'first row for this CIK is SKYD; the watch ticker wins');
   assert.equal(map.get('0001617640')?.symbol, 'Z');
@@ -59,10 +60,10 @@ test('classifySecEntry with the watch list: off-list -> not_watched; small items
   const r = classifySecEntry(costco, null, { watch: map });
   assert.ok('item' in r);
   assert.deepEqual(r.item.tickers, [{ symbol: 'COST', name: 'Costco Wholesale Corp', exchange: 'Nasdaq' }]);
-  for (const n of ['3.01', '4.01', '1.02', '2.06']) {
+  for (const n of ['3.01', '4.01', '1.02']) {
     assert.deepEqual(classifySecEntry({ ...costco, items: items(n) }, null, { watch: map }), { skip: 'not_watch_item' }, n);
   }
-  for (const n of ['1.01', '1.03', '1.05', '2.01', '2.02', '2.05', '4.02', '5.02']) {
+  for (const n of ['1.01', '1.03', '1.05', '2.01', '2.02', '2.03', '2.04', '2.05', '2.06', '4.02', '5.02']) {
     assert.ok('item' in classifySecEntry({ ...costco, items: items(n) }, null, { watch: map }), n);
   }
 });

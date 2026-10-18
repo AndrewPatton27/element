@@ -8,6 +8,7 @@ export interface CardScore {
   scores: { headline: number; summary: number; trust: number; importance: number };
   decision: 'PASS' | 'REVISE' | 'ABANDON'; relation: StoryRelation; related_id: string | null;
   reason: string; recommendations: string[];
+  category_fix?: string | null; proposed_headline?: string | null;
 }
 export interface ScoreClient { generate(prompt: string): Promise<string> }
 export const REPORT_CARD = `Element gives busy people business and market news affecting money, jobs and lives. Topic must fit markets, economy, known companies, consumer safety/money, consequential regulators, broad tech/science, or major world events. Exclude niche paperwork, Form 144, routine SEC exhibits/amendments, trivial micro-cap, local crime, celebrity/sports without business impact, opinion, speculation, private-person stories, and guesses. Score headline, summary, trust, importance 0-2 each. Headline: sentence case, verb, about 40-80 chars, no clickbait/jargon/form numbers. Summary: 2-3 plain sentences, adds why it matters, factual, neutral. Trust: source/link, AI label, disclaimer, freshness, no duplicate. PASS means topic_fit and no zero. REVISE means topic fits and fixable with source text. ABANDON means off-topic, stale, duplicate, trivial or unfixable. Relation must be DUPLICATE (same facts/angle), UPDATE (new facts), ANGLE (different effect), RELATED (distinct connected story), NEW (unconnected). DUPLICATE always ABANDON. Return strict JSON matching schema in the prompt.`;
@@ -34,4 +35,4 @@ export async function applyAudit(cards: RevisableCard[], scores: CardScore[], ac
   }
   return undo;
 }
-export function auditTable(rows:Array<{card:RevisableCard;score:CardScore}>):string { return ['id | category | headline | topic fit | scores H/S/T/I | decision | relation | reason | recommendation',...rows.map(({card:c,score:s})=>`${c.id} | ${c.category} | ${c.headline} | ${s.topic_fit?'yes':'no'} (${s.matched_topic??''}) | ${s.scores.headline}/${s.scores.summary}/${s.scores.trust}/${s.scores.importance} | ${s.decision} | ${s.relation}${s.related_id?` ${s.related_id}`:''} | ${s.reason} | ${s.recommendations.join('; ')}`)].join('\n'); }
+export function auditTable(rows:Array<{card:RevisableCard;score:CardScore}>):string { return rows.map(({card:c,score:s})=>`${s.decision==='PASS'?'✓':s.decision==='REVISE'?'✎':'×'} ${c.category}${s.category_fix?` → ${s.category_fix}`:''} | ${s.reason} | ${s.recommendations[0]??''}`).join('\n'); }

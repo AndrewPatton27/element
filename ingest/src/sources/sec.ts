@@ -93,7 +93,7 @@ export function parseTickerExchangeJson(json: string): TickerMap {
 // for filings whose items do not decide it (see resolveSecClassification).
 
 /** Most newsworthy item first. The first item in this list that a filing has decides its class. */
-export const ITEM_PRIORITY = ['1.03', '2.02', '4.02', '4.01', '1.05', '2.01', '5.02', '1.01', '1.02', '3.01', '2.05', '2.06', '7.01', '8.01'];
+export const ITEM_PRIORITY = ['1.03', '2.02', '4.02', '4.01', '1.05', '2.01', '5.02', '1.01', '2.03', '2.04', '1.02', '3.01', '2.05', '2.06', '7.01', '8.01'];
 
 /**
  * Items that decide category and event_type on their own. Event types stay inside the set
@@ -109,6 +109,8 @@ export const ITEM_CLASS: Record<string, { category: CategorySlug; event_type: Ev
   '2.01': { category: 'deals', event_type: 'deal' },          // acquisition or sale completed
   '5.02': { category: 'markets', event_type: 'exec_change' }, // officer or director change
   '1.01': { category: 'deals', event_type: 'deal' },          // material agreement
+  '2.03': { category: 'deals', event_type: 'deal' },          // direct financial obligation or major commitment
+  '2.04': { category: 'markets', event_type: null },          // acceleration or increase of a direct obligation
   '1.02': { category: 'deals', event_type: 'deal' },          // agreement ended
   '3.01': { category: 'markets', event_type: null },          // delisting / listing-rule notice
   '2.05': { category: 'markets', event_type: null },          // layoffs / restructuring costs ('default' weight)

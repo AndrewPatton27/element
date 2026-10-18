@@ -20,6 +20,9 @@ export interface Publisher {
   reviseBlurb?(p: RevisePayload): Promise<{ status: 'revised' | 'hidden' | 'not_found'; id: string }>;
   /** End of a run: recompute the Trending boosts from recent interactions (api.refresh_trending). */
   refreshTrending?(): Promise<unknown>;
+  auditCards?(): Promise<RevisableCard[]>;
+  setAuditStatus?(id: string, status: string): Promise<void>;
+  setStoryLink?(id: string, related: string, kind: string): Promise<void>;
 }
 
 /** Thrown when a Supabase RPC answers with a non-2xx status (message from PostgREST, no key). */
@@ -64,6 +67,24 @@ export function createSupabasePublisher(opts: { url: string; key: string; fetchI
     listToRevise: (current, limit) => rpc('blurbs_to_revise', { p_current: current, p_limit: limit }),
     reviseBlurb: (p) => rpc('revise_blurb', { p }),
     refreshTrending: () => rpc('refresh_trending', {}),
+    async auditCards() {
+      const rows: RevisableCard[] = [];
+      // api.feed(mode,cursor,limit,category) is the deployed anon RPC. Follow cursors
+      // because it returns a JSON envelope rather than an offset page.
+      for (const mode of ['latest', 'top']) {
+        let cursor: string | null = null;
+        for (let pageNo = 0; pageNo < 20; pageNo++) {
+          const page: any = await rpc<any>('feed', { p_mode: mode, p_cursor: cursor, p_limit: 100, p_category: null });
+          const items = Array.isArray(page) ? page : page?.items;
+          if (!Array.isArray(items) || !items.length) break;
+          rows.push(...items);
+          cursor = page?.next_cursor ?? null;
+          if (!cursor) break;
+        }
+      }
+      return [...new Map(rows.map((r) => [r.id, r])).values()];
+    },
+    async setStoryLink(id, related, kind) { try { await rpc('set_story_link', { p_card_id: id, p_related_id: related, p_kind: kind }); } catch { /* optional RPC */ } },
   };
 }
 

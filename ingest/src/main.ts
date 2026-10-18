@@ -22,6 +22,7 @@ import { config, describeEnv, fedRegisterUrls, readEnv } from './config.ts';
 import { runOnce, SOURCE_NAMES, type Deps, type SourceName } from './pipeline.ts';
 import { runBackfill } from './backfill.ts';
 import { runRewrite } from './rewrite.ts';
+import { runAudit, groqRevision } from './audit.ts';
 import { isMailCommand, mailMain } from './mailCli.ts';
 import type { RevisableCard } from './types.ts';
 import { createDryRunPublisher, createSupabasePublisher } from './publish.ts';
@@ -155,6 +156,25 @@ export async function refreshTrendingSafely(publisher: Deps['publisher'], log: (
  */
 export async function main(argv: string[]): Promise<number> {
   if (isMailCommand(argv)) return mailMain(argv);          // --brief-summary / --send-briefs (see mailCli.ts)
+  if (argv.includes('--audit-cards')) {
+    const allowed = new Set(['--audit-cards','--apply','--no-gemini']);
+    for (const flag of argv) if (!allowed.has(flag)) throw new Error(`unknown audit option: ${flag}`);
+    if (argv.filter(x=>x==='--apply').length > 1 || argv.filter(x=>x==='--audit-cards').length > 1) throw new Error('duplicate audit option');
+    loadDotEnv();
+    const apply = argv.includes('--apply');
+    const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    const groqKey = process.env.GROQ_API_KEY;
+    if (!url || !key || !groqKey) throw new Error('audit needs EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY and GROQ_API_KEY');
+    const reader = createSupabasePublisher({url,key});
+    if (!reader.auditCards) throw new Error('publisher does not support card audit');
+    const cards = await reader.auditCards();
+    if (apply && !process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('--apply needs SUPABASE_SERVICE_ROLE_KEY (revise_blurb and set_story_link are service-role RPCs)');
+    const writer = apply ? createSupabasePublisher({url,key:process.env.SUPABASE_SERVICE_ROLE_KEY!}) : reader;
+    if (!writer.reviseBlurb) throw new Error('publisher does not support revise_blurb');
+    await runAudit({cards,apply,noGemini:argv.includes('--no-gemini'),groqKey,revise:(c,r)=>groqRevision(groqKey,c,r),write:p=>writer.reviseBlurb!(p),hide:(id,note)=>writer.reviseBlurb!({id,action:'hide',note}),link:(id,related,kind)=>writer.setStoryLink?.(id,related,kind) ?? Promise.resolve()});
+    return 0;
+  }
   const args = parseArgs(argv);
   const log = (s: string) => console.log(s);
 

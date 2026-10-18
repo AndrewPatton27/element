@@ -81,6 +81,7 @@ export const config = {
     ] as readonly RegExp[],
     scorePromptVersion: 'report-card-v1',
     recentCardDays: 7,
+    auditBatchSize: 5,
     auditHideMaxFraction: 0.4,
   },
 
@@ -256,33 +257,33 @@ export const config = {
   // Spotify (foreign filer, files 6-K not 8-K), Electronic Arts and Walgreens (taken private; not in
   // the SEC ticker list on 2026-10-17).
   watchCompanies: [
-    'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'NVDA', 'TSLA', 'NFLX', 'SNAP', 'RDDT', 'RBLX', 'TTWO', 'PINS', 'MTCH', 'BMBL', 'DUOL', 'ADBE', 'CRM', 'ORCL', 'INTC', 'AMD', 'QCOM', 'AVGO', 'IBM', 'DELL',
+    'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'NVDA', 'TSLA', 'NFLX', 'SNAP', 'RDDT', 'RBLX', 'TTWO', 'PINS', 'MTCH', 'BMBL', 'DUOL', 'ADBE', 'CRM', 'ORCL', 'INTC', 'AMD', 'QCOM', 'AVGO', 'IBM', 'DELL', 'NOW', 'CSCO', 'TXN', 'AMAT', 'MU', 'LRCX', 'KLAC', 'ADI', 'PANW', 'CRWD', 'PLTR',
     'DIS', 'WBD', 'PSKY', 'ROKU', 'SIRI', 'LYV', 'AMC', 'CMCSA', 'CHTR', 'VZ', 'T', 'TMUS',
     'UBER', 'LYFT', 'DASH', 'ABNB', 'BKNG', 'EXPE', 'ETSY', 'EBAY', 'CVNA', 'W', 'CHWY', 'PTON', 'GME',
-    'HOOD', 'SOFI', 'COIN', 'PYPL', 'XYZ', 'V', 'MA', 'AXP', 'AFRM', 'SLM', 'NNI', 'COF', 'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'SCHW', 'SYF',
-    'WMT', 'TGT', 'COST', 'HD', 'LOW', 'BBY', 'KR', 'DG', 'DLTR', 'TJX', 'ROST', 'GAP', 'ANF', 'AEO', 'URBN', 'LULU', 'NKE', 'CROX', 'DECK', 'UAA', 'ELF', 'ULTA',
+    'HOOD', 'SOFI', 'COIN', 'PYPL', 'XYZ', 'V', 'MA', 'AXP', 'AFRM', 'SLM', 'NNI', 'COF', 'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS', 'SCHW', 'SYF', 'USB', 'PNC', 'TFC', 'BK', 'STT', 'BLK', 'ICE', 'CME', 'SPGI', 'MCO',
+    'WMT', 'TGT', 'COST', 'HD', 'LOW', 'BBY', 'KR', 'DG', 'DLTR', 'TJX', 'ROST', 'GAP', 'ANF', 'AEO', 'URBN', 'LULU', 'NKE', 'CROX', 'DECK', 'UAA', 'ELF', 'ULTA', 'M', 'JWN', 'FIVE', 'ORLY', 'AZO', 'TSCO',
     'CMG', 'SBUX', 'MCD', 'YUM', 'DPZ', 'WING', 'CAVA', 'SHAK', 'DRI', 'KO', 'PEP', 'KDP', 'MNST', 'CELH', 'PG', 'HSY',
-    'F', 'GM', 'RIVN', 'LCID', 'DAL', 'UAL', 'AAL', 'LUV', 'JBLU', 'ALK', 'MAR', 'HLT', 'CCL', 'RCL', 'NCLH',
+    'F', 'GM', 'RIVN', 'LCID', 'DAL', 'UAL', 'AAL', 'LUV', 'JBLU', 'ALK', 'MAR', 'HLT', 'CCL', 'RCL', 'NCLH', 'LMT', 'RTX', 'GD', 'NOC', 'HON', 'CAT', 'DE', 'GE', 'MMM',
     'CVS', 'UNH', 'PFE', 'MRNA', 'JNJ', 'LLY', 'ABBV', 'MRK', 'BMY', 'AMGN', 'GILD', 'HIMS',
     'BA', 'XOM', 'CVX', 'UPS', 'FDX', 'BRK-B',
     'Z', 'RKT', 'CHGG', 'COUR', 'PGR', 'ALL', 'EFX', 'TRU', 'FICO', 'HRB', 'INTU',
   ],
   // 8-K items that may become a card for a watch-list company: earnings, CEO/CFO changes, big deals,
   // layoffs/restructuring, cyber incidents, restatements, bankruptcy. Anything else is skipped.
-  watchItems: ['1.01', '1.03', '1.05', '2.01', '2.02', '2.05', '4.02', '5.02'],
+  watchItems: ['1.01', '1.03', '1.05', '2.01', '2.02', '2.03', '2.04', '2.05', '2.06', '4.02', '5.02'],
   // A filing whose only card item is 5.02 is kept only if the Item 5.02 text names one of these roles
   // together with a change word (routine director-only changes and pay plans are skipped).
   topRolePattern: /\b(chief executive officer|chief financial officer|ceo|cfo|chair|chairman|chairwoman|chairperson|(?<!vice )president)\b/i,
   roleChangePattern: /\b(resign\w*|retire\w*|appoint\w*|depart\w*|step(?:s|ped)? down|succeed\w*|successor|named|terminat\w*|separat\w*|transition\w*)\b/i,
   // Template cards (no AI, so no relevance score) only for these items of watch-list companies.
-  templateSecItems: ['2.02', '5.02', '1.05', '4.02', '2.05'],
+  templateSecItems: ['2.02', '5.02', '1.05', '4.02', '2.05', '2.03'],
   // AI everyday_relevance score (1-5) below this: the card is not published (logged as low_relevance).
   minEverydayRelevance: 3,
   // Optional boost for watch-list cards. NOT applied: importance is computed only in the ranking SQL
   // (core.refresh_rank), and the task said to skip the boost if it touches that SQL.
   watchCompanyBoost: 1.5,
   // 8-K items we turn into cards.
-  sec8kItems: ['1.01', '1.02', '1.03', '1.05', '2.01', '2.02', '2.05', '2.06', '3.01', '4.01', '4.02', '5.02', '7.01', '8.01'],
+  sec8kItems: ['1.01', '1.02', '1.03', '1.05', '2.01', '2.02', '2.03', '2.04', '2.05', '2.06', '3.01', '4.01', '4.02', '5.02', '7.01', '8.01'],
   // Low-value items: a filing whose items are only these (Reg FD, other events, exhibits) is
   // skipped before any page fetch or AI call, unless it also has a substantive tracked item.
   sec8kLowValueItems: ['7.01', '8.01', '9.01'],
