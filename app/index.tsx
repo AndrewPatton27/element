@@ -12,6 +12,8 @@ import type { BlurbCard, CategorySlug } from '../contract/types.ts';
 import { useAppData } from '../lib/appData';
 import { useAccount } from '../lib/accountContext';
 import { forYouCoversTopics, withoutHidden } from '../lib/accountLogic';
+import { favoritesFirst } from '../lib/localPrefs';
+import { rankLocal } from '../lib/localRank';
 import { sourceName, withoutHiddenSources } from '../lib/sourceKeys';
 import { SIGN_IN_AGAIN_MESSAGE } from '../lib/session';
 import type { FeedTab } from '../lib/feedLogic';
@@ -67,33 +69,40 @@ export default function FeedScreen() {
   );
   const [promptHidden, setPromptHidden] = useState(() => store.get(PROMPT_KEY) === '1');
 
-  // Signing out while on For you falls back to Top; arriving from onboarding opens For you.
-  useEffect(() => {
-    if (!signedIn && mode === 'for_you') setMode('top');
-  }, [signedIn, mode]);
+  // Arriving from onboarding (or another screen's top bar) opens For you; it works signed out
+  // too (ranked on this device).
   // Other screens' top bar sends ?tab=top|latest|for_you (t makes a repeat tap count).
   useEffect(() => {
-    if (params.tab === 'for_you' && signedIn) setMode('for_you');
-    else if (params.tab === 'top' || params.tab === 'latest') setMode(params.tab);
-  }, [params.tab, params.t, signedIn]);
+    if (params.tab === 'for_you' || params.tab === 'top' || params.tab === 'latest') setMode(params.tab);
+  }, [params.tab, params.t]);
 
   const forYou = mode === 'for_you';
-  // Signed in: hidden topics leave the feed and the chips at once (the server filters too).
-  const hidden = signedIn ? (acct.prefs?.hidden ?? []) : [];
-  const hiddenSources = signedIn ? (acct.prefs?.hiddenSources ?? []) : [];
-  const sourcesSupported = signedIn && acct.prefs?.hiddenSources != null;
+  // Hidden topics and sources leave the feed and the chips at once: the account's when signed
+  // in (the server filters too), this device's when signed out.
+  const hidden = acct.viewPrefs?.hidden ?? [];
+  const hiddenSources = acct.viewPrefs?.hiddenSources ?? [];
+  const sourcesSupported = acct.viewPrefs?.hiddenSources != null;
   // The same filter drives the list on screen and the paging, so "end of feed" and "load
   // more" are decided on what the reader can actually see.
   const visible = useCallback(
     (cards: BlurbCard[]) => withoutHiddenSources(withoutHidden(cards, hidden), hiddenSources),
     [hidden, hiddenSources],
   );
-  const { state, loadMore, retry } = useFeed(api, { mode, category: forYou ? null : category, user: acct.user?.id ?? null }, acct.account, visible);
+  const local = acct.localPrefs;
+  const rankPage = useCallback((cards: BlurbCard[]) => rankLocal(cards, local), [local]);
+  const { state, loadMore, retry } = useFeed(
+    api,
+    { mode, category: forYou ? null : category, user: acct.user?.id ?? null },
+    acct.account,
+    visible,
+    signedIn ? undefined : rankPage,
+  );
   const showSources = useCallback((c: BlurbCard) => setSheetCard(c), []);
   const openDetail = useCallback((c: BlurbCard) => setDetailCard(c), []);
 
   const items = visible(state.items);
-  const chipCategories = withoutHidden(categories, hidden);
+  const followed = acct.viewPrefs?.followed ?? [];
+  const chipCategories = favoritesFirst(withoutHidden(categories, hidden), followed);
   useEffect(() => {
     if (category && hidden.includes(category)) setCategory(null);
   }, [category, hidden]);
@@ -204,11 +213,11 @@ export default function FeedScreen() {
         onShowSources={showSources}
         onOpenDetail={openDetail}
         wide={wide}
-        reactions={signedIn ? acct.reactions : undefined}
-        onReact={signedIn ? react : undefined}
+        reactions={acct.reactions}
+        onReact={react}
         onActiveCard={signedIn && focused ? onActiveCard : undefined}
         active={focused && sheetCard === null && detailCard === null && menuCard === null}
-        onMore={signedIn ? setMenuCard : undefined}
+        onMore={setMenuCard}
       />
     );
   }
@@ -246,19 +255,27 @@ export default function FeedScreen() {
     ) : null;
 
   // For you: the chips don't apply; show what it is built from instead.
-  const followed = acct.prefs?.followed ?? [];
   const forYouLine = forYou ? (
     <View style={[styles.forYouLine, !wide && styles.promptNarrow, wide && styles.forYouWide]}>
       <Text style={[styles.forYouText, wide && { flex: 0 }, { color: p.muted }]} numberOfLines={wide ? 6 : 2}>
-        {!forYouCoversTopics(state.items, followed)
-          ? 'No new cards in your topics yet; showing top stories.'
-          : followed.length
-            ? `Tailored to ${followed.map((s) => categoryName(s, categories)).join(', ')} and your likes.`
-            : 'Tailored to your likes.'}
+        {!signedIn
+          ? followed.length || Object.keys(acct.reactions).length
+            ? 'Ranked on this device from your topics and likes.'
+            : 'Like cards or pick topics and this feed learns, on this device.'
+          : !forYouCoversTopics(state.items, followed)
+            ? 'No new cards in your topics yet; showing top stories.'
+            : followed.length
+              ? `Tailored to ${followed.map((s) => categoryName(s, categories)).join(', ')} and your likes.`
+              : 'Tailored to your likes.'}
       </Text>
       <Pressable onPress={() => router.navigate('/account' as never)} accessibilityRole="link" hitSlop={8}>
         <Text style={[styles.forYouEdit, { color: p.accentInk }]}>{followed.length ? 'Edit topics' : 'Pick topics'}</Text>
       </Pressable>
+      {!signedIn ? (
+        <Pressable onPress={() => router.navigate('/signin' as never)} accessibilityRole="link" hitSlop={8}>
+          <Text style={[styles.forYouSync, { color: p.muted }]}>Sign in to sync across devices</Text>
+        </Pressable>
+      ) : null}
     </View>
   ) : null;
 
@@ -278,7 +295,7 @@ export default function FeedScreen() {
       selected={category}
       onSelect={setCategory}
       wide={wide}
-      onEdit={signedIn ? () => router.navigate('/account' as never) : undefined}
+      onEdit={() => router.navigate('/account' as never)}
     />
   );
 
@@ -296,7 +313,7 @@ export default function FeedScreen() {
                 categories={chipCategories}
                 selected={category}
                 onSelect={setCategory}
-                onEdit={signedIn ? () => router.navigate('/account' as never) : undefined}
+                onEdit={() => router.navigate('/account' as never)}
               />
             )}
             {prompt}
@@ -315,7 +332,7 @@ export default function FeedScreen() {
               <Wordmark size={22} />
             </View>
             <View style={styles.tabs}>
-              <SortToggle mode={mode} onChange={setMode} forYou={signedIn} />
+              <SortToggle mode={mode} onChange={setMode} forYou />
             </View>
           </View>
           <View style={[styles.ticker, { borderBottomColor: p.border }]}>
@@ -358,4 +375,5 @@ const styles = StyleSheet.create({
   forYouWide: { flexDirection: 'column', alignItems: 'flex-start', gap: 6, paddingHorizontal: 12 },
   forYouText: { flex: 1, fontFamily: fonts.sans, fontSize: 14, lineHeight: 19 },
   forYouEdit: { fontFamily: fonts.sansSemi, fontSize: 14 },
+  forYouSync: { fontFamily: fonts.sans, fontSize: 13, textDecorationLine: 'underline' },
 });

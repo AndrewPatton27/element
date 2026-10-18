@@ -44,8 +44,8 @@ export default function FollowingScreen() {
     if (detailCard && signedIn) trackOpenDetail(detailCard);
   }, [detailCard, signedIn, trackOpenDetail]);
 
-  const hidden = signedIn ? (acct.prefs?.hidden ?? []) : [];
-  const hiddenSources = signedIn ? (acct.prefs?.hiddenSources ?? []) : [];
+  const hidden = acct.viewPrefs?.hidden ?? [];
+  const hiddenSources = acct.viewPrefs?.hiddenSources ?? [];
   const visible = useCallback(
     (cards: BlurbCard[]) => withoutHiddenSources(withoutHidden(cards, hidden), hiddenSources),
     [hidden, hiddenSources],

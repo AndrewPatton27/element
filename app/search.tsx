@@ -72,8 +72,8 @@ export default function SearchScreen() {
   const target = searchTarget(typed, topic);
   const key = searchKey(target);
 
-  const hidden = signedIn ? (acct.prefs?.hidden ?? []) : [];
-  const hiddenSources = signedIn ? (acct.prefs?.hiddenSources ?? []) : [];
+  const hidden = acct.viewPrefs?.hidden ?? [];
+  const hiddenSources = acct.viewPrefs?.hiddenSources ?? [];
   const visible = useCallback(
     (cards: BlurbCard[]) => withoutHiddenSources(withoutHidden(cards, hidden), hiddenSources),
     [hidden, hiddenSources],

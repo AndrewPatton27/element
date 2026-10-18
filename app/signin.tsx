@@ -205,6 +205,11 @@ export default function SignInScreen() {
             </Pressable>
           ) : null}
           <PrimaryButton label={label} onPress={submit} />
+          {!acct.user ? (
+            <Pressable onPress={() => router.navigate('/account' as never)} accessibilityRole="link" style={styles.forgot}>
+              <Text style={[styles.linkText, { color: p.accentInk }]}>Or keep using Element without an account: your topics and sources on this device →</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {mode === 'signin' ? (

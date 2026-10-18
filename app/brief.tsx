@@ -112,8 +112,8 @@ export default function BriefScreen() {
   const { data, loading, error } = slot;
 
   // The same hidden topics / sources the feed uses.
-  const hidden = signedIn ? (acct.prefs?.hidden ?? []) : [];
-  const hiddenSources = signedIn ? (acct.prefs?.hiddenSources ?? []) : [];
+  const hidden = acct.viewPrefs?.hidden ?? [];
+  const hiddenSources = acct.viewPrefs?.hiddenSources ?? [];
   const visible = useCallback(
     (cards: BlurbCard[]) => withoutHiddenSources(withoutHidden(cards, hidden), hiddenSources),
     [hidden, hiddenSources],
@@ -144,7 +144,7 @@ export default function BriefScreen() {
     );
   } else if (briefIsEmpty(view)) {
     const hiddenAll = !briefIsEmpty(unfiltered);
-    body = <BriefEmpty mode={mode} hidden={hiddenAll} onRefresh={refresh} onFeed={goFeed} onSettings={signedIn ? goAccount : undefined} />;
+    body = <BriefEmpty mode={mode} hidden={hiddenAll} onRefresh={refresh} onFeed={goFeed} onSettings={goAccount} />;
   } else {
     const label = headlineLabel(mode, data.window_hours);
     const stories = (

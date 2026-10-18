@@ -1,4 +1,5 @@
-// The card's "⋯" options (signed in only): hide this card's topic. A small sheet
+// The card's "⋯" options (everyone; signed out the choice is kept on this device): hide this
+// card's topic or source. A small sheet
 // with large tap targets; Escape / back / tapping outside closes it.
 
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';

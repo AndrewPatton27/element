@@ -1,4 +1,5 @@
-// Feed tabs (underline style): Top / Latest for everyone, For you when signed in.
+// Feed tabs (underline style): Trending / Latest / For you for everyone. Signed out, For you
+// is ranked on the device (lib/localRank.ts). `forYou` is kept for callers but no longer hides the tab.
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { FeedTab } from '../lib/feedLogic';
@@ -11,11 +12,12 @@ const OPTIONS: { mode: FeedTab; label: string; hint: string }[] = [
   { mode: 'for_you', label: 'For you', hint: 'Tailored to your topics and likes' },
 ];
 
-export function SortToggle({ mode, onChange, wide, forYou }: { mode: FeedTab | null; onChange: (m: FeedTab) => void; wide?: boolean; forYou?: boolean }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function SortToggle({ mode, onChange, wide, forYou: _forYou }: { mode: FeedTab | null; onChange: (m: FeedTab) => void; wide?: boolean; forYou?: boolean }) {
   const p = usePalette();
   return (
     <View style={styles.row} accessibilityRole="tablist">
-      {OPTIONS.filter((o) => forYou || o.mode !== 'for_you').map((o) => {
+      {OPTIONS.map((o) => {
         const on = o.mode === mode;
         return (
           <Pressable

@@ -48,9 +48,8 @@ export default function AccountScreen() {
   const [hideSignal, setHideSignal] = useState(0);
   const [deleteText, setDeleteText] = useState('');
 
-  useEffect(() => {
-    if (!acct.user) router.replace('/signin' as never);
-  }, [acct.user]);
+  // Signed out the page still works: topics, companies and sources are kept on this device.
+  const signedIn = acct.user !== null;
   useEffect(() => {
     let alive = true;
     if (acct.user) void acct.account.myCategories().then((c) => alive && c && c.length && setMyCategories(c));
@@ -59,8 +58,8 @@ export default function AccountScreen() {
     };
   }, [acct.account, acct.user]);
   useEffect(() => {
-    if (acct.prefs) setTopics({ followed: acct.prefs.followed, hidden: acct.prefs.hidden });
-  }, [acct.prefs]);
+    if (acct.viewPrefs) setTopics({ followed: acct.viewPrefs.followed, hidden: acct.viewPrefs.hidden });
+  }, [acct.viewPrefs]);
 
   async function run(section: Section, work: () => Promise<string | void>, done: string) {
     setBusy(section);
@@ -106,10 +105,10 @@ export default function AccountScreen() {
 
   const card = [styles.card, { backgroundColor: p.surface, borderColor: p.border }];
   const input = [fieldStyles.input, { borderColor: p.borderStrong, backgroundColor: p.surface, color: p.ink }];
-  const saved = acct.prefs?.followed ?? [];
-  const hiddenSources = acct.prefs?.hiddenSources ?? null; // null: server doesn't support it yet
+  const saved = acct.viewPrefs?.followed ?? [];
+  const hiddenSources = acct.viewPrefs?.hiddenSources ?? null; // null: server doesn't support it yet
   const key = (l: string[]) => l.slice().sort().join();
-  const topicsChanged = key(saved) !== key(topics.followed) || key(acct.prefs?.hidden ?? []) !== key(topics.hidden);
+  const topicsChanged = key(saved) !== key(topics.followed) || key(acct.viewPrefs?.hidden ?? []) !== key(topics.hidden);
   const message = (s: Section) => {
     const m = msgs[s];
     return m ? (
@@ -135,7 +134,16 @@ export default function AccountScreen() {
   const toggle = (which: NonNullable<typeof open>) => () => setOpen((o) => (o === which ? null : which));
   const email = acct.user?.email ?? '';
 
-  const profile = (
+  const profile = !signedIn ? (
+    <View style={[card, styles.guest]}>
+      <Text style={[styles.value, { color: p.ink }]}>You’re not signed in</Text>
+      <Text style={[styles.help, { color: p.inkSoft }]}>
+        Your likes, topics, companies and sources are saved on this device only. Sign in to sync them across devices; they move into your account
+        the first time you sign in.
+      </Text>
+      <PrimaryButton label="Sign in or create an account" onPress={() => router.navigate('/signin' as never)} />
+    </View>
+  ) : (
     <View style={[card, styles.profile]}>
       <View style={[styles.avatar, { backgroundColor: p.accentSoft }]} accessible={false}>
         <Text style={[styles.avatarText, { color: p.accentInk }]}>{(email[0] ?? 'E').toUpperCase()}</Text>
@@ -212,7 +220,13 @@ export default function AccountScreen() {
       </View>
     ) : null;
 
-  const settings = (
+  const settings = !signedIn ? (
+    <View style={[card, styles.settings]} accessibilityLabel="Settings">
+      <ListRow first wide={wide} chevron label="Numbers to know" onPress={() => router.navigate('/numbers' as never)} />
+      <ListRow wide={wide} chevron label="About Element" onPress={() => router.navigate('/about' as never)} />
+      <ListRow wide={wide} chevron label="Sign in" onPress={() => router.navigate('/signin' as never)} />
+    </View>
+  ) : (
     <View style={[card, styles.settings]} accessibilityLabel="Settings">
       <ListRow first wide={wide} label="Change email" onPress={toggle('email')}>
         {panel(
@@ -362,6 +376,7 @@ export default function AccountScreen() {
 
 const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: radius.tile },
+  guest: { gap: 10, paddingVertical: 16, paddingHorizontal: 18 },
   profile: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, paddingHorizontal: 18 },
   avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontFamily: fonts.serif, fontSize: 22 },
