@@ -144,12 +144,22 @@ export interface BlurbCard {
   share_path: string;                   // "/b/<id>"
   importance?: number;                  // ranking input (about 1..20); optional, never shown
   detail?: CardDetail | null;           // in-depth summary; null or missing = none (older servers omit it)
+  follow_reason?: string;               // present on cards returned by api.following_feed
 }
 
 /** Response of `api.feed`. `next_cursor` null = end of feed. Treat the cursor as opaque. */
 export interface FeedPage {
   items: BlurbCard[];
   next_cursor: string | null;
+}
+
+/** Daily or weekly editorial brief assembled from published cards and macro facts. */
+export interface Brief {
+  generated_at: string;
+  window_hours: number;
+  headline_cards: BlurbCard[];
+  sections: { category: string; label: string; cards: BlurbCard[] }[];
+  numbers: MacroFact[];
 }
 
 export type NoticePlacement =

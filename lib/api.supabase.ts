@@ -3,9 +3,10 @@
 // No React imports, so node --test can run it with a fake fetch.
 
 import type { Api, FeedRequest } from './api.ts';
+import type { BlurbCard, Brief, FeedPage, MacroFact, NumberTrend } from '../contract/types.ts';
 import { NETWORK_MESSAGE, friendlyHttpError, parseErrorBody, warnRaw } from './errors.ts';
 import { clampLimit } from './feedLogic.ts';
-import { isBlurbCard, parseAppConfig, parseCategories, parseFeedPage, parseMacroFacts, parseNumberTrends } from './types.ts';
+import { isBlurbCard, isMacroFact, parseAppConfig, parseCategories, parseFeedPage, parseMacroFacts, parseNumberTrends } from './types.ts';
 
 export interface SupabaseOptions {
   url: string; // https://<project>.supabase.co, no trailing slash
@@ -36,8 +37,8 @@ export interface PlannedRequest {
 export function planRequest(
   base: string,
   key: string,
-  op: 'feed' | 'categories' | 'numbers' | 'config' | 'top_stories' | 'number_trends',
-  req?: FeedRequest,
+  op: 'feed' | 'categories' | 'numbers' | 'config' | 'top_stories' | 'number_trends' | 'search' | 'related_cards' | 'following_feed' | 'daily_brief' | 'weekly_brief',
+  req?: FeedRequest & { q?: string; cardId?: string; topics?: string[]; sources?: string[]; tickers?: string[] },
   token?: string | null,
 ): PlannedRequest {
   const headers: Record<string, string> = { apikey: key, Accept: 'application/json', 'Accept-Profile': 'api' };
@@ -60,6 +61,18 @@ export function planRequest(
       url: `${base}/rest/v1/rpc/${op}`,
       init: { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'Content-Profile': 'api' }, body: '{}' },
     };
+  }
+  if (op === 'search' || op === 'related_cards' || op === 'following_feed' || op === 'daily_brief' || op === 'weekly_brief') {
+    const extra = req;
+    const bounded = (value: number | undefined, fallback: number, max: number) => Math.max(1, Math.min(max, Number.isFinite(value) ? Math.trunc(value as number) : fallback));
+    const rpcBody = op === 'search'
+      ? { p_q: String(extra?.q ?? '').slice(0, 80), p_cursor: req?.cursor ?? null, p_limit: bounded(req?.limit, 20, 30) }
+      : op === 'related_cards'
+        ? { p_card_id: extra?.cardId, p_limit: bounded(req?.limit, 5, 10) }
+        : op === 'following_feed'
+          ? { p_topics: extra?.topics ?? [], p_sources: extra?.sources ?? [], p_tickers: extra?.tickers ?? [], p_cursor: req?.cursor ?? null, p_limit: bounded(req?.limit, 20, 30) }
+          : {};
+    return { url: `${base}/rest/v1/rpc/${op}`, init: { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'Content-Profile': 'api' }, body: JSON.stringify(rpcBody) } };
   }
   const path = {
     categories: 'categories?select=*&order=sort_order',
@@ -89,6 +102,22 @@ export function createSupabaseApi(opts: SupabaseOptions): Api {
       throw new ApiError(friendlyHttpError(res.status, message, code), res.status, detail);
     }
     return res.json();
+  }
+
+  const emptyBrief = (): Brief => ({ generated_at: new Date(0).toISOString(), window_hours: 24, headline_cards: [], sections: [], numbers: [] });
+  function parseBrief(x: unknown): Brief {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) return emptyBrief();
+    const row = x as Record<string, unknown>;
+    return {
+      generated_at: typeof row.generated_at === 'string' ? row.generated_at : new Date(0).toISOString(),
+      window_hours: typeof row.window_hours === 'number' ? row.window_hours : 24,
+      headline_cards: Array.isArray(row.headline_cards) ? row.headline_cards.filter(isBlurbCard) : [],
+      sections: Array.isArray(row.sections) ? row.sections.filter((s): s is { category: string; label: string; cards: BlurbCard[] } => !!s && typeof s === 'object' && typeof (s as any).category === 'string' && typeof (s as any).label === 'string').map((s) => ({ ...s, cards: Array.isArray(s.cards) ? s.cards.filter(isBlurbCard) : [] })) : [],
+      numbers: Array.isArray(row.numbers) ? row.numbers.filter(isMacroFact) : [],
+    };
+  }
+  async function optional(op: Parameters<typeof planRequest>[2], args?: FeedRequest & { q?: string; cardId?: string; topics?: string[]; sources?: string[]; tickers?: string[] }): Promise<unknown> {
+    try { return await call(planRequest(opts.url, opts.key, op, args)); } catch { return null; }
   }
 
   return {
@@ -122,6 +151,27 @@ export function createSupabaseApi(opts: SupabaseOptions): Api {
       } catch {
         return [];
       }
+    },
+    async search(q, cursor, limit) {
+      const x = await optional('search', { mode: 'top', cursor, limit, q });
+      try { return x === null ? { items: [], next_cursor: null } : parseFeedPage(x); } catch { return { items: [], next_cursor: null }; }
+    },
+    async relatedCards(cardId, limit = 5) {
+      const x = await optional('related_cards', { mode: 'top', limit, cardId });
+      return Array.isArray(x) ? x.filter(isBlurbCard).slice(0, limit) : [];
+    },
+    async followingFeed(f) {
+      const x = await optional('following_feed', { mode: 'top', ...f });
+      try { return x === null ? { items: [], next_cursor: null } : parseFeedPage(x); } catch { return { items: [], next_cursor: null }; }
+    },
+    async dailyBrief() {
+      return parseBrief(await optional('daily_brief'));
+    },
+    async weeklyBrief() {
+      const raw = await optional('weekly_brief');
+      const brief = parseBrief(raw);
+      const movers = raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).movers) ? parseNumberTrends((raw as Record<string, unknown>).movers) : [];
+      return { ...brief, window_hours: 168, movers };
     },
   };
 }

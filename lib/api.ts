@@ -1,7 +1,7 @@
 // One data interface, two implementations: sample fixtures (mock, the default) and
 // the Supabase `api` schema over plain fetch. Screens only talk to this interface.
 
-import type { AppConfig, BlurbCard, Category, CategorySlug, FeedMode, FeedPage, MacroFact, NumberTrend } from '../contract/types.ts';
+import type { AppConfig, BlurbCard, Brief, Category, CategorySlug, FeedMode, FeedPage, MacroFact, NumberTrend } from '../contract/types.ts';
 import { resolveApiConfig, readEnv, type ApiConfig } from './config.ts';
 import { allCards, createMockApi } from './api.mock.ts';
 import { createMockAccount, createSupabaseAccount, type AccountApi } from './account.ts';
@@ -25,6 +25,11 @@ export interface Api {
   topStories(): Promise<BlurbCard[]>;
   /** 10-yr Treasury, CPI, unemployment, WTI crude with a 12-point history. [] when unavailable. */
   numberTrends(): Promise<NumberTrend[]>;
+  search(q: string, cursor?: string | null, limit?: number): Promise<FeedPage>;
+  relatedCards(cardId: string, limit?: number): Promise<BlurbCard[]>;
+  followingFeed(f: { topics: string[]; sources: string[]; tickers: string[]; cursor?: string | null; limit?: number }): Promise<FeedPage>;
+  dailyBrief(): Promise<Brief>;
+  weeklyBrief(): Promise<Brief & { movers: NumberTrend[] }>;
 }
 
 export type ApiResult = { ok: true; api: Api; account: AccountApi } | { ok: false; error: string };
