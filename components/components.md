@@ -43,3 +43,14 @@ Accessibility note: react-native-web ignores `accessibilityState` and `accessibi
 
 
 Card footer: the disclaimer is built once and placed by `disclaimerPlacement` (`lib/labels.ts`), so it renders exactly once whether or not `onReact` is passed (a non-function `onReact` counts as absent). `Disclaimer` falls back to the built-in wording if its text is empty.
+
+## Search and Following (used by `app/search.tsx` and `app/following.tsx`)
+
+| File | What it does |
+|---|---|
+| `SearchBox.tsx` | The search pill (magnifier, text, clear button); Enter submits. 44 px on phones, 56 px on wide web. |
+| `SearchIdle.tsx` | The empty-box view: recent searches, "Browse by category" tiles and "Try a company" chips. A local clock icon. |
+| `SearchResultCard.tsx` | One result tile (badge, topic, headline, summary, optional "Because you follow X", source row, "More detail", AI label and disclaimer once, share-alike credit). |
+| `SearchResults.tsx` | A list of tiles in one or two columns with loading, error, empty and "Show more" states. Shared by Search and Following. |
+| `FollowingManager.tsx` | The "You follow" panel: removable chips, plus topic and source pickers and a ticker box. |
+| `FollowingButton.tsx` | The Follow / "✓ Following" pill. |

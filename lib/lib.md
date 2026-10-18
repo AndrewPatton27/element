@@ -57,3 +57,10 @@ Files in `lib/__tests__/`: `account`, `api`, `detail`, `dwell`, `feedLogic`, `fi
 - **`labels.ts` – `disclaimerPlacement(hasReactions)`.** Decides where the disclaimer goes (in the footer row, or under the reaction buttons). Exactly one slot is ever true, so every card renders the disclaimer once (`__tests__/disclaimer.test.ts`).
 - **`account.ts` – `trackDwellOnExit` and `planRpc`.** The last dwell on `pagehide` is sent with `fetch` `keepalive: true` and the user's auth header (`sendBeacon` cannot set headers). It uses the stored token as it is (nothing can be awaited while the page closes), is skipped when signed out or expired, and never throws.
 - New tests: `errors`, `feedPaging`, `disclaimer` (`lib/__tests__/`).
+
+## Search and Following helpers
+
+- `searchLogic.ts`: 300 ms debounce, 2-character minimum, query normalising, the search target and list key, recent searches (add, remove, parse), wording. Tests: `__tests__/searchLogic.test.ts`.
+- `followingLogic.ts`: the three follow lists (topics, sources, tickers), parse / toggle / ticker check, which topics come from the account, the "Because you follow X" text with topic slugs turned into names. Tests: `__tests__/followingLogic.test.ts` (includes the mock search and following feed).
+- `useFollows.ts`: the follow lists for the screens (account topics when signed in, device storage otherwise).
+- `usePagedCards.ts`: pages any card list by key (search, topic, follows) with the feed's rules: a new key starts over, late answers are dropped, hidden topics and sources are skipped.

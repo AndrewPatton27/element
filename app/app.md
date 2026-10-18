@@ -38,3 +38,11 @@ Output goes to `dist/` as a single-page app (`web.output: "single"` in `app.json
 - On `pagehide` (web) the last card's time is sent with a `keepalive` fetch (`trackDwellOnExit`), keeping the auth header.
 - Screens show short friendly error text (`lib/errors.ts` `userMessage`), never raw server messages.
 - Phones (design `docs/design/mobile/Mobile-Final.dc.html`): a 56 px white header with the wordmark and the feed tabs, the "Numbers to know" ticker (`NumbersTicker`) under it, then 44 px category chips and the pager. The disclaimer line sits under each card, above the bottom nav.
+
+## Search and Following screens (search.tsx, ollowing.tsx)
+
+Both sit in the 5-tab bar (phones) and the top bar (wide web). Designs: `docs/design/{mobile,web}/*-Search` and `*-Following`. Both run against the mock API until the real RPCs are live; with the real client an unavailable RPC returns an empty page, which shows the empty states.
+
+- **Search** (`/search`): the box waits 300 ms after the last key and searches from 2 characters (`lib/searchLogic.ts`), then shows `api.search` results page by page with a "Show more" button. Empty box: recent searches (kept on the device, "Clear"), "Browse by category" tiles (a tile shows that topic's top cards via `api.feed`) and "Try a company" tickers. A topic being browsed, or a company the results are about, gets a Follow button. Results hide the reader's hidden topics and sources, like the feed. Phones put the box in the header; wide web shows it under the page title.
+- **Following** (`/following`): a "You follow" panel (topics, companies, sources, each removable; "+ Add" opens the pickers and a ticker box), then `api.followingFeed({topics, sources, tickers})` with each card's "Because you follow X" line, newest relevant first (the server orders it). Nothing followed: the pickers start open as a prompt and the top stories show below. Topics follow the account when signed in (same list as For you) and live on the device when signed out; sources and companies always live on the device (`lib/useFollows.ts`).
+- Result tiles carry the required labels: the disclaimer once per card, the AI label on AI-written cards, the source row (opens the sources sheet with links) and the Wikipedia credit; no images, no prices. Tapping a tile opens the same `DetailSheet` as the feed.
