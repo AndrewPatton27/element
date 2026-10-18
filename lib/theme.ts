@@ -26,6 +26,8 @@ export interface Palette {
   up: string; // change went up
   down: string; // change went down
   flat: string; // unchanged
+  good: string; // change generally good for households (green, AA on bg and white)
+  bad: string; // change generally bad for households (red, AA on bg and white)
   overlay: string; // behind sheets
   warn: string; // design --warn: alerts, "updated" dots, rises in a number
 }
@@ -55,6 +57,8 @@ export const light: Palette = {
   up: '#8A3B12',
   down: '#0A5A4E',
   flat: '#56635B',
+  good: '#1B6B34',
+  bad: '#B3261E',
   overlay: 'rgba(20,33,28,0.5)',
   warn: '#8A3B12',
 };
@@ -84,6 +88,8 @@ export const dark: Palette = {
   up: '#F0A07A',
   down: '#6FD0BD',
   flat: '#98A59D',
+  good: '#6FCB8A',
+  bad: '#F29B94',
   overlay: 'rgba(0,0,0,0.6)',
   warn: '#F0A07A',
 };

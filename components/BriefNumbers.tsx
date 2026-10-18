@@ -9,12 +9,13 @@ import Svg, { Circle, Line, Path, Polyline } from 'react-native-svg';
 import type { MacroFact, NumberTrend, RequiredNotice } from '../contract/types.ts';
 import { trendA11yLabel } from '../lib/briefLogic';
 import { changeText, factA11yLabel } from '../lib/format';
+import { withToneLabel } from '../lib/numberTone';
 import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
 import { changeColor } from './DataCard';
 import { ChevronLeftIcon, ChevronRightIcon } from './Icons';
 import { openUrl } from './SourceChip';
-import { BASELINE, CHART_H, CHART_W, chartShape, stepIndex } from './trendChart';
+import { BASELINE, CHART_H, CHART_W, chartShape, stepIndex, trendColors } from './trendChart';
 
 export function BriefNumbers({
   facts,
@@ -48,7 +49,7 @@ export function BriefNumbers({
             key={f.series_id}
             onPress={() => openUrl(f.source_url)}
             accessibilityRole="link"
-            accessibilityLabel={factA11yLabel(f)}
+            accessibilityLabel={withToneLabel(factA11yLabel(f), f.series_id, f.direction)}
             style={({ pressed }) => [styles.row, { borderTopColor: p.divider, opacity: pressed ? 0.75 : 1 }]}
           >
             <View style={styles.rowLeft}>
@@ -57,7 +58,7 @@ export function BriefNumbers({
             </View>
             <View style={styles.rowRight}>
               <Text style={[styles.value, { color: p.ink }]}>{f.value}</Text>
-              {change ? <Text style={[styles.change, { color: changeColor(p, f.direction) }]}>{change}</Text> : null}
+              {change ? <Text style={[styles.change, { color: changeColor(p, f) }]}>{change}</Text> : null}
             </View>
           </Pressable>
         );
@@ -82,7 +83,7 @@ export function BriefMovers({ movers, wide }: { movers: NumberTrend[]; wide: boo
   if (movers.length === 0) return null;
   const s = movers[Math.min(i, movers.length - 1)];
   const shape = chartShape(s.points);
-  const tone = s.direction === 'up' ? p.up : s.direction === 'down' ? p.down : p.flat;
+  const { delta: tone, line } = trendColors(p, s.key, s.direction);
   return (
     <View accessibilityLabel="Number trends" style={[styles.trends, wide && styles.cardWide, { backgroundColor: p.surface, borderColor: p.border }]}>
       <View style={styles.trendHead}>
@@ -103,7 +104,7 @@ export function BriefMovers({ movers, wide }: { movers: NumberTrend[]; wide: boo
           </View>
         ) : null}
       </View>
-      <View style={styles.valueRow} accessible accessibilityLabel={trendA11yLabel(s)}>
+      <View style={styles.valueRow} accessible accessibilityLabel={withToneLabel(trendA11yLabel(s), s.key, s.direction)}>
         <Text style={[styles.big, { color: p.ink }]}>{s.value}</Text>
         <Text style={[styles.change, { color: tone }]}>{s.change}</Text>
       </View>
@@ -116,9 +117,9 @@ export function BriefMovers({ movers, wide }: { movers: NumberTrend[]; wide: boo
           >
             <Line x1={8} y1={BASELINE} x2={592} y2={BASELINE} stroke={p.border} strokeWidth={1} />
             <Line x1={8} y1={85} x2={592} y2={85} stroke={p.divider} strokeWidth={1} />
-            <Path d={shape.area} fill={p.accent} fillOpacity={0.1} />
-            <Polyline points={shape.points} fill="none" stroke={p.accent} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
-            <Circle cx={shape.cx} cy={shape.cy} r={7} fill={p.accent} />
+            <Path d={shape.area} fill={line} fillOpacity={0.1} />
+            <Polyline points={shape.points} fill="none" stroke={line} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+            <Circle cx={shape.cx} cy={shape.cy} r={7} fill={line} />
           </Svg>
           <View style={styles.axis}>
             <Text style={[styles.small, { color: p.muted }]}>12 weeks ago</Text>

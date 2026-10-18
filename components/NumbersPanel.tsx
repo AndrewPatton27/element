@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, MacroFact } from '../contract/types.ts';
 import type { Api } from '../lib/api.ts';
 import { changeText, factA11yLabel, shortDate } from '../lib/format';
+import { withToneLabel } from '../lib/numberTone';
 import { noticesFor } from '../lib/labels';
 import { plainExplainer } from '../lib/seriesCopy';
 import { usePalette } from '../lib/useTheme';
@@ -71,7 +72,7 @@ export function NumbersPanel({ api, config, variant }: Props) {
             key={f.series_id}
             onPress={() => openUrl(f.source_url)}
             accessibilityRole="link"
-            accessibilityLabel={factA11yLabel(f)}
+            accessibilityLabel={withToneLabel(factA11yLabel(f), f.series_id, f.direction)}
             style={({ pressed }) => [styles.cRow, { borderTopColor: p.rowDivider, opacity: pressed ? 0.75 : 1 }]}
           >
             <View style={styles.cLeft}>
@@ -82,7 +83,7 @@ export function NumbersPanel({ api, config, variant }: Props) {
             </View>
             <View style={styles.cRight}>
               <Text style={[styles.cValue, { color: p.ink }]}>{f.value}</Text>
-              {changeText(f) ? <Text style={[styles.cChange, { color: changeColor(p, f.direction) }]}>{changeText(f)}</Text> : null}
+              {changeText(f) ? <Text style={[styles.cChange, { color: changeColor(p, f) }]}>{changeText(f)}</Text> : null}
             </View>
           </Pressable>
         ))}
@@ -100,7 +101,7 @@ export function NumbersPanel({ api, config, variant }: Props) {
             key={f.series_id}
             onPress={() => openUrl(f.source_url)}
             accessibilityRole="link"
-            accessibilityLabel={factA11yLabel(f)}
+            accessibilityLabel={withToneLabel(factA11yLabel(f), f.series_id, f.direction)}
             style={({ pressed }) => [styles.fRow, { backgroundColor: p.surface, borderColor: p.border, opacity: pressed ? 0.8 : 1 }]}
           >
             <View style={styles.fLeft}>
@@ -112,7 +113,7 @@ export function NumbersPanel({ api, config, variant }: Props) {
             </View>
             <View style={styles.fRight}>
               <Text style={[styles.fValue, { color: p.ink }]}>{f.value}</Text>
-              {changeText(f) ? <Text style={[styles.fChange, { color: changeColor(p, f.direction) }]}>{changeText(f)}</Text> : null}
+              {changeText(f) ? <Text style={[styles.fChange, { color: changeColor(p, f) }]}>{changeText(f)}</Text> : null}
             </View>
           </Pressable>
         );

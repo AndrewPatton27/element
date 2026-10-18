@@ -9,11 +9,13 @@ import Svg, { Circle, Line, Path, Polyline } from 'react-native-svg';
 import type { BlurbCard, Category, NumberTrend } from '../contract/types.ts';
 import type { Api } from '../lib/api.ts';
 import { cardTime, categoryName } from '../lib/format';
+import { trendA11yLabel } from '../lib/briefLogic';
+import { withToneLabel } from '../lib/numberTone';
 import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
 import { badgeLabel } from './Card';
 import { ChevronLeftIcon, ChevronRightIcon } from './Icons';
-import { BASELINE, CHART_H, CHART_W, chartShape, stepIndex, storiesToShow } from './trendChart';
+import { BASELINE, CHART_H, CHART_W, chartShape, stepIndex, storiesToShow, trendColors } from './trendChart';
 
 const ROTATE_MS = 7000;
 
@@ -122,7 +124,7 @@ function TrendsCard({ trends }: { trends: NumberTrend[] }) {
 
   const s = trends[Math.min(i, trends.length - 1)];
   const shape = chartShape(s.points);
-  const tone = s.direction === 'up' ? p.up : s.direction === 'down' ? p.down : p.flat;
+  const { delta: tone, line } = trendColors(p, s.key, s.direction);
   return (
     <View ref={box} accessibilityLabel="Number trends" style={[styles.trends, { backgroundColor: p.surface, borderColor: p.border }]}>
       <View style={styles.trendHead}>
@@ -151,7 +153,7 @@ function TrendsCard({ trends }: { trends: NumberTrend[] }) {
           </View>
         ) : null}
       </View>
-      <View style={styles.valueRow}>
+      <View style={styles.valueRow} accessible accessibilityLabel={withToneLabel(trendA11yLabel(s), s.key, s.direction)}>
         <Text style={[styles.value, { color: p.ink }]}>{s.value}</Text>
         <Text style={[styles.change, { color: tone }]}>{s.change}</Text>
       </View>
@@ -163,9 +165,9 @@ function TrendsCard({ trends }: { trends: NumberTrend[] }) {
         >
           <Line x1={8} y1={BASELINE} x2={592} y2={BASELINE} stroke={p.border} strokeWidth={1} />
           <Line x1={8} y1={85} x2={592} y2={85} stroke={p.divider} strokeWidth={1} />
-          <Path d={shape.area} fill={p.accent} fillOpacity={0.1} />
-          <Polyline points={shape.points} fill="none" stroke={p.accent} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-          <Circle cx={shape.cx} cy={shape.cy} r={5.5} fill={p.accent} />
+          <Path d={shape.area} fill={line} fillOpacity={0.1} />
+          <Polyline points={shape.points} fill="none" stroke={line} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+          <Circle cx={shape.cx} cy={shape.cy} r={5.5} fill={line} />
         </Svg>
       ) : null}
       <View style={styles.foot}>

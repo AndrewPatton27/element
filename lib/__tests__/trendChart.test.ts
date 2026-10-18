@@ -39,3 +39,15 @@ test('storiesToShow: 3 on short laptops, 4 in between, 5 on tall windows', () =>
   assert.equal(storiesToShow(800), 4);
   assert.equal(storiesToShow(900), 5);
 });
+
+import { trendColors } from '../../components/trendChart.ts';
+import { light as lightPalette } from '../theme.ts';
+
+test('trend colours follow the tone; the line stays accent when neutral', () => {
+  const bad = trendColors(lightPalette, 'CPIAUCSL', 'up');
+  assert.deepEqual(bad, { delta: lightPalette.bad, line: lightPalette.bad });
+  const good = trendColors(lightPalette, 'UNRATE', 'down');
+  assert.deepEqual(good, { delta: lightPalette.good, line: lightPalette.good });
+  assert.deepEqual(trendColors(lightPalette, 'DGS10', 'up'), { delta: lightPalette.flat, line: lightPalette.accent });
+  assert.deepEqual(trendColors(lightPalette, 'UNRATE', 'flat'), { delta: lightPalette.flat, line: lightPalette.accent });
+});

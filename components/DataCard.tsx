@@ -5,15 +5,16 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, BlurbCard, MacroFact } from '../contract/types.ts';
 import { changeText, factA11yLabel, shortDate } from '../lib/format';
 import { cardNotices } from '../lib/labels';
+import { changeToneColor, withToneLabel } from '../lib/numberTone';
 import { usePalette } from '../lib/useTheme';
 import type { Palette } from '../lib/theme';
 import { fonts } from '../lib/theme';
 import { openUrl } from './SourceChip';
 
-export function changeColor(p: Palette, direction: MacroFact['direction']): string {
-  if (direction === 'up') return p.up;
-  if (direction === 'down') return p.down;
-  return p.flat;
+// Green = generally good for households, red = generally bad, gray = no change
+// or neither (see lib/numberTone.ts). The glyph and word carry the direction.
+export function changeColor(p: Palette, f: Pick<MacroFact, 'series_id' | 'direction'>): string {
+  return changeToneColor(p, f.series_id, f.direction);
 }
 
 export function DataFacts({ card, config, compact }: { card: BlurbCard; config: AppConfig | null; compact?: boolean }) {
@@ -31,12 +32,12 @@ export function DataFacts({ card, config, compact }: { card: BlurbCard; config: 
             key={f.series_id}
             style={[styles.fact, multi && styles.factMulti, multi && i > 0 && { borderLeftWidth: 1, borderLeftColor: p.border, paddingLeft: 14 }]}
             accessible
-            accessibilityLabel={factA11yLabel(f)}
+            accessibilityLabel={withToneLabel(factA11yLabel(f), f.series_id, f.direction)}
           >
             <Text style={[styles.label, { color: p.dataInk }]}>{f.label}</Text>
             <View style={[styles.valueRow, multi && styles.valueCol]}>
               <Text style={[styles.value, { color: p.ink, fontSize: valueSize, lineHeight: Math.round(valueSize * 1.05), letterSpacing: -valueSize * 0.02 }]}>{f.value}</Text>
-              {changeText(f) ? <Text style={[styles.change, { color: changeColor(p, f.direction) }]}>{changeText(f)}</Text> : null}
+              {changeText(f) ? <Text style={[styles.change, { color: changeColor(p, f) }]}>{changeText(f)}</Text> : null}
             </View>
             <Text style={[styles.cite, multi && styles.citeMulti, { color: p.inkSoft }]}>
               {f.period ? f.period : `As of ${shortDate(f.as_of)}`} · {f.source_short}

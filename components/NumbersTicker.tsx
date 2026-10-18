@@ -14,6 +14,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import type { AppConfig } from '../contract/types.ts';
 import type { Api } from '../lib/api.ts';
 import { changeText, factA11yLabel } from '../lib/format';
+import { withToneLabel } from '../lib/numberTone';
 import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
 import { changeColor } from './DataCard';
@@ -100,7 +101,7 @@ export function NumbersTicker({ api, config }: { api: Api; config: AppConfig | n
           key={`${keyPrefix}-${f.series_id}`}
           onPress={openNumbers}
           accessibilityRole="link"
-          accessibilityLabel={`${factA11yLabel(f)}. Opens Numbers to know.`}
+          accessibilityLabel={`${withToneLabel(factA11yLabel(f), f.series_id, f.direction)}. Opens Numbers to know.`}
           style={({ pressed }) => [styles.item, { opacity: pressed ? 0.75 : 1 }]}
         >
           <Text style={[styles.label, { color: p.inkSoft }]} numberOfLines={1}>
@@ -110,7 +111,7 @@ export function NumbersTicker({ api, config }: { api: Api; config: AppConfig | n
             {f.value}
           </Text>
           {changeText(f) ? (
-            <Text style={[styles.change, { color: changeColor(p, f.direction) }]} numberOfLines={1}>
+            <Text style={[styles.change, { color: changeColor(p, f) }]} numberOfLines={1}>
               {changeText(f)}
             </Text>
           ) : null}

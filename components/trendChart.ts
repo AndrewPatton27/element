@@ -2,6 +2,9 @@
 // docs/design/web/Web-Final.dc.html): 600 x 170 box, 8 px side margin, 14 px
 // vertical margin, baseline at y = 156. No React imports.
 
+import { changeToneColor } from '../lib/numberTone.ts';
+import type { Palette } from '../lib/theme.ts';
+
 export const CHART_W = 600;
 export const CHART_H = 170;
 const PX = 8;
@@ -29,6 +32,14 @@ export function chartShape(data: number[]): ChartShape | null {
     cx: last[0],
     cy: last[1],
   };
+}
+
+// Colours for one trend: the change text ("delta") follows the tone (green good,
+// red bad, gray neutral); the chart line is green or red only when the change
+// is judged, otherwise the brand accent. Direction is still in the glyph + word.
+export function trendColors(p: Palette, seriesId: string, direction: 'up' | 'down' | 'flat' | null): { delta: string; line: string } {
+  const delta = changeToneColor(p, seriesId, direction);
+  return { delta, line: delta === p.good || delta === p.bad ? delta : p.accent };
 }
 
 // Next / previous slide, wrapping around; safe for an empty list.
