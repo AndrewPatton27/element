@@ -72,9 +72,10 @@ export function CategoryChips({ categories, selected, onSelect, wide, onEdit }: 
 
 const styles = StyleSheet.create({
   scroller: { flexGrow: 0, flexShrink: 0 },
-  row: { gap: 8, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
+  // Mobile-Final: 44 px pills (full touch target), 16 px page padding.
+  row: { gap: 8, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { height: 36, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1, justifyContent: 'center' },
+  chip: { height: 44, paddingHorizontal: 16, borderRadius: 22, borderWidth: 1, justifyContent: 'center' },
   text: { fontSize: 14 },
 });
 

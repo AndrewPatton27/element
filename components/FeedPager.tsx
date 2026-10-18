@@ -144,16 +144,15 @@ export function FeedPager({
               onNext={last ? undefined : next}
               wide={wide}
               compact={compact}
+              peek={!last}
               reaction={reactions?.[item.id]}
               onReact={onReact}
             />
           </CardErrorBoundary>
-          {/* the edge of the next card peeking out below, as in the design (phone layout only) */}
-          {wide ? null : <View style={[styles.stack, { backgroundColor: p.surface, borderColor: p.border, opacity: last ? 0 : 1 }]} />}
         </View>
       );
     },
-    [height, config, categories, onShowSources, onOpenDetail, onMore, next, wide, compact, items.length, done, p, reactions, onReact],
+    [height, config, categories, onShowSources, onOpenDetail, onMore, next, wide, compact, items.length, done, reactions, onReact],
   );
 
   return (
@@ -199,7 +198,7 @@ const styles = StyleSheet.create({
   end: { height: 120, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   endText: { fontFamily: fonts.sansMedium, fontSize: 14, textAlign: 'center' },
   fill: { flex: 1 },
-  page: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
+  // Phones: the card, the next card's edge and the disclaimer line all sit inside the page.
+  page: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
   pageWide: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 12 },
-  stack: { height: 10, marginHorizontal: 28, borderWidth: 1, borderTopWidth: 0, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
 });

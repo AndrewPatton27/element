@@ -35,7 +35,7 @@ export function DataFacts({ card, config, compact }: { card: BlurbCard; config: 
           >
             <Text style={[styles.label, { color: p.dataInk }]}>{f.label}</Text>
             <View style={[styles.valueRow, multi && styles.valueCol]}>
-              <Text style={[styles.value, { color: p.ink, fontSize: valueSize, lineHeight: valueSize * 1.05 }]}>{f.value}</Text>
+              <Text style={[styles.value, { color: p.ink, fontSize: valueSize, lineHeight: Math.round(valueSize * 1.05), letterSpacing: -valueSize * 0.02 }]}>{f.value}</Text>
               {changeText(f) ? <Text style={[styles.change, { color: changeColor(p, f.direction) }]}>{changeText(f)}</Text> : null}
             </View>
             <Text style={[styles.cite, multi && styles.citeMulti, { color: p.inkSoft }]}>
@@ -60,16 +60,17 @@ export function DataFacts({ card, config, compact }: { card: BlurbCard; config: 
 
 const styles = StyleSheet.create({
   wrap: { gap: 8 },
-  panel: { borderRadius: 18, paddingVertical: 16, paddingHorizontal: 20, gap: 10 },
-  panelMulti: { flexDirection: 'row', gap: 14, paddingHorizontal: 16 },
-  fact: { gap: 4 },
+  // Feed-Data draft: cream panel, 18/20 padding, uppercase label, 64 px serif number.
+  panel: { borderRadius: 18, paddingVertical: 18, paddingHorizontal: 20, gap: 10 },
+  panelMulti: { flexDirection: 'row', gap: 14, paddingHorizontal: 16, paddingVertical: 16 },
+  fact: { gap: 6 },
   factMulti: { flex: 1, minWidth: 0 },
   valueCol: { flexDirection: 'column', alignItems: 'flex-start' },
   citeMulti: { fontSize: 13 },
   label: { fontFamily: fonts.sansSemi, fontSize: 13, letterSpacing: 0.26, textTransform: 'uppercase' },
   valueRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 12 },
-  value: { fontFamily: fonts.serif, letterSpacing: -1 },
+  value: { fontFamily: fonts.serif },
   change: { fontFamily: fonts.sansSemi, fontSize: 15 },
-  cite: { fontFamily: fonts.sans, fontSize: 14 },
+  cite: { fontFamily: fonts.sans, fontSize: 15 },
   notice: { fontFamily: fonts.sans, fontSize: 12, lineHeight: 16, fontStyle: 'italic' },
 });

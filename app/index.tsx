@@ -19,10 +19,11 @@ import { categoryName } from '../lib/format';
 import { defaultStore } from '../lib/storage';
 import { useFeed } from '../lib/useFeed';
 import { usePalette, useWide } from '../lib/useTheme';
-import { fonts } from '../lib/theme';
+import { MOBILE_HEADER_HEIGHT, fonts } from '../lib/theme';
 import { CategoryChips, CategoryList } from '../components/CategoryChips';
 import { FeedPager } from '../components/FeedPager';
 import { CloseIcon } from '../components/Icons';
+import { NumbersTicker } from '../components/NumbersTicker';
 import { Shell, Wordmark } from '../components/Shell';
 import { WideAside, useAsideData } from '../components/WideAside';
 import { SortToggle } from '../components/SortToggle';
@@ -308,11 +309,17 @@ export default function FeedScreen() {
     >
       {wide ? null : (
         <>
-          <View style={styles.brand}>
-            <Wordmark />
+          {/* Mobile-Final: 56 px white header (wordmark + feed tabs), then the Numbers ticker. */}
+          <View style={[styles.header, { backgroundColor: p.surface, borderBottomColor: p.border }]}>
+            <View style={styles.brand}>
+              <Wordmark size={22} />
+            </View>
+            <View style={styles.tabs}>
+              <SortToggle mode={mode} onChange={setMode} forYou={signedIn} />
+            </View>
           </View>
-          <View style={styles.tabs}>
-            <SortToggle mode={mode} onChange={setMode} forYou={signedIn} />
+          <View style={[styles.ticker, { borderBottomColor: p.border }]}>
+            <NumbersTicker api={api} config={config} />
           </View>
           {chips}
           {prompt}
@@ -336,12 +343,14 @@ export default function FeedScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  brand: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4, minHeight: 44, justifyContent: 'center' },
-  tabs: { paddingHorizontal: 20 },
+  header: { flexDirection: 'row', alignItems: 'flex-end', height: MOBILE_HEADER_HEIGHT, paddingLeft: 16, paddingRight: 12, borderBottomWidth: 1 },
+  brand: { height: MOBILE_HEADER_HEIGHT - 1, justifyContent: 'center', marginRight: 6 },
+  tabs: { flexShrink: 1, marginBottom: -1 }, // the active underline sits on the header's bottom rule
+  ticker: { height: 44, borderBottomWidth: 1, justifyContent: 'center', overflow: 'hidden' },
   inlineError: { alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, marginTop: 6 },
   prompt: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingLeft: 14, paddingRight: 8, minHeight: 40 },
   promptWide: { marginTop: 16, paddingLeft: 12, minHeight: 0 },
-  promptNarrow: { marginHorizontal: 20, marginTop: 8 },
+  promptNarrow: { marginHorizontal: 16, marginTop: 8 },
   promptMain: { flex: 1, paddingVertical: 8 },
   promptText: { fontFamily: fonts.sansSemi, fontSize: 14 },
   promptClose: { padding: 6 },

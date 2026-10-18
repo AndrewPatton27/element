@@ -36,3 +36,4 @@ Output goes to `dist/` as a single-page app (`web.output: "single"` in `app.json
 - The same `visible` filter (hidden topics and sources) drives the list on screen and `useFeed` paging, so "load more" and "all caught up" follow what the reader can see.
 - On `pagehide` (web) the last card's time is sent with a `keepalive` fetch (`trackDwellOnExit`), keeping the auth header.
 - Screens show short friendly error text (`lib/errors.ts` `userMessage`), never raw server messages.
+- Phones (design `docs/design/mobile/Mobile-Final.dc.html`): a 56 px white header with the wordmark and the feed tabs, the "Numbers to know" ticker (`NumbersTicker`) under it, then 44 px category chips and the pager. The disclaimer line sits under each card, above the bottom nav.
