@@ -1,6 +1,8 @@
 // Pure mock implementations for search, related cards, following and briefs.
 // Kept separate from fixture-loading code so these rules can run under node:test.
 import type { BlurbCard, Brief, FeedPage, MacroFact, NumberTrend } from '../contract/types.ts';
+import { mockRankScore } from './feedLogic.ts';
+import { rankSearch } from './searchLogic.ts';
 
 export function createMockFeatureApi(cards: BlurbCard[], numbers: MacroFact[], trends: NumberTrend[]) {
   const page = (items: BlurbCard[], cursor?: string | null, limit = 20): FeedPage => {
@@ -29,11 +31,8 @@ export function createMockFeatureApi(cards: BlurbCard[], numbers: MacroFact[], t
   };
   return {
     search(q: string, cursor?: string | null, limit = 20) {
-      const needle = q.trim().toLocaleLowerCase();
-      if (needle.length < 2) return { items: [], next_cursor: null } as FeedPage;
-      const found = cards.filter((c) => [c.headline, c.body, c.detail?.paragraphs.join(' '), c.detail?.key_points.join(' '), c.category, ...c.tickers.map((t) => `${t.symbol} ${t.name}`), ...c.sources.map((s) => s.name)].filter(Boolean).join(' ').toLocaleLowerCase().includes(needle))
-        .sort((a, b) => (b.importance ?? 1) * Math.pow(0.5, Math.max(0, Date.now() - Date.parse(b.sort_at)) / 259_200_000) - (a.importance ?? 1) * Math.pow(0.5, Math.max(0, Date.now() - Date.parse(a.sort_at)) / 259_200_000));
-      return page(found, cursor, limit);
+      // Same rules as api.search v2: any word, similar words, typos, tickers; Trending order.
+      return page(rankSearch(cards, q, mockRankScore), cursor, limit);
     },
     relatedCards(cardId: string, limit = 5) {
       const source = cards.find((c) => c.id === cardId);

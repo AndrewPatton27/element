@@ -5,7 +5,7 @@
 // searches on this device, and when the box is empty offers topics and companies
 // to try.
 
-import type { Category } from '../contract/types.ts';
+import type { BlurbCard, Category } from '../contract/types.ts';
 
 export const SEARCH_DEBOUNCE_MS = 300;
 export const SEARCH_MIN_CHARS = 2;
@@ -81,6 +81,128 @@ export function parseRecents(raw: string | null): string[] {
 
 export function serializeRecents(list: string[]): string {
   return JSON.stringify(list.slice(0, RECENT_MAX));
+}
+
+// ---- Matching and ranking (mock mode; mirrors api.search v2, 20261018020000_search_v2.sql) ----
+//
+// A card matches when ANY query word matches (stem/prefix, curated synonym, typo, exact ticker or
+// series id). Results are ordered by the Trending score; each extra matched word adds a x1.3 bonus.
+
+export const SEARCH_MAX_TERMS = 6; // settings.md: search_max_terms
+export const SEARCH_TERM_BONUS = 1.3; // settings.md: search_term_bonus
+export const SEARCH_TYPO_MIN_LEN = 5; // settings.md: search_typo_min_len
+export const SEARCH_PREFIX_MIN_LEN = 3; // settings.md: search_prefix_min_len
+const TRENDING_HALF_LIFE_HOURS = 8; // rank_params.half_life_hours
+
+const STOPWORDS = new Set(
+  'the a an and or of to in on for at by with is are was were be it its as from that this what how why who about into'.split(' '),
+);
+
+// Same groups as core.search_synonyms.
+export const SYNONYM_GROUPS: readonly (readonly string[])[] = [
+  ['fed', 'federal reserve', 'fomc'],
+  ['rate', 'rates', 'interest'],
+  ['inflation', 'cpi', 'prices'],
+  ['jobs', 'employment', 'unemployment', 'payrolls'],
+  ['oil', 'crude', 'wti', 'energy'],
+  ['stocks', 'equities', 'markets'],
+  ['quake', 'earthquake', 'tremor'],
+  ['recall', 'recalls', 'safety'],
+  ['gdp', 'growth', 'economy'],
+  ['deal', 'merger', 'acquisition'],
+];
+
+// Lowercase, punctuation to spaces, cap 80, words of 2+ letters, no stopwords, no repeats, at most 6.
+export function searchTerms(raw: string): string[] {
+  const norm = raw.slice(0, SEARCH_MAX_CHARS).toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  if (norm.length < SEARCH_MIN_CHARS) return [];
+  const out: string[] = [];
+  for (const w of norm.split(' ')) {
+    if (w.length >= 2 && !STOPWORDS.has(w) && !out.includes(w)) out.push(w);
+    if (out.length === SEARCH_MAX_TERMS) break;
+  }
+  return out;
+}
+
+// A rough English stem (the database uses Postgres's english stemmer).
+export function stem(word: string): string {
+  for (const suf of ['ing', 'ed', 'es', 's']) {
+    if (word.endsWith(suf) && word.length - suf.length >= 3) return word.slice(0, -suf.length);
+  }
+  return word;
+}
+
+export function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur.push(Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+// Typo: same first letter, length within 2, edit distance <= 1 (<= 2 from 8 letters).
+export function isTypo(term: string, word: string): boolean {
+  if (term.length < SEARCH_TYPO_MIN_LEN || word === term || word[0] !== term[0]) return false;
+  if (Math.abs(word.length - term.length) > 2) return false;
+  return editDistance(term, word) <= (term.length >= 8 ? 2 : 1);
+}
+
+function alternatives(term: string): string[] {
+  const group = SYNONYM_GROUPS.find((g) => g.some((w) => w === term || w === `${term}s` || `${w}s` === term));
+  return group ? [term, ...group.filter((w) => w !== term)] : [term];
+}
+
+function wordMatches(alt: string, words: string[], allowPrefix: boolean): boolean {
+  const s = stem(alt);
+  return words.some((w) => w === alt || stem(w) === s || (allowPrefix && alt.length >= SEARCH_PREFIX_MIN_LEN && stem(w).startsWith(s)));
+}
+
+function termMatches(term: string, words: string[], text: string, card: BlurbCard): boolean {
+  const upper = term.toLocaleUpperCase();
+  if (card.tickers.some((t) => t.symbol === upper) || card.macro.some((m) => m.series_id === upper)) return true;
+  for (const alt of alternatives(term)) {
+    if (alt.includes(' ') ? ` ${text} `.includes(` ${alt}`) : wordMatches(alt, words, true)) return true;
+  }
+  return words.some((w) => isTypo(term, w));
+}
+
+// Everything a search looks at, lowercased with punctuation removed.
+export function searchText(card: BlurbCard): string {
+  return [
+    card.headline, card.body, card.detail?.paragraphs.join(' '), card.detail?.key_points.join(' '),
+    card.category, card.event_type?.replace(/_/g, ' '),
+    ...card.tickers.map((t) => `${t.symbol} ${t.name}`), ...card.sources.map((s) => s.name),
+    ...card.macro.map((m) => `${m.series_id} ${m.label}`),
+  ].filter(Boolean).join(' ').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+// How many query words the card matches (0 = not a result).
+export function matchedTermCount(card: BlurbCard, terms: string[]): number {
+  const text = searchText(card);
+  const words = text.split(' ');
+  return terms.filter((t) => termMatches(t, words, text, card)).length;
+}
+
+// Trending score in hours (+8 h = twice as important), plus log2(1.3) half-lives per extra matched word.
+export function searchScore(trendingHours: number, matched: number): number {
+  return trendingHours + TRENDING_HALF_LIFE_HOURS * Math.log2(SEARCH_TERM_BONUS) * Math.max(0, matched - 1);
+}
+
+// Matching cards in Trending order; ties: importance, newest, id desc.
+export function rankSearch(cards: BlurbCard[], raw: string, trendingHours: (c: BlurbCard) => number): BlurbCard[] {
+  const terms = searchTerms(raw);
+  if (terms.length === 0) return [];
+  return cards
+    .map((c) => ({ c, n: matchedTermCount(c, terms) }))
+    .filter((x) => x.n > 0)
+    .map((x) => ({ c: x.c, k: searchScore(trendingHours(x.c), x.n) }))
+    .sort((a, b) => b.k - a.k || (b.c.importance ?? 1) - (a.c.importance ?? 1)
+      || Date.parse(b.c.sort_at) - Date.parse(a.c.sort_at) || (a.c.id < b.c.id ? 1 : a.c.id > b.c.id ? -1 : 0))
+    .map((x) => x.c);
 }
 
 // ---- Suggestions and wording ----
