@@ -30,7 +30,7 @@ export function mainTabs(signedIn: boolean): MainItem[] {
     { key: 'brief', label: 'Brief', href: '/brief', Icon: BriefIcon },
     { key: 'search', label: 'Search', href: '/search', Icon: SearchIcon },
     { key: 'following', label: 'Following', href: '/following', Icon: PulseIcon },
-    { key: 'me', label: 'Me', href: signedIn ? '/account' : '/signin', Icon: PersonIcon },
+    { key: 'me', label: 'Me', href: '/account', Icon: PersonIcon },
   ];
 }
 
