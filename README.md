@@ -179,3 +179,9 @@ npx tsc --noEmit
 ├── supabase/     # PostgreSQL migrations (schemas, RLS, functions, and ranking)
 └── assets/       # Icons and application graphics
 ```
+
+---
+
+## License
+
+The code is released under the [MIT License](LICENSE). News content keeps its own terms: see the data sources and credits above.
