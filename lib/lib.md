@@ -69,6 +69,8 @@ Files in `lib/__tests__/`: `account`, `api`, `detail`, `dwell`, `feedLogic`, `fi
 
 ## Signed-out readers (`localPrefs.ts`, `localRank.ts`)
 
+- `queueLogic.ts`: pure queue helpers derive a 3–7 card ahead target from preference signal count and variety, use five-card reveal sizing, and rerank only the unseen tail with `rankLocal` for device readers. Signed-in ordering preserves the server-personalized base. Tests: `__tests__/queueLogic.test.ts`.
+
 - `localPrefs.ts`: what a signed-out reader chose, on this device only (`element.local-prefs` plus the shared `element.follows`): like/dislike per card id (with topic and source, newest 200 kept), hidden topics, hidden sources, favorite (= followed) topics. `asUserPrefs` gives it the account's shape; `favoritesFirst` orders chips; `mergeIntoAccount` is the one-time, idempotent union merged into the account on sign-in (account wins conflicts; flag `element.local-migrated.<uid>`). Tests: `__tests__/localPrefs.test.ts`.
 - `localRank.ts`: signed-out For you. `rankLocal` re-orders one page of the public Trending feed: recency + importance, +24 h favorite topic, +8 h per like in the topic and +4 h per like from the source (max 3 each), the same minus for dislikes, disliked cards and hidden topics/sources dropped, then a diversity pass (6 h per same-topic card among the last 3 picked). Tests: `__tests__/localRank.test.ts`.
 - `accountContext.tsx` exposes `viewPrefs` (account prefs when signed in, device prefs when signed out) and `localPrefs`; `react`, `savePrefs`, `hideTopic`, `restoreTopics`, `hideSource`, `saveSources` write to the device when signed out and send nothing.
