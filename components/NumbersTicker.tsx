@@ -9,6 +9,7 @@
 // strip scrolls sideways by hand instead).
 
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { useRouter } from 'expo-router';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig } from '../contract/types.ts';
 import type { Api } from '../lib/api.ts';
@@ -17,7 +18,6 @@ import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
 import { changeColor } from './DataCard';
 import { useNumbers } from './NumbersPanel';
-import { openUrl } from './SourceChip';
 
 // Pixels travelled per second. Lower is calmer.
 const SPEED = 48;
@@ -25,6 +25,8 @@ const SPEED = 48;
 export function NumbersTicker({ api, config }: { api: Api; config: AppConfig | null }) {
   const p = usePalette();
   const { facts } = useNumbers(api);
+  const router = useRouter();
+  const openNumbers = () => router.push('/numbers');
   const [setWidth, setSetWidth] = useState(0);
   const [offset, setOffset] = useState(0);
 
@@ -96,9 +98,9 @@ export function NumbersTicker({ api, config }: { api: Api; config: AppConfig | n
       {facts.map((f) => (
         <Pressable
           key={`${keyPrefix}-${f.series_id}`}
-          onPress={() => openUrl(f.source_url)}
+          onPress={openNumbers}
           accessibilityRole="link"
-          accessibilityLabel={factA11yLabel(f)}
+          accessibilityLabel={`${factA11yLabel(f)}. Opens Numbers to know.`}
           style={({ pressed }) => [styles.item, { opacity: pressed ? 0.75 : 1 }]}
         >
           <Text style={[styles.label, { color: p.inkSoft }]} numberOfLines={1}>
