@@ -176,15 +176,18 @@ begin
   -- guest order:  DIS 3.5, MKT 1, ECO 0.5, TECH 0, D2 -0.5, ENE -1, LIKED -10
   -- A: follow tech (+2), hide economy, dislike DIS (markets -1 h, DIS gone),
   --    like a deals card (deals +1 h)
-  -- expected:     TECH 2, D2 0.5, MKT 0, ENE -1, LIKED -9
+  -- For you v2 (trending_foryou migration): personal terms x3, a card already shown -24 h,
+  -- the 2nd card of a topic -0.5 h. A also opened a source on X1 (energy +0.5 learned).
+  -- expected:     D2 -0.5+3 = 2.5, ENE -1+1.5 = 0.5, MKT 1-3 = -2, LIKED -10+3-0.5 = -7.5,
+  --               TECH 0+6-24 = -18 (shown once already: viewed above)
   page := api.feed_for_you(null, 10);
   select string_agg(replace(x->>'headline', 'ACCT ', ''), ',' order by o) into got
     from jsonb_array_elements(page -> 'items') with ordinality as t(x, o) where o <= 5;
-  if got is distinct from 'TECH,D2,MKT,ENE,LIKED' then
-    raise exception 'FAIL: for-you order for A is %, expected TECH,D2,MKT,ENE,LIKED', got;
+  if got is distinct from 'D2,ENE,MKT,LIKED,TECH' then
+    raise exception 'FAIL: for-you order for A is %, expected D2,ENE,MKT,LIKED,TECH', got;
   end if;
-  if (page->'items'->4->>'my_reaction') is distinct from 'like' or (page->'items'->0->>'my_reaction') is not null then
-    raise exception 'FAIL: my_reaction wrong: % / %', page->'items'->4->'my_reaction', page->'items'->0->'my_reaction';
+  if (page->'items'->3->>'my_reaction') is distinct from 'like' or (page->'items'->0->>'my_reaction') is not null then
+    raise exception 'FAIL: my_reaction wrong: % / %', page->'items'->3->'my_reaction', page->'items'->0->'my_reaction';
   end if;
 
   -- same card shape as api.feed (plus my_reaction)
@@ -228,8 +231,10 @@ begin
   -- B's feed: DIS 3.5 (not disliked by B), ENE -1+4 = 3, MKT 1, ECO 0.5 (not hidden for B)
   select string_agg(replace(x->>'headline', 'ACCT ', ''), ',' order by o) into got
     from jsonb_array_elements(api.feed_for_you(null, 10) -> 'items') with ordinality as t(x, o) where o <= 4;
-  if got is distinct from 'DIS,ENE,MKT,ECO' then
-    raise exception 'FAIL: for-you order for B is %, expected DIS,ENE,MKT,ECO', got;
+  -- For you v2: ENE -1+12 = 11, DIS 3.5+3 (exploration: B has no markets signals) = 6.5,
+  -- then ECO 0.5+3 and MKT 1+3-0.5 tie at 3.5 (order between them decided by id)
+  if got not in ('ENE,DIS,ECO,MKT', 'ENE,DIS,MKT,ECO') then
+    raise exception 'FAIL: for-you order for B is %, expected ENE,DIS then ECO/MKT', got;
   end if;
   -- B deletes B's data: A's rows survive
   r := api.delete_my_data();

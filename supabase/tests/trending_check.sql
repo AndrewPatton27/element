@@ -254,20 +254,16 @@ begin
   exception when others then ok := sqlerrm = 'invalid_cursor'; end;
   if not ok then raise exception 'FAIL: bad for-you cursor accepted'; end if;
 
-  -- ---- 9. no more than 2 in a row from one topic (when another topic is available) ------
-  -- (13 of A's 16 cards are markets, so only the first 12 can be fully mixed)
-  select max(run) into n from (
-    select count(*) as run from (
-      select o, cat, o - row_number() over (partition by cat order by o) as grp
-        from (select o, x->>'category' as cat
-                from jsonb_array_elements(api.feed_for_you(null, 30)->'items') with ordinality as t(x, o)
-               where o <= 12) q) q2
-     group by cat, grp) q3;
-  if n > 2 then
-    select string_agg(x->>'category', ',' order by o) into got
-      from jsonb_array_elements(api.feed_for_you(null, 30)->'items') with ordinality as t(x, o);
-    raise exception 'FAIL: % cards in a row from one topic: %', n, got;
-  end if;
+  -- ---- 9. no more than 2 in a row from one topic while another topic is still available ---
+  -- (13 of A's 16 cards are markets, so the tail is allowed to be markets only)
+  select array_agg(x->>'category' order by o) into seen
+    from jsonb_array_elements(api.feed_for_you(null, 30)->'items') with ordinality as t(x, o);
+  for i in 3 .. coalesce(cardinality(seen), 0) loop
+    if seen[i] = seen[i-1] and seen[i] = seen[i-2]
+       and exists (select 1 from unnest(seen[i:]) c where c <> seen[i]) then
+      raise exception 'FAIL: 3 in a row from % while other topics remain: %', seen[i], array_to_string(seen, ',');
+    end if;
+  end loop;
 
   -- ---- 10. cold start = Trending order, followed topic boosted --------------------------
   perform set_config('request.jwt.claims', json_build_object('sub', ub, 'role', 'authenticated')::text, true);
@@ -287,6 +283,123 @@ begin
   if (api.get_prefs()->'hidden_categories') <> '[]'::jsonb then raise exception 'FAIL: B sees A''s hidden topics'; end if;
   if exists (select 1 from jsonb_array_elements(api.feed('latest', null, 30)->'items') x where x->>'category' = 'energy') is not true then
     raise exception 'FAIL: A''s hidden topic was applied to B';
+  end if;
+
+  -- ---- 12. breadth: 5 bank earnings + 5 earthquakes + others (Trending and For you) ------
+  perform set_config('role', 'none', true);
+  update core.blurbs set status = 'hidden' where dedupe_key like 'tr-%';
+  delete from core.trend_generations;                                   -- no boosts for this part
+  for i in 1 .. 5 loop
+    insert into core.blurbs (dedupe_key, kind, headline, category, event_type, tickers, as_of, sort_at, rank_score)
+    values ('br-E' || i, 'summary', 'BR E' || i, 'earnings', 'earnings',
+            jsonb_build_array(jsonb_build_object('symbol', (array['JPM','BAC','WFC','C','GS'])[i], 'name', 'Bank ' || i)),
+            now(), now(), base + 10 - 0.1 * i);
+  end loop;
+  insert into core.blurbs (dedupe_key, kind, headline, category, event_type, tickers, as_of, sort_at, rank_score)
+  values ('br-DJ', 'summary', 'BR DJ', 'deals', 'deal', '[{"symbol":"JPM","name":"JPMorgan"}]', now(), now(), base + 9.95);
+  for i in 1 .. 10 loop
+    insert into core.blurbs (dedupe_key, kind, headline, category, as_of, sort_at, rank_score)
+    values ('br-X' || i, 'summary', 'BR X' || i, (array['markets','policy','world'])[1 + i % 3], now(), now(), base + 9.5 - 0.5 * i);
+  end loop;
+  for i in 1 .. 5 loop
+    insert into core.blurbs (dedupe_key, kind, headline, category, event_type, as_of, sort_at, rank_score)
+    values ('br-Q' || i, 'summary', 'BR Q' || i, 'science', 'earthquake', now(), now(), base + 4.9 - 0.1 * i);
+  end loop;
+  insert into core.blurb_sources (blurb_id, name, kind, url, license_class, is_primary)
+  select x.id, case when x.dedupe_key like 'br-Q%' then 'U.S. Geological Survey' else 'SEC' end,
+         case when x.dedupe_key like 'br-Q%' then 'government' else 'filing' end,
+         'https://www.sec.gov/br/' || x.id, case when x.dedupe_key like 'br-Q%' then 'public_domain' else 'company_filing' end, true
+    from core.blurbs x where x.dedupe_key like 'br-%';
+
+  foreach mode in array array['anon-top', 'b-foryou'] loop
+    if mode = 'anon-top' then
+      perform set_config('role', 'anon', true);
+      perform set_config('request.jwt.claims', '{"role":"anon"}', true);
+    else
+      perform set_config('role', 'authenticated', true);
+      perform set_config('request.jwt.claims', json_build_object('sub', ub, 'role', 'authenticated')::text, true);
+      perform api.set_prefs('{}', null);                             -- B follows nothing here
+    end if;
+    page := '[]'::jsonb; cur := null; n := 0;
+    loop
+      if mode = 'anon-top' then r := api.feed('top', cur, 10); else r := api.feed_for_you(cur, 10); end if;
+      page := page || (r->'items');
+      cur := r->>'next_cursor'; n := n + 1;
+      exit when cur is null or n > 10;
+    end loop;
+    if jsonb_array_length(page) <> 21
+       or (select count(distinct x->>'id') from jsonb_array_elements(page) x) <> 21 then
+      raise exception 'FAIL: % breadth paging returned % cards (expected 21, no repeats)', mode, jsonb_array_length(page);
+    end if;
+    select string_agg(replace(x->>'headline', 'BR ', ''), ',' order by o) into got
+      from jsonb_array_elements(page) with ordinality as t(x, o);
+    -- back-to-back rule on one 30-card page (across a page boundary it holds only when the
+    -- next page still has another kind of card; here the last page would be a lone quake)
+    if mode = 'anon-top' then r := api.feed('top', null, 30); else r := api.feed_for_you(null, 30); end if;
+    select string_agg(replace(x->>'headline', 'BR ', ''), ',' order by o) into k1
+      from jsonb_array_elements(r->'items') with ordinality as t(x, o);
+    if exists (
+      select 1 from jsonb_array_elements(r->'items') with ordinality as a(x, o)
+        join jsonb_array_elements(r->'items') with ordinality as b2(y, p) on p = o + 1
+       where (x->>'event_type' is not null and x->>'event_type' = y->>'event_type' and x->>'category' = y->>'category')
+          or exists (select 1 from jsonb_array_elements(x->'tickers') t1, jsonb_array_elements(y->'tickers') t2
+                      where t1->>'symbol' = t2->>'symbol')) then
+      raise exception 'FAIL: % has two similar cards back to back: %', mode, k1;
+    end if;
+    if exists (
+      select 1 from jsonb_array_elements(page) with ordinality as a(x, o)
+        join jsonb_array_elements(page) with ordinality as b2(y, p) on p = o + 1
+        join jsonb_array_elements(page) with ordinality as c3(z, q) on q = o + 2
+       where x->>'category' = y->>'category' and y->>'category' = z->>'category') then
+      raise exception 'FAIL: % has 3 of one category in a row: %', mode, got;
+    end if;
+    -- the two most important cards (DJ, E1) stay in the first 4 places
+    if array_position(string_to_array(got, ','), 'DJ') > 4 or array_position(string_to_array(got, ','), 'E1') > 4 then
+      raise exception 'FAIL: % pushed the most important card down: %', mode, got;
+    end if;
+  end loop;
+
+  -- ---- 13. hide a source (signed in): A hides USGS ---------------------------------------
+  perform set_config('role', 'authenticated', true);
+  perform set_config('request.jwt.claims', json_build_object('sub', ua, 'role', 'authenticated')::text, true);
+  r := api.set_prefs(p_hidden_sources => array['usgs']);
+  if r->'hidden_sources' <> '["usgs"]'::jsonb or r->'hidden_categories' <> '["energy"]'::jsonb then
+    raise exception 'FAIL: set_prefs with hidden sources returned %', r;
+  end if;
+  r := api.set_prefs(p_followed => array['tech'], p_hidden => array['energy']);   -- old 2-argument call
+  if r->'hidden_sources' <> '["usgs"]'::jsonb then raise exception 'FAIL: old set_prefs call dropped hidden_sources'; end if;
+  r := api.set_prefs(array['tech'], array['energy']);                             -- positional
+  ok := false;
+  begin perform api.set_prefs(null, null, array['not-a-source']);
+  exception when others then ok := sqlerrm like 'unknown_source%'; end;
+  if not ok then raise exception 'FAIL: unknown source key accepted'; end if;
+  foreach mode in array array['top', 'latest', 'foryou'] loop
+    page := '[]'::jsonb; cur := null; n := 0;
+    loop
+      if mode = 'foryou' then r := api.feed_for_you(cur, 10); else r := api.feed(mode, cur, 10); end if;
+      page := page || (r->'items');
+      cur := r->>'next_cursor'; n := n + 1;
+      exit when cur is null or n > 10;
+    end loop;
+    if exists (select 1 from jsonb_array_elements(page) x where x->>'headline' like 'BR Q%') then
+      raise exception 'FAIL: hidden source USGS shown to A in %', mode;
+    end if;
+    if jsonb_array_length(page) <> 16 then raise exception 'FAIL: A got % cards in % with USGS hidden, expected 16', jsonb_array_length(page), mode; end if;
+  end loop;
+  if jsonb_array_length(api.feed('top', null, 10, 'science')->'items') <> 0 then
+    raise exception 'FAIL: hidden source returned through p_category';
+  end if;
+  perform set_config('role', 'anon', true);
+  perform set_config('request.jwt.claims', '{"role":"anon"}', true);
+  if (select count(*) from jsonb_array_elements(api.feed('latest', null, 30)->'items') x where x->>'headline' like 'BR Q%') <> 5 then
+    raise exception 'FAIL: anon lost the USGS cards';
+  end if;
+  r := api.sources();
+  if jsonb_array_length(r) <> 9 or not (r @> '[{"key":"usgs"}]'::jsonb) then raise exception 'FAIL: api.sources() returned %', r; end if;
+  perform set_config('role', 'none', true);
+  if core.source_key_of('data', gen_random_uuid()) <> 'fred' then raise exception 'FAIL: data cards are not mapped to fred'; end if;
+  if core.source_key_of('summary', (select id from core.blurbs where dedupe_key = 'br-Q1')) <> 'usgs' then
+    raise exception 'FAIL: USGS card not mapped to usgs';
   end if;
 
   raise exception 'ALL TRENDING CHECKS PASSED (test data rolled back on purpose)';

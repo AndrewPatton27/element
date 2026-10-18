@@ -109,10 +109,11 @@ begin
   if not ok then raise exception 'FAIL: dwell_ms accepted on a view row'; end if;
   perform set_config('role', 'authenticated', true);
 
-  -- affinity readout: tech T1 -0.15 + L1 +0.25 = 0.1; markets 1; energy 0.5; deals 1.5;
+  -- affinity readout: tech T1 -0.15 (L1's 10-minute look counts as "walked away" = neutral
+  -- since the trending_foryou migration); markets 1; energy 0.5; deals 1.5;
   -- policy -1; economy 0 (5 s look = neutral) and insider 0 (view only) are absent
   aff := api.get_prefs() -> 'affinity';
-  if aff is distinct from '{"tech":0.10,"markets":1.00,"energy":0.50,"deals":1.50,"policy":-1.00}'::jsonb then
+  if aff is distinct from '{"tech":-0.15,"markets":1.00,"energy":0.50,"deals":1.50,"policy":-1.00}'::jsonb then
     raise exception 'FAIL: affinity for A is %', aff;
   end if;
 
@@ -121,10 +122,15 @@ begin
   -- guest order would be X (+2), Z (+1), Y (0)
   perform api.track((ids->>'X')::uuid, 'dwell', 9000);     -- read X: tech +0.25, X -3
   perform api.track((ids->>'Z')::uuid, 'open_detail');     -- read Z: energy +0.5, Z -3
-  -- expected: Y 0.25, X 2+0.25-3 = -0.75, Z 1+0.5-3 = -1.5
+  -- since the trending_foryou migration a read card is -100 h and personal terms count x3:
+  -- Y 0+0.75 first; X 2+0.75-100 = -97.25 and Z 1+1.5-100 = -97.5 go to the end
   select string_agg(replace(x->>'headline', 'SIG ', ''), ',' order by o) into got
-    from jsonb_array_elements(api.feed_for_you(null, 10) -> 'items') with ordinality as t(x, o) where o <= 3;
-  if got is distinct from 'Y,X,Z' then raise exception 'FAIL: seen penalty order for B is %, expected Y,X,Z', got; end if;
+    from jsonb_array_elements(api.feed_for_you(null, 30) -> 'items') with ordinality as t(x, o);
+  -- (the "no more than 2 in a row" rule may slot Z between the earnings cards G2 and G3)
+  if got not like 'Y,%' or got not like '%,X'
+     or 'Z' <> all ((string_to_array(got, ','))[cardinality(string_to_array(got, ',')) - 2 :]) then
+    raise exception 'FAIL: seen penalty order for B is %, expected Y first, X last, Z in the last three', got;
+  end if;
 
   -- three earnings cards at the card cap (+1.5 each = 4.5) -> category cap 4
   for i in 1 .. 3 loop
