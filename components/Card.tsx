@@ -18,11 +18,12 @@ import { usePalette } from '../lib/useTheme';
 import type { Palette } from '../lib/theme';
 import { fonts, radius } from '../lib/theme';
 import { DataFacts } from './DataCard';
-import { ExternalIcon, InfoIcon, NumbersIcon, ShareIcon, SparkleIcon, ThumbDownIcon, ThumbUpIcon } from './Icons';
+import { ExternalIcon, InfoIcon, NumbersIcon, PulseIcon, ShareIcon, SparkleIcon, ThumbDownIcon, ThumbUpIcon } from './Icons';
 import type { Feedback } from '../lib/accountLogic';
 import { Disclaimer, ShareAlikeLine } from './Labels';
 import { SourceRow } from './SourceChip';
 import { FollowPill } from './FollowPill';
+import { useFollowedStories } from '../lib/useFollowedStories';
 import { footerLabels, linkOutCredit, linkOutDelay, shareUrl } from './cardFooter';
 import { msSinceSwipeEnd, shouldOpenDetail, wasCardSwiped, type PointerPoint } from '../lib/swipeLogic';
 
@@ -177,6 +178,9 @@ export function Card(props: Props) {
     const t = setTimeout(() => setToast(null), 2500);
     return () => clearTimeout(t);
   }, [toast]);
+  const storyFollows = useFollowedStories();
+  const storyFollowed = storyFollows.isFollowed(card.id);
+  const onToggleStory = () => setToast(storyFollows.toggle(card.id, card) ? 'Following this story' : 'Stopped following this story');
   const onShare = () => {
     shareCard(card)
       .then(setToast)
@@ -222,6 +226,16 @@ export function Card(props: Props) {
               <ReactButton kind="dislike" on={reaction === 'dislike'} onPress={() => reactFn(card, 'dislike')} />
             </>
           ) : null}
+          <Pressable
+            onPress={onToggleStory}
+            accessibilityRole="button"
+            accessibilityLabel={storyFollowed ? 'Following this story, double tap to stop' : 'Follow this story'}
+            accessibilityState={{ selected: storyFollowed }}
+            aria-pressed={storyFollowed}
+            style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <PulseIcon color={storyFollowed ? p.accent : p.ink} size={22} />
+          </Pressable>
           {shareable ? (
             <Pressable
               onPress={onShare}

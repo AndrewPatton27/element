@@ -11,7 +11,7 @@ import { useAppData } from '../lib/appData';
 import { useAccount } from '../lib/accountContext';
 import { withoutHidden } from '../lib/accountLogic';
 import { withoutHiddenSources } from '../lib/sourceKeys';
-import { followCountText, followReasonText, followsKey, hasFollows } from '../lib/followingLogic';
+import { followReasonText, followsKey, hasFollows } from '../lib/followingLogic';
 import { suggestedTopics } from '../lib/searchLogic';
 import { useFollows } from '../lib/useFollows';
 import { usePagedCards } from '../lib/usePagedCards';
@@ -21,7 +21,11 @@ import { go } from '../components/TabBar';
 import { DetailSheet } from '../components/DetailSheet';
 import { FollowingManager } from '../components/FollowingManager';
 import { ScreenShell } from '../components/ScreenShell';
-import { SearchResults } from '../components/SearchResults';
+import { FollowedStories, useStoryRows } from '../components/FollowedStories';
+import { UndoToast } from '../components/UndoToast';
+import { storiesHeader } from '../lib/followedStories';
+import { useFollowedStories } from '../lib/useFollowedStories';
+import { FollowingFeed } from '../components/FollowingFeed';
 import { SourcesSheet } from '../components/SourcesSheet';
 import { aiNoticeText, disclaimerText } from '../lib/labels';
 
@@ -37,6 +41,12 @@ export default function FollowingScreen() {
   // The "add" pickers are open while nothing is followed (the prompt) and when asked for.
   const [manage, setManage] = useState(false);
   const expanded = manage || !following;
+
+  const followedStories = useFollowedStories();
+  const { rows, loading: storiesLoading } = useStoryRows(api, followedStories.stories);
+  const [undo, setUndo] = useState<BlurbCard | null>(null);
+  const hdr = storiesHeader(rows.filter((r) => r.updates.length > 0).length, rows.length);
+  const countLine = rows.length ? [hdr.left, hdr.right].filter(Boolean).join(' · ') : undefined;
 
   const [sheetCard, setSheetCard] = useState<BlurbCard | null>(null);
   const [detailCard, setDetailCard] = useState<BlurbCard | null>(null);
@@ -80,12 +90,35 @@ export default function FollowingScreen() {
   );
 
   return (
-    <ScreenShell tab="following" title="Following" meta={following ? followCountText(follows) : undefined}>
-      <Text style={[styles.intro, wide && styles.introWide, { color: p.inkSoft }]}>
-        {following
-          ? 'The newest stories about what you follow come first. Each one says why it is here.'
-          : 'Follow topics, companies or sources and their newest stories gather here.'}
+    <ScreenShell tab="following" title="Following" meta={wide ? countLine : undefined}>
+      {!wide && rows.length ? (
+        <View style={styles.countRow}>
+          <Text style={[styles.countLeft, { color: p.ink }]}>{hdr.left}</Text>
+          {hdr.right ? <Text style={[styles.countRight, { color: p.muted }]}>{hdr.right}</Text> : null}
+        </View>
+      ) : null}
+      <Text style={[styles.intro, wide && styles.introWide, { color: p.inkBody }]}>
+        Follow a story from the feed with the pulse button. When it changes{wide ? ' or develops' : ''}, the newest update moves to the top here.
       </Text>
+      {rows.length || storiesLoading && followedStories.stories.length ? (
+        <FollowedStories
+          rows={rows}
+          loading={storiesLoading}
+          categories={categories}
+          onOpen={setDetailCard}
+          onUnfollow={(c) => {
+            followedStories.toggle(c.id, c);
+            setUndo(c);
+          }}
+        />
+      ) : (
+        <View style={[styles.storyEmpty, { borderColor: p.border, backgroundColor: p.surface }]}>
+          <Text style={[styles.noneTitle, { color: p.ink }]}>No followed stories yet</Text>
+          <Text style={[styles.noneText, { color: p.muted }]}>Tap the pulse button on a card in the feed to follow that story.</Text>
+        </View>
+      )}
+
+      <Text accessibilityRole="header" style={[styles.section, { color: p.muted }]}>More stories you may like</Text>
 
       <FollowingManager
         categories={suggestedTopics(categories, hidden)}
@@ -105,26 +138,31 @@ export default function FollowingScreen() {
         </Pressable>
       ) : null}
 
-      <Text style={[styles.section, { color: p.muted }]} accessibilityRole="header">
-        {following ? 'Newest for you' : 'Top stories for now'}
-      </Text>
-
-      <SearchResults
+      <FollowingFeed
         items={items}
         state={state}
         config={config}
         categories={categories}
-        columns={wide ? 2 : 1}
-        reasonFor={following ? (c) => followReasonText(c, categories) : undefined}
+        reactions={signedIn ? acct.reactions : Object.fromEntries(Object.entries(acct.localPrefs.reactions).map(([id, r]) => [id, r.r]))}
+        reasonFor={(c) => followReasonText(c, categories)}
+        onReact={acct.react}
         onOpen={setDetailCard}
-        onShowSources={setSheetCard}
-        onLoadMore={loadMore}
+        onSources={setSheetCard}
+        onMore={loadMore}
         onRetry={retry}
         empty={empty}
       />
 
       <Text style={[styles.footer, { color: p.muted }]}>{aiNoticeText(config)} · {disclaimerText(config)}</Text>
 
+      <UndoToast
+        message={undo ? 'Stopped following this story' : null}
+        onUndo={() => {
+          if (undo) followedStories.toggle(undo.id, undo);
+          setUndo(null);
+        }}
+        onDone={() => setUndo(null)}
+      />
       <SourcesSheet card={sheetCard} config={config} onClose={() => setSheetCard(null)} />
       <DetailSheet card={detailCard} config={config} categories={categories} onClose={() => setDetailCard(null)} />
     </ScreenShell>
@@ -136,6 +174,10 @@ const styles = StyleSheet.create({
   intro: { fontFamily: fonts.sans, fontSize: font.chip, lineHeight: 20, paddingHorizontal: 4 },
   introWide: { fontSize: font.body, lineHeight: 24, maxWidth: 640, paddingHorizontal: 0 },
   section: { fontFamily: fonts.sansSemi, fontSize: 12, letterSpacing: 0.6, textTransform: 'uppercase', paddingHorizontal: 4 },
+  countRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 4 },
+  countLeft: { fontFamily: fonts.sansSemi, fontSize: 15 },
+  countRight: { fontFamily: fonts.sans, fontSize: 13 },
+  storyEmpty: { borderWidth: 1, borderRadius: 20, alignItems: 'center', gap: 8, paddingVertical: 28, paddingHorizontal: 18 },
   signIn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   signInText: { fontFamily: fonts.sansSemi, fontSize: 14, lineHeight: 19 },
   none: { alignItems: 'center', gap: 10, paddingVertical: 36, paddingHorizontal: 16 },
