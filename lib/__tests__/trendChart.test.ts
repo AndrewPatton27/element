@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chartShape, stepIndex, BASELINE } from '../../components/trendChart.ts';
+import { chartShape, stepIndex, storiesToShow, BASELINE } from '../../components/trendChart.ts';
 
 test('chartShape: the last point is at the right edge and the area closes on the baseline', () => {
   const s = chartShape([1, 2, 3, 4]);
@@ -31,4 +31,11 @@ test('stepIndex wraps both ways and tolerates an empty list', () => {
   assert.equal(stepIndex(0, -1, 4), 3);
   assert.equal(stepIndex(1, 1, 4), 2);
   assert.equal(stepIndex(0, 1, 0), 0);
+});
+
+test('storiesToShow: 3 on short laptops, 4 in between, 5 on tall windows', () => {
+  assert.equal(storiesToShow(692), 3);
+  assert.equal(storiesToShow(768), 3);
+  assert.equal(storiesToShow(800), 4);
+  assert.equal(storiesToShow(900), 5);
 });

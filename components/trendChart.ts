@@ -36,3 +36,13 @@ export function stepIndex(i: number, delta: 1 | -1, length: number): number {
   if (length <= 0) return 0;
   return (((i + delta) % length) + length) % length;
 }
+
+
+// How many Top stories sit above the trend chart. Short windows (a 1366x768 or
+// 1280x720 laptop, where the browser leaves 650-800 px) show 3 so the chart is
+// visible without scrolling the column; the design's 5 on tall windows.
+export function storiesToShow(windowHeight: number): number {
+  if (windowHeight < 800) return 3;
+  if (windowHeight < 880) return 4;
+  return 5;
+}

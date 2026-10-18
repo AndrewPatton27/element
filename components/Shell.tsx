@@ -8,7 +8,7 @@
 // DATA banner sits on top in mock mode.
 
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { APP_NAME } from '../lib/config';
@@ -39,8 +39,10 @@ export function Wordmark({ size = 24 }: { size?: number }) {
 function TopBar({ active, p, signedIn, feedTab }: { active: Tab; p: Palette; signedIn: boolean; feedTab?: ShellProps['feedTab'] }) {
   const onChange =
     feedTab?.onChange ?? ((m: FeedTab) => router.navigate({ pathname: '/', params: { tab: m, t: String(Date.now()) } } as never));
+  // Laptops (about 1280 px): tighter gaps so the bar stays on one row, also with "Account".
+  const narrow = useWindowDimensions().width < 1340;
   return (
-    <View style={[styles.topBar, { backgroundColor: p.surface, borderBottomColor: p.border }]}>
+    <View style={[styles.topBar, narrow && styles.topBarTight, { backgroundColor: p.surface, borderBottomColor: p.border }]}>
       <Pressable onPress={() => go('/')} accessibilityRole="link" accessibilityLabel={`${APP_NAME}, home`}>
         <Text style={[styles.wordmark, { color: p.accent }]}>{APP_NAME}</Text>
       </Pressable>
@@ -153,6 +155,7 @@ const styles = StyleSheet.create({
     minHeight: TOP_BAR_HEIGHT,
     borderBottomWidth: 1,
   },
+  topBarTight: { columnGap: 16, paddingHorizontal: 24 },
   wordmark: { fontFamily: fonts.serif, fontSize: 26, letterSpacing: -0.26 },
   spacer: { flex: 1 },
   textLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },

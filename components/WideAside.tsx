@@ -4,7 +4,7 @@
 // left out when its list is empty.
 
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Svg, { Circle, Line, Path, Polyline } from 'react-native-svg';
 import type { BlurbCard, Category, NumberTrend } from '../contract/types.ts';
 import type { Api } from '../lib/api.ts';
@@ -13,9 +13,10 @@ import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
 import { badgeLabel } from './Card';
 import { ChevronLeftIcon, ChevronRightIcon } from './Icons';
-import { BASELINE, CHART_H, CHART_W, chartShape, stepIndex } from './trendChart';
+import { BASELINE, CHART_H, CHART_W, chartShape, stepIndex, storiesToShow } from './trendChart';
 
 const ROTATE_MS = 7000;
+
 
 export interface AsideData {
   loading: boolean;
@@ -52,9 +53,13 @@ export function WideAside({
   categories: Category[];
   onOpenStory: (card: BlurbCard) => void;
 }) {
+  // Tight mode: on short windows (1366x768 laptops) fewer stories, so the trend chart
+  // still shows without scrolling the column.
+  const { height } = useWindowDimensions();
+  const count = storiesToShow(height);
   return (
     <View>
-      <TopStories stories={data.stories} categories={categories} onOpen={onOpenStory} />
+      <TopStories stories={data.stories.slice(0, count)} categories={categories} onOpen={onOpenStory} />
       <TrendsCard trends={data.trends} />
     </View>
   );
