@@ -1,19 +1,15 @@
-// Account → Your topics: each topic is Follow, Normal or Hide. A segmented control
-// per row; the chosen segment is filled and shows a check mark (never colour only),
-// and screen readers get radio buttons named "<Topic>: Follow" and so on.
+// Account → topics. Two groups of chips (design Mobile-Me "Categories you
+// follow"): tap a chip to make a topic a Favorite (it comes first in "For you"),
+// and, under it, tap a topic to Hide it (you won't see it at all). A topic is
+// never both: each tap goes through withTopicState, which clears the other list.
+// Chips show a check mark when on, so state is never colour-only.
 
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import type { Category } from '../contract/types.ts';
-import { topicState, withTopicState, type TopicState } from '../lib/accountLogic';
-import { usePalette } from '../lib/useTheme';
-import { fonts } from '../lib/theme';
+import { topicState, withTopicState } from '../lib/accountLogic';
+import { SectionLabel } from './FormParts';
 import { LoadingState } from './States';
-
-const STATES: { state: TopicState; label: string }[] = [
-  { state: 'follow', label: 'Favorite' }, // stored as "followed" on the server
-  { state: 'normal', label: 'Normal' },
-  { state: 'hide', label: 'Hide' },
-];
+import { TopicChip } from './TopicPicker';
 
 interface Props {
   categories: Category[];
@@ -22,54 +18,53 @@ interface Props {
 }
 
 export function TopicStatePicker({ categories, value, onChange }: Props) {
-  const p = usePalette();
   if (categories.length === 0) return <LoadingState label="Loading topics…" />;
+  const canHide = categories.filter((c) => topicState(value, c.slug) !== 'follow');
   return (
-    <View style={styles.list}>
-      {categories.map((c) => {
-        const current = topicState(value, c.slug);
-        return (
-          <View key={c.slug} style={[styles.row, { borderTopColor: p.rowDivider }]}>
-            <Text style={[styles.name, { color: current === 'hide' ? p.muted : p.ink }]} numberOfLines={2}>
-              {c.name}
-            </Text>
-            <View style={[styles.seg, { borderColor: p.borderStrong }]} accessibilityRole="radiogroup" accessibilityLabel={c.name}>
-              {STATES.map(({ state, label }) => {
-                const on = state === current;
-                return (
-                  <Pressable
-                    key={state}
-                    onPress={() => onChange(withTopicState(value, c.slug, state))}
-                    accessibilityRole="radio"
-                    aria-checked={on}
-                    accessibilityLabel={`${c.name}: ${label}`}
-                    style={[styles.option, on && { backgroundColor: state === 'hide' ? p.surfaceMuted : p.accentSoft }]}
-                  >
-                    <Text
-                      style={[
-                        styles.optionText,
-                        { color: on ? (state === 'hide' ? p.ink : p.accentInk) : p.muted, fontFamily: on ? fonts.sansSemi : fonts.sansMedium },
-                      ]}
-                    >
-                      {on ? '✓ ' : ''}
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+    <View style={styles.groups}>
+      <View style={styles.group}>
+        <SectionLabel>Categories you follow</SectionLabel>
+        <View style={styles.wrap} accessibilityRole="list">
+          {categories.map((c) => {
+            const on = topicState(value, c.slug) === 'follow';
+            return (
+              <TopicChip
+                key={c.slug}
+                label={c.name}
+                on={on}
+                accessibilityLabel={`${c.name}: favorite`}
+                onPress={() => onChange(withTopicState(value, c.slug, on ? 'normal' : 'follow'))}
+              />
+            );
+          })}
+        </View>
+      </View>
+      {canHide.length > 0 ? (
+        <View style={styles.group}>
+          <SectionLabel>Topics to hide</SectionLabel>
+          <View style={styles.wrap} accessibilityRole="list">
+            {canHide.map((c) => {
+              const on = topicState(value, c.slug) === 'hide';
+              return (
+                <TopicChip
+                  key={c.slug}
+                  label={c.name}
+                  on={on}
+                  mark="Hidden: "
+                  accessibilityLabel={`Hide ${c.name}`}
+                  onPress={() => onChange(withTopicState(value, c.slug, on ? 'normal' : 'hide'))}
+                />
+              );
+            })}
           </View>
-        );
-      })}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  list: {},
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1 },
-  name: { flex: 1, fontFamily: fonts.sansMedium, fontSize: 15 },
-  seg: { flexDirection: 'row', borderWidth: 1, borderRadius: 999, overflow: 'hidden' },
-  option: { minHeight: 36, minWidth: 64, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  optionText: { fontSize: 13 },
+  groups: { gap: 20 },
+  group: { gap: 10 },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

@@ -8,12 +8,13 @@ import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { useAccount } from '../lib/accountContext';
 import { parseRecoveryLink, validateNewPassword, type RecoveryLink } from '../lib/session';
-import { usePalette } from '../lib/useTheme';
+import { usePalette, useWide } from '../lib/useTheme';
 import { userMessage } from '../lib/errors';
-import { fonts } from '../lib/theme';
+import { fonts, font, radius } from '../lib/theme';
 import { PasswordField } from '../components/PasswordField';
-import { Shell } from '../components/Shell';
-import { Button, LoadingState } from '../components/States';
+import { PrimaryButton } from '../components/FormParts';
+import { ScreenShell } from '../components/ScreenShell';
+import { LoadingState } from '../components/States';
 
 let consumed: RecoveryLink | null = null; // the web link, read once per page load
 
@@ -33,6 +34,7 @@ function readLink(url: string | null): RecoveryLink | null {
 
 export default function ResetPasswordScreen() {
   const p = usePalette();
+  const wide = useWide();
   const acct = useAccount();
   const url = Linking.useURL();
   const [link, setLink] = useState<RecoveryLink | null>(null);
@@ -74,7 +76,7 @@ export default function ResetPasswordScreen() {
         <Text style={[styles.message, { color: p.up }]} accessibilityRole="alert">
           {link.error}
         </Text>
-        <Button label="Go to sign in" onPress={() => router.replace('/signin' as never)} />
+        <PrimaryButton label="Go to sign in" onPress={() => router.replace('/signin' as never)} />
       </View>
     );
   } else if (done) {
@@ -83,7 +85,7 @@ export default function ResetPasswordScreen() {
         <Text style={[styles.message, { color: p.accentInk }]} accessibilityLiveRegion="polite">
           {acct.user ? 'Your password was changed and you are signed in.' : 'Your password was changed. Sign in with the new password.'}
         </Text>
-        <Button label={acct.user ? 'Go to my feed' : 'Go to sign in'} onPress={() => router.replace((acct.user ? '/' : '/signin') as never)} />
+        <PrimaryButton label={acct.user ? 'Go to my feed' : 'Go to sign in'} onPress={() => router.replace((acct.user ? '/' : '/signin') as never)} />
       </View>
     );
   } else {
@@ -110,31 +112,36 @@ export default function ResetPasswordScreen() {
             {error}
           </Text>
         ) : null}
-        <Button label={busy ? 'Saving…' : 'Set new password'} onPress={submit} />
+        <PrimaryButton label={busy ? 'Saving…' : 'Set new password'} onPress={submit} />
       </View>
     );
   }
 
   return (
-    <Shell active="account" scroll>
-      <Text style={[styles.title, { color: p.ink }]} accessibilityRole="header">
-        Choose a new password
-      </Text>
-      <View style={[styles.card, { backgroundColor: p.surface, borderColor: p.border }]}>{body}</View>
-      {link && link.ok && !done ? (
-        <Pressable onPress={() => router.replace('/signin' as never)} accessibilityRole="link" style={styles.back}>
-          <Text style={[styles.backText, { color: p.accentInk }]}>Back to sign in</Text>
-        </Pressable>
-      ) : null}
-    </Shell>
+    <ScreenShell tab="me" title="New password">
+      <View style={[styles.wrap, wide && styles.wrapWide]}>
+        <Text style={[styles.title, { color: p.ink, fontSize: wide ? font.title : 28 }]} accessibilityRole="header">
+          Choose a new password
+        </Text>
+        <View style={[styles.card, wide && styles.cardWide, wide && { backgroundColor: p.surface, borderColor: p.border }]}>{body}</View>
+        {link && link.ok && !done ? (
+          <Pressable onPress={() => router.replace('/signin' as never)} accessibilityRole="link" style={styles.back}>
+            <Text style={[styles.backText, { color: p.accent }]}>Back to sign in</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { fontFamily: fonts.serif, fontSize: 34, lineHeight: 37, letterSpacing: -0.5 },
-  card: { borderWidth: 1, borderRadius: 24, padding: 24 },
-  block: { gap: 12 },
-  message: { fontFamily: fonts.sansMedium, fontSize: 15, lineHeight: 21 },
-  back: { alignSelf: 'center', paddingVertical: 10 },
-  backText: { fontFamily: fonts.sansSemi, fontSize: 15 },
+  wrap: { gap: 20, paddingHorizontal: 8, paddingTop: 4 },
+  wrapWide: { width: '100%', maxWidth: 440, alignSelf: 'flex-start' },
+  title: { fontFamily: fonts.serif, letterSpacing: -0.4 },
+  card: {},
+  cardWide: { borderWidth: 1, borderRadius: radius.card, padding: 28 },
+  block: { gap: 14 },
+  message: { fontFamily: fonts.sansMedium, fontSize: font.nav, lineHeight: 22 },
+  back: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 },
+  backText: { fontFamily: fonts.sansSemi, fontSize: font.nav },
 });

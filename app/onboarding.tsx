@@ -6,15 +6,16 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useAccount } from '../lib/accountContext';
 import { useAppData } from '../lib/appData';
-import { usePalette } from '../lib/useTheme';
+import { usePalette, useWide } from '../lib/useTheme';
 import { userMessage } from '../lib/errors';
-import { fonts } from '../lib/theme';
-import { Shell } from '../components/Shell';
-import { Button } from '../components/States';
+import { fonts, font } from '../lib/theme';
+import { PrimaryButton, SectionLabel } from '../components/FormParts';
+import { ScreenShell } from '../components/ScreenShell';
 import { TopicPicker } from '../components/TopicPicker';
 
 export default function OnboardingScreen() {
   const p = usePalette();
+  const wide = useWide();
   const { categories } = useAppData();
   const acct = useAccount();
   const [selected, setSelected] = useState<string[]>([]);
@@ -46,51 +47,56 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <Shell active="account" scroll>
-      <Text style={[styles.title, { color: p.ink }]} accessibilityRole="header">
-        Pick your favorite topics
-      </Text>
-      <Text style={[styles.sub, { color: p.muted }]}>
-        Your “For you” feed puts your favorites first. Likes and “less like this” fine-tune it over time. You can change your favorites any time in
-        Account.
-      </Text>
-      <TopicPicker categories={categories} selected={selected} onChange={setSelected} />
-      <Text style={[styles.sub, { color: p.muted }]}>Topics to hide (optional): you won’t see these at all.</Text>
-      <TopicPicker
-        categories={categories.filter((c) => !selected.includes(c.slug))}
-        selected={hidden.filter((h) => !selected.includes(h))}
-        onChange={setHidden}
-      />
-      {error ? (
-        <Text style={[styles.error, { color: p.up }]} accessibilityRole="alert">
-          {error}
+    <ScreenShell tab="me" title="Your topics">
+      <View style={[styles.column, wide && styles.columnWide]}>
+        <Text style={[styles.heading, { color: p.ink, fontSize: wide ? font.title : 28 }]} accessibilityRole="header">
+          Pick your favorite topics
         </Text>
-      ) : null}
-      <View style={styles.actions}>
-        <Button
-          label={busy ? 'Saving…' : selected.length ? `Save ${selected.length} topic${selected.length === 1 ? '' : 's'}` : 'Save'}
-          onPress={busy ? () => undefined : save}
+        <Text style={[styles.sub, { color: p.inkSoft }]}>
+          Your “For you” feed puts your favorites first. Likes and “less like this” fine-tune it over time. You can change your favorites any time
+          in Account.
+        </Text>
+        <TopicPicker categories={categories} selected={selected} onChange={setSelected} />
+        <SectionLabel>Topics to hide (optional)</SectionLabel>
+        <Text style={[styles.sub, { color: p.inkSoft }]}>You won’t see these at all.</Text>
+        <TopicPicker
+          categories={categories.filter((c) => !selected.includes(c.slug))}
+          selected={hidden.filter((h) => !selected.includes(h))}
+          onChange={setHidden}
         />
-        <Pressable
-          onPress={() => {
-            acct.skipOnboarding();
-            router.dismissTo('/');
-          }}
-          accessibilityRole="button"
-          style={styles.skip}
-        >
-          <Text style={[styles.skipText, { color: p.muted }]}>Skip for now</Text>
-        </Pressable>
+        {error ? (
+          <Text style={[styles.error, { color: p.up }]} accessibilityRole="alert">
+            {error}
+          </Text>
+        ) : null}
+        <View style={styles.actions}>
+          <PrimaryButton
+            label={busy ? 'Saving…' : selected.length ? `Save ${selected.length} topic${selected.length === 1 ? '' : 's'}` : 'Save'}
+            onPress={busy ? () => undefined : save}
+          />
+          <Pressable
+            onPress={() => {
+              acct.skipOnboarding();
+              router.dismissTo('/');
+            }}
+            accessibilityRole="button"
+            style={styles.skip}
+          >
+            <Text style={[styles.skipText, { color: p.inkSoft }]}>Skip for now</Text>
+          </Pressable>
+        </View>
       </View>
-    </Shell>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { fontFamily: fonts.serif, fontSize: 34, lineHeight: 37, letterSpacing: -0.5 },
-  sub: { fontFamily: fonts.sans, fontSize: 15, lineHeight: 21 },
-  error: { fontFamily: fonts.sansMedium, fontSize: 14 },
+  column: { gap: 14 },
+  columnWide: { maxWidth: 640, width: '100%', alignSelf: 'flex-start' },
+  heading: { fontFamily: fonts.serif, letterSpacing: -0.4 },
+  sub: { fontFamily: fonts.sans, fontSize: font.nav, lineHeight: 22 },
+  error: { fontFamily: fonts.sansMedium, fontSize: font.chip },
   actions: { gap: 6, alignItems: 'stretch' },
-  skip: { alignSelf: 'center', paddingVertical: 12 },
-  skipText: { fontFamily: fonts.sansSemi, fontSize: 15 },
+  skip: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 },
+  skipText: { fontFamily: fonts.sansSemi, fontSize: font.nav },
 });

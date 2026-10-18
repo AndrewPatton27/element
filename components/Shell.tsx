@@ -1,7 +1,6 @@
 // Page frame shared by every screen. Phones: content, then the 5-tab bottom bar
 // (Feed / Brief / Search / Following / Me; components/TabBar.tsx). Numbers and
-// About are no longer tabs, so on Me, Numbers and About a slim "Numbers · About"
-// row sits above the bar to keep them one tap away. Wide web: a 64 px top bar
+// About are not tabs: the Me page links to both. Wide web: a 64 px top bar
 // (wordmark, Trending / Latest / For you, the Feed / Brief / Search / Following /
 // Me links, Numbers, Sign in or Account), a scrolling Numbers strip, then a body
 // of left categories, the main column and a right aside, with a floating About
@@ -33,28 +32,6 @@ export function Wordmark({ size = 24 }: { size?: number }) {
     <Text style={{ fontFamily: fonts.serif, fontSize: size, letterSpacing: -size * 0.01, color: p.accent }} accessibilityRole="header">
       {APP_NAME}
     </Text>
-  );
-}
-
-// Phones only: Numbers and About links (they used to be bottom tabs).
-function MoreLinks({ active, p }: { active: Tab; p: Palette }) {
-  const items = [
-    { key: 'numbers' as const, label: 'Numbers to know', href: '/numbers' as const },
-    { key: 'about' as const, label: 'About Element', href: '/about' as const },
-  ];
-  return (
-    <View style={[styles.moreRow, { borderTopColor: p.divider }]}>
-      {items.map(({ key, label, href }) => {
-        const on = key === active;
-        return (
-          <Pressable key={key} onPress={() => go(href)} accessibilityRole="link" accessibilityState={{ selected: on }} style={styles.moreLink}>
-            <Text style={{ color: on ? p.accentInk : p.inkSoft, fontSize: font.chip, fontFamily: on ? fonts.sansSemi : fonts.sansMedium }}>
-              {label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
   );
 }
 
@@ -155,12 +132,10 @@ export function Shell({ active, children, left, aside, scroll, bare, feedTab }: 
     ) : (
       <View style={styles.fill}>{children}</View>
     );
-  const showMore = active === 'account' || active === 'me' || active === 'numbers' || active === 'about';
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: p.bg }]} edges={['top', 'bottom']}>
       {api.sample ? <SampleBanner /> : null}
       {content}
-      {showMore ? <MoreLinks active={active} p={p} /> : null}
       <TabBar active={active} signedIn={signedIn} />
     </SafeAreaView>
   );
@@ -213,6 +188,4 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
   },
-  moreRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, borderTopWidth: 1, paddingHorizontal: 16 },
-  moreLink: { minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },
 });

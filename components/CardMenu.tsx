@@ -6,7 +6,7 @@ import type { BlurbCard, Category } from '../contract/types.ts';
 import { categoryName } from '../lib/format';
 import { cardSourceKey, sourceName } from '../lib/sourceKeys';
 import { usePalette } from '../lib/useTheme';
-import { fonts } from '../lib/theme';
+import { fonts, radius, font } from '../lib/theme';
 
 interface Props {
   card: BlurbCard | null;
@@ -25,7 +25,7 @@ export function CardMenu({ card, categories, onHideTopic, onClose, onHideSource 
     <Modal visible={card !== null} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, { backgroundColor: p.overlay }]} onPress={onClose} accessibilityLabel="Close options" />
       <View style={styles.center} pointerEvents="box-none">
-        <View style={[styles.menu, { backgroundColor: p.surface }]} accessibilityViewIsModal accessibilityLabel="Card options">
+        <View style={[styles.menu, { backgroundColor: p.surface, borderColor: p.border }]} accessibilityViewIsModal accessibilityLabel="Card options">
           <Pressable
             onPress={() => card && onHideTopic(card)}
             accessibilityRole="button"
@@ -60,11 +60,11 @@ export function CardMenu({ card, categories, onHideTopic, onClose, onHideSource 
 const styles = StyleSheet.create({
   backdrop: { flex: 1 },
   center: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  menu: { width: '100%', maxWidth: 360, borderRadius: 20, overflow: 'hidden' },
-  item: { paddingVertical: 16, paddingHorizontal: 20, gap: 4 },
-  itemText: { fontFamily: fonts.sansSemi, fontSize: 16 },
-  hint: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 18 },
+  menu: { width: '100%', maxWidth: 360, borderRadius: radius.tile, borderWidth: 1, overflow: 'hidden' },
+  item: { minHeight: 52, paddingVertical: 14, paddingHorizontal: 20, gap: 4, justifyContent: 'center' },
+  itemText: { fontFamily: fonts.sansSemi, fontSize: font.body },
+  hint: { fontFamily: fonts.sans, fontSize: font.meta, lineHeight: 18 },
   divided: { borderTopWidth: 1 },
   cancel: { borderTopWidth: 1, alignItems: 'center' },
-  cancelText: { fontFamily: fonts.sansSemi, fontSize: 16 },
+  cancelText: { fontFamily: fonts.sansSemi, fontSize: font.body },
 });

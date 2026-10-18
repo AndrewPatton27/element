@@ -1,9 +1,11 @@
-// Account: email (change it), password (change it), sign out, topics, delete my
-// data, and delete the whole account (type DELETE to confirm). Confirms are
-// in-page because browser dialogs don't exist on native.
+// Me / Account (designs: docs/design/mobile/Mobile-Me, docs/design/web/Web-Me).
+// A profile card, the topics you follow or hide, the sources you switch on, and
+// a settings list (change email, change password, Numbers, About, sign out,
+// delete my data, delete my account). Forms open inline under their row.
+// Confirms are in-page because browser dialogs don't exist on native.
 
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { SOURCES } from '../lib/sourcesInfo';
 import { SOURCE_KEYS, toggleSource } from '../lib/sourceKeys';
 import { router } from 'expo-router';
@@ -11,13 +13,14 @@ import type { Category } from '../contract/types.ts';
 import { useAccount } from '../lib/accountContext';
 import { useAppData } from '../lib/appData';
 import { categoryName } from '../lib/format';
+import { disclaimerText } from '../lib/labels';
 import { DELETE_CONFIRM_WORD, deleteConfirmed, validateEmail, validateNewPassword } from '../lib/session';
-import { usePalette } from '../lib/useTheme';
+import { usePalette, useWide } from '../lib/useTheme';
 import { userMessage } from '../lib/errors';
-import { fonts } from '../lib/theme';
+import { fonts, font, radius } from '../lib/theme';
 import { PasswordField, fieldStyles } from '../components/PasswordField';
-import { Shell } from '../components/Shell';
-import { Button } from '../components/States';
+import { OutlineButton, PrimaryButton, ListRow, SectionLabel } from '../components/FormParts';
+import { ScreenShell } from '../components/ScreenShell';
 import { TopicStatePicker } from '../components/TopicStatePicker';
 
 type Section = 'email' | 'password' | 'topics' | 'sources' | 'data' | 'account' | 'session';
@@ -25,7 +28,8 @@ type Msg = { text: string; error: boolean };
 
 export default function AccountScreen() {
   const p = usePalette();
-  const { categories: publicCategories } = useAppData();
+  const wide = useWide();
+  const { categories: publicCategories, config } = useAppData();
   // Signed in: my_categories also lists favorite or hidden topics that have no cards right now,
   // so a hidden topic can always be un-hidden. Falls back to the public list.
   const [myCategories, setMyCategories] = useState<Category[] | null>(null);
@@ -34,12 +38,11 @@ export default function AccountScreen() {
   const [topics, setTopics] = useState<{ followed: string[]; hidden: string[] }>({ followed: [], hidden: [] });
   const [busy, setBusy] = useState<Section | null>(null);
   const [msgs, setMsgs] = useState<Partial<Record<Section, Msg>>>({});
-  const [editingEmail, setEditingEmail] = useState(false);
+  const [open, setOpen] = useState<'email' | 'password' | 'data' | 'delete' | null>(null);
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [hideSignal, setHideSignal] = useState(0);
-  const [confirmingData, setConfirmingData] = useState(false);
   const [deleteText, setDeleteText] = useState('');
 
   useEffect(() => {
@@ -90,7 +93,7 @@ export default function AccountScreen() {
       'email',
       async () => {
         const r = await acct.changeEmail(newEmail);
-        setEditingEmail(false);
+        setOpen(null);
         setNewEmail('');
         return r === 'changed' ? 'Email changed.' : 'Check both inboxes: confirm the change from the link we sent.';
       },
@@ -116,120 +119,67 @@ export default function AccountScreen() {
       </Text>
     ) : null;
   };
-  const outline = (label: string, onPress: () => void, color = p.ink, border = p.borderStrong) => (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.outline, { borderColor: border, opacity: pressed ? 0.75 : 1 }]}
-    >
-      <Text style={[styles.outlineText, { color }]}>{label}</Text>
-    </Pressable>
+  // A row's panel: its form (when open) and its status message (always).
+  const panel = (section: Section, form: ReactNode) => {
+    const m = message(section);
+    return form || m ? (
+      <>
+        {form}
+        {m}
+      </>
+    ) : undefined;
+  };
+  const toggle = (which: NonNullable<typeof open>) => () => setOpen((o) => (o === which ? null : which));
+  const email = acct.user?.email ?? '';
+
+  const profile = (
+    <View style={[card, styles.profile]}>
+      <View style={[styles.avatar, { backgroundColor: p.accentSoft }]} accessible={false}>
+        <Text style={[styles.avatarText, { color: p.accentInk }]}>{(email[0] ?? 'E').toUpperCase()}</Text>
+      </View>
+      <View style={styles.profileText}>
+        <Text style={[styles.label, { color: p.muted }]}>Signed in as</Text>
+        <Text style={[styles.value, { color: p.ink }]} numberOfLines={1}>
+          {email}
+        </Text>
+      </View>
+    </View>
   );
 
-  return (
-    <Shell active="account" scroll>
-      <Text style={[styles.title, { color: p.ink }]} accessibilityRole="header">
-        Account
+  const topicsSection = (
+    <View style={styles.section}>
+      <Text style={[styles.help, { color: p.inkSoft }]}>
+        {saved.length
+          ? `Your favorites (${saved.map((s) => categoryName(s, categories)).join(', ')}) come first in “For you”. Pick the topics you want first, hide the ones you never want to see, then save.`
+          : 'Mark topics as favorite to put them first in your “For you” feed, or hide the ones you never want to see.'}
       </Text>
-
-      <View style={card}>
-        <Text style={[styles.label, { color: p.muted }]}>Signed in as</Text>
-        <Text style={[styles.value, { color: p.ink }]}>{acct.user?.email ?? ''}</Text>
-        {editingEmail ? (
-          <View style={styles.form}>
-            <Text style={[fieldStyles.label, { color: p.inkSoft }]}>New email</Text>
-            <TextInput
-              style={input}
-              value={newEmail}
-              onChangeText={setNewEmail}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="email"
-              textContentType="emailAddress"
-              inputMode="email"
-              keyboardType="email-address"
-              placeholder="new@example.com"
-              placeholderTextColor={p.muted}
-              accessibilityLabel="New email"
-              onSubmitEditing={changeEmail}
-            />
-            <Button label={busy === 'email' ? 'Saving…' : 'Save new email'} onPress={changeEmail} />
-            {outline('Cancel', () => setEditingEmail(false))}
-          </View>
-        ) : (
-          outline('Change email', () => setEditingEmail(true))
-        )}
-        {message('email')}
-        {outline('Sign out', () => void run('session', () => acct.signOut(), 'Signed out.'))}
-        {message('session')}
-      </View>
-
-      <View style={card}>
-        <Text style={[styles.h2, { color: p.ink }]} accessibilityRole="header">
-          Password
-        </Text>
-        <Text style={[styles.help, { color: p.muted }]}>
-          Your password is stored only as a one-way hash by our sign-in service; nobody, including us, can read it.
-        </Text>
-        <PasswordField
-          label="New password"
-          value={newPassword}
-          onChangeText={setNewPassword}
-          autoComplete="new-password"
-          placeholder="At least 8 characters"
-          hideSignal={hideSignal}
+      <TopicStatePicker categories={categories} value={topics} onChange={setTopics} />
+      {topicsChanged ? (
+        <PrimaryButton
+          label={busy === 'topics' ? 'Saving…' : 'Save topics'}
+          onPress={() => void run('topics', () => acct.savePrefs(topics.followed, topics.hidden), 'Topics saved.')}
         />
-        <PasswordField
-          label="Confirm new password"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          autoComplete="new-password"
-          onSubmitEditing={changePassword}
-          hideSignal={hideSignal}
-        />
-        <Button label={busy === 'password' ? 'Saving…' : 'Change password'} onPress={changePassword} />
-        {message('password')}
-      </View>
+      ) : null}
+      {message('topics')}
+    </View>
+  );
 
-      <View style={card}>
-        <Text style={[styles.h2, { color: p.ink }]} accessibilityRole="header">
-          Your favorite topics
+  const sourcesSection =
+    hiddenSources !== null ? (
+      <View style={styles.section}>
+        <SectionLabel>Sources</SectionLabel>
+        <Text style={[styles.help, { color: p.inkSoft }]}>
+          Choose which sources you see cards from. Changes apply to every feed right away. At least one source stays on.
         </Text>
-        <Text style={[styles.help, { color: p.muted }]}>
-          {saved.length
-            ? `Your favorites (${saved.map((s) => categoryName(s, categories)).join(', ')}) come first in “For you”. Change any topic to Favorite, Normal or Hide, then save.`
-            : 'Mark topics as Favorite to put them first in your “For you” feed, or Hide the ones you never want to see.'}
-        </Text>
-        <TopicStatePicker categories={categories} value={topics} onChange={setTopics} />
-        {topicsChanged ? (
-          <Button
-            label={busy === 'topics' ? 'Saving…' : 'Save topics'}
-            onPress={() => void run('topics', () => acct.savePrefs(topics.followed, topics.hidden), 'Topics saved.')}
-          />
-        ) : null}
-        {message('topics')}
-      </View>
-
-      {hiddenSources !== null ? (
         <View style={card}>
-          <Text style={[styles.h2, { color: p.ink }]} accessibilityRole="header">
-            Sources
-          </Text>
-          <Text style={[styles.help, { color: p.muted }]}>
-            Choose which sources you see cards from. Changes apply to every feed right away. At least one source stays on.
-          </Text>
-          {SOURCE_KEYS.map((s) => {
+          {SOURCE_KEYS.map((s, i) => {
             const on = !hiddenSources.includes(s.key);
-            const info = SOURCES.find((i) => i.key === s.key);
+            const info = SOURCES.find((x) => x.key === s.key);
             return (
-              <View key={s.key} style={[styles.sourceRow, { borderTopColor: p.rowDivider }]}>
+              <View key={s.key} style={[styles.sourceRow, i > 0 && { borderTopWidth: 1, borderTopColor: p.divider }]}>
                 <View style={styles.sourceText}>
                   <Text style={[styles.sourceName, { color: on ? p.ink : p.muted }]}>{s.name}</Text>
-                  {info ? (
-                    <Text style={[styles.help, { color: p.muted }]}>
-                      {info.gives}
-                    </Text>
-                  ) : null}
+                  {info ? <Text style={[styles.small, { color: p.muted }]}>{info.gives}</Text> : null}
                   <Text
                     style={[styles.aboutLink, { color: p.accentInk }]}
                     onPress={() => router.navigate('/about' as never)}
@@ -252,92 +202,176 @@ export default function AccountScreen() {
               </View>
             );
           })}
-          {message('sources')}
         </View>
-      ) : null}
+        {message('sources')}
+      </View>
+    ) : null;
 
-      <View style={card}>
-        <Text style={[styles.h2, { color: p.ink }]} accessibilityRole="header">
-          Your data
-        </Text>
-        <Text style={[styles.help, { color: p.muted }]}>
-          We keep your topics and what you liked, viewed or opened, only to tailor your feed. Deleting it keeps your login; to remove that too, delete
-          your account below.
-        </Text>
-        {confirmingData ? (
-          <View style={styles.form}>
-            <Text style={[styles.help, { color: p.ink }]}>Delete your topics and history? This can’t be undone.</Text>
-            <Pressable
-              onPress={() =>
-                void run(
-                  'data',
-                  async () => {
-                    await acct.deleteMyData();
-                    setConfirmingData(false);
-                  },
-                  'Your data was deleted.',
-                )
-              }
-              accessibilityRole="button"
-              style={[styles.danger, { backgroundColor: p.up }]}
-            >
-              <Text style={[styles.dangerText, { color: '#FFFFFF' }]}>Yes, delete my data</Text>
-            </Pressable>
-            {outline('Cancel', () => setConfirmingData(false))}
-          </View>
-        ) : (
-          outline('Delete my data', () => setConfirmingData(true), p.up, p.up)
+  const settings = (
+    <View style={[card, styles.settings]} accessibilityLabel="Settings">
+      <ListRow first wide={wide} label="Change email" onPress={toggle('email')}>
+        {panel(
+          'email',
+          open === 'email' ? (
+            <View style={styles.form}>
+              <Text style={[fieldStyles.label, { color: p.ink }]}>New email</Text>
+              <TextInput
+                style={input}
+                value={newEmail}
+                onChangeText={setNewEmail}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                inputMode="email"
+                keyboardType="email-address"
+                placeholder="new@example.com"
+                placeholderTextColor={p.muted}
+                accessibilityLabel="New email"
+                onSubmitEditing={changeEmail}
+              />
+              <PrimaryButton label={busy === 'email' ? 'Saving…' : 'Save new email'} onPress={changeEmail} />
+              <OutlineButton label="Cancel" onPress={() => setOpen(null)} />
+            </View>
+          ) : null,
         )}
-        {message('data')}
-      </View>
+      </ListRow>
+      <ListRow wide={wide} label="Change password" onPress={toggle('password')}>
+        {panel(
+          'password',
+          open === 'password' ? (
+            <View style={styles.form}>
+              <Text style={[styles.help, { color: p.muted }]}>
+                Your password is stored only as a one-way hash by our sign-in service; nobody, including us, can read it.
+              </Text>
+              <PasswordField
+                label="New password"
+                value={newPassword}
+                onChangeText={setNewPassword}
+                autoComplete="new-password"
+                placeholder="At least 8 characters"
+                hideSignal={hideSignal}
+              />
+              <PasswordField
+                label="Confirm new password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                autoComplete="new-password"
+                onSubmitEditing={changePassword}
+                hideSignal={hideSignal}
+              />
+              <PrimaryButton label={busy === 'password' ? 'Saving…' : 'Change password'} onPress={changePassword} />
+              <OutlineButton label="Cancel" onPress={() => setOpen(null)} />
+            </View>
+          ) : null,
+        )}
+      </ListRow>
+      <ListRow wide={wide} chevron label="Numbers to know" onPress={() => router.navigate('/numbers' as never)} />
+      <ListRow wide={wide} chevron label="About Element" onPress={() => router.navigate('/about' as never)} />
+      <ListRow wide={wide} label="Sign out" onPress={() => void run('session', () => acct.signOut(), 'Signed out.')}>
+        {panel('session', null)}
+      </ListRow>
+      <ListRow wide={wide} tone="warn" label="Delete my data" onPress={toggle('data')}>
+        {panel(
+          'data',
+          open === 'data' ? (
+            <View style={styles.form}>
+              <Text style={[styles.help, { color: p.muted }]}>
+                We keep your topics and what you liked, viewed or opened, only to tailor your feed. Deleting it keeps your login; to remove that too,
+                delete your account.
+              </Text>
+              <Text style={[styles.help, { color: p.ink }]}>Delete your topics and history? This can’t be undone.</Text>
+              <PrimaryButton danger
+                label="Yes, delete my data"
+                onPress={() =>
+                  void run(
+                    'data',
+                    async () => {
+                      await acct.deleteMyData();
+                      setOpen(null);
+                    },
+                    'Your data was deleted.',
+                  )
+                }
+              />
+              <OutlineButton label="Cancel" onPress={() => setOpen(null)} />
+            </View>
+          ) : null,
+        )}
+      </ListRow>
+      <ListRow wide={wide} tone="warn" label="Delete my account" onPress={toggle('delete')}>
+        {panel(
+          'account',
+          open === 'delete' ? (
+            <View style={styles.form}>
+              <Text style={[styles.help, { color: p.muted }]}>
+                Removes your login, your topics and your history for good, and signs you out. To confirm, type {DELETE_CONFIRM_WORD} below.
+              </Text>
+              <TextInput
+                style={input}
+                value={deleteText}
+                onChangeText={setDeleteText}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                autoComplete="off"
+                placeholder={DELETE_CONFIRM_WORD}
+                placeholderTextColor={p.muted}
+                accessibilityLabel={`Type ${DELETE_CONFIRM_WORD} to confirm`}
+              />
+              <PrimaryButton danger
+                label={busy === 'account' ? 'Deleting…' : 'Delete my account'}
+                disabled={!deleteConfirmed(deleteText) || busy === 'account'}
+                onPress={() => void run('account', () => acct.deleteAccount(), 'Your account was deleted.')}
+              />
+            </View>
+          ) : null,
+        )}
+      </ListRow>
+    </View>
+  );
 
-      <View style={card}>
-        <Text style={[styles.h2, { color: p.ink }]} accessibilityRole="header">
-          Delete account
-        </Text>
-        <Text style={[styles.help, { color: p.muted }]}>
-          Removes your login, your topics and your history for good, and signs you out. To confirm, type {DELETE_CONFIRM_WORD} below.
-        </Text>
-        <TextInput
-          style={input}
-          value={deleteText}
-          onChangeText={setDeleteText}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          autoComplete="off"
-          placeholder={DELETE_CONFIRM_WORD}
-          placeholderTextColor={p.muted}
-          accessibilityLabel={`Type ${DELETE_CONFIRM_WORD} to confirm`}
-        />
-        <Pressable
-          disabled={!deleteConfirmed(deleteText) || busy === 'account'}
-          onPress={() => void run('account', () => acct.deleteAccount(), 'Your account was deleted.')}
-          accessibilityRole="button"
-          aria-disabled={!deleteConfirmed(deleteText)}
-          style={[styles.danger, { backgroundColor: p.up, opacity: deleteConfirmed(deleteText) ? 1 : 0.4 }]}
-        >
-          <Text style={[styles.dangerText, { color: '#FFFFFF' }]}>{busy === 'account' ? 'Deleting…' : 'Delete my account'}</Text>
-        </Pressable>
-        {message('account')}
-      </View>
-    </Shell>
+  return (
+    <ScreenShell tab="me" title={wide ? 'Me' : 'Account'}>
+      {profile}
+      {wide ? (
+        <View style={styles.cols}>
+          <View style={styles.colMain}>
+            {topicsSection}
+            {sourcesSection}
+          </View>
+          <View style={styles.colSide}>{settings}</View>
+        </View>
+      ) : (
+        <>
+          {topicsSection}
+          {sourcesSection}
+          {settings}
+        </>
+      )}
+      <Text style={[styles.disclaimer, { color: p.muted }]}>{disclaimerText(config)}</Text>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { fontFamily: fonts.serif, fontSize: 34, lineHeight: 37, letterSpacing: -0.5 },
-  card: { borderWidth: 1, borderRadius: 24, padding: 20, gap: 10 },
-  form: { gap: 8 },
-  label: { fontFamily: fonts.sansMedium, fontSize: 13 },
-  value: { fontFamily: fonts.sansSemi, fontSize: 17 },
-  h2: { fontFamily: fonts.serif, fontSize: 24 },
-  help: { fontFamily: fonts.sans, fontSize: 14, lineHeight: 20 },
-  outline: { minHeight: 48, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  outlineText: { fontFamily: fonts.sansSemi, fontSize: 16 },
-  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 10, borderTopWidth: 1 },
+  card: { borderWidth: 1, borderRadius: radius.tile },
+  profile: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, paddingHorizontal: 18 },
+  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontFamily: fonts.serif, fontSize: 22 },
+  profileText: { flex: 1, minWidth: 0, gap: 2 },
+  label: { fontFamily: fonts.sans, fontSize: font.meta },
+  value: { fontFamily: fonts.sansSemi, fontSize: font.body },
+  section: { gap: 10 },
+  cols: { flexDirection: 'row', flexWrap: 'wrap', gap: 28, alignItems: 'flex-start' },
+  colMain: { flexGrow: 1, flexShrink: 1, flexBasis: 380, minWidth: 0, gap: 28 },
+  colSide: { flexGrow: 1, flexShrink: 1, flexBasis: 340, minWidth: 0 },
+  settings: { overflow: 'hidden' },
+  form: { gap: 10 },
+  help: { fontFamily: fonts.sans, fontSize: font.chip, lineHeight: 21 },
+  small: { fontFamily: fonts.sans, fontSize: font.meta, lineHeight: 18 },
+  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, paddingHorizontal: 18 },
   sourceText: { flex: 1, gap: 2 },
-  sourceName: { fontFamily: fonts.sansSemi, fontSize: 15 },
-  aboutLink: { fontFamily: fonts.sansSemi, fontSize: 13, textDecorationLine: 'underline', paddingVertical: 10 },
-  danger: { minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  dangerText: { fontFamily: fonts.sansSemi, fontSize: 16 },
+  sourceName: { fontFamily: fonts.sansSemi, fontSize: font.body },
+  aboutLink: { fontFamily: fonts.sansSemi, fontSize: font.meta, textDecorationLine: 'underline', paddingVertical: 10 },
+  disclaimer: { fontFamily: fonts.sans, fontSize: font.small },
 });

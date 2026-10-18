@@ -1,19 +1,23 @@
-// Sign in / create account / forgot password, with email and password. After the
-// first sign-in the topic picker opens; otherwise back to the feed.
+// Sign in / create account / forgot password, with email and password (designs:
+// docs/design/{mobile,web}/*-SignIn and *-CreateAccount). Create account is a
+// mode of this screen (also reachable as /signin?mode=signup). After the first
+// sign-in the topic picker opens; otherwise back to the feed.
 
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { isOnboardingSkipped, useAccount } from '../lib/accountContext';
 import { needsOnboarding } from '../lib/accountLogic';
+import { useAppData } from '../lib/appData';
+import { disclaimerText } from '../lib/labels';
 import { RESET_SENT_MESSAGE, validateCredentials, validateEmail } from '../lib/session';
-import { usePalette } from '../lib/useTheme';
+import { usePalette, useWide } from '../lib/useTheme';
 import { userMessage } from '../lib/errors';
-import { fonts } from '../lib/theme';
+import { fonts, font, radius } from '../lib/theme';
 import { PasswordField, fieldStyles } from '../components/PasswordField';
-import { Shell } from '../components/Shell';
-import { Button } from '../components/States';
+import { OutlineButton, PrimaryButton } from '../components/FormParts';
+import { ScreenShell } from '../components/ScreenShell';
 
 type Mode = 'signin' | 'signup' | 'forgot';
 
@@ -23,14 +27,19 @@ function resetRedirectUrl(): string {
   return Linking.createURL('/reset-password');
 }
 
-const TITLES: Record<Mode, string> = { signin: 'Sign in', signup: 'Create your account', forgot: 'Reset your password' };
+const TITLES: Record<Mode, string> = { signin: 'Sign in to follow and personalize', signup: 'Create your account', forgot: 'Reset your password' };
+const HEADERS: Record<Mode, string> = { signin: 'Sign in', signup: 'Create account', forgot: 'Reset password' };
 
 export default function SignInScreen() {
   const p = usePalette();
+  const wide = useWide();
   const acct = useAccount();
-  const [mode, setMode] = useState<Mode>('signin');
+  const { config } = useAppData();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const [mode, setMode] = useState<Mode>(params.mode === 'signup' ? 'signup' : 'signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [hideSignal, setHideSignal] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +59,7 @@ export default function SignInScreen() {
     setInfo(null);
     setSentTo(null);
     setPassword('');
+    setConfirm('');
   }
 
   async function submit() {
@@ -71,7 +81,7 @@ export default function SignInScreen() {
       }
       return;
     }
-    const problem = validateCredentials(email, password);
+    const problem = validateCredentials(email, password) ?? (mode === 'signup' && password !== confirm ? 'The two passwords don’t match.' : null);
     if (problem) return setError(problem);
     setBusy(true);
     try {
@@ -94,6 +104,7 @@ export default function SignInScreen() {
     } finally {
       // Never keep the password around (or on screen) after a submit.
       setPassword('');
+      setConfirm('');
       setHideSignal((n) => n + 1);
       setBusy(false);
     }
@@ -102,110 +113,176 @@ export default function SignInScreen() {
   const label = busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset link';
 
   return (
-    <Shell active="account" scroll>
-      <Text style={[styles.title, { color: p.ink }]} accessibilityRole="header">
-        {TITLES[mode]}
-      </Text>
-      {acct.notice && mode === 'signin' ? (
-        <Text style={[styles.note, { backgroundColor: p.dataSoft, color: p.dataInk }]} accessibilityRole="alert">
-          {acct.notice}
-        </Text>
-      ) : null}
-      <Text style={[styles.sub, { color: p.muted }]}>
-        {mode === 'forgot'
-          ? 'Enter the email you signed up with. We’ll send a link to choose a new password.'
-          : 'An account gives you a “For you” feed built from the topics you pick and the cards you like. Reading the feed never needs one.'}
-      </Text>
-      {acct.account.sample ? (
-        <Text style={[styles.note, { backgroundColor: p.dataSoft, color: p.dataInk }]}>
-          {mode === 'forgot'
-            ? 'Sample mode: no email is sent. After you press the button, a test reset link appears here.'
-            : 'Sample mode: any email and an 8+ character password work. Nothing leaves this device.'}
-        </Text>
-      ) : null}
-      <View style={[styles.card, { backgroundColor: p.surface, borderColor: p.border }]}>
-        <Text style={[fieldStyles.label, { color: p.inkSoft }]}>Email</Text>
-        <TextInput
-          style={[fieldStyles.input, styles.gap, { borderColor: p.borderStrong, backgroundColor: p.surface, color: p.ink }]}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="email"
-          textContentType="emailAddress"
-          inputMode="email"
-          keyboardType="email-address"
-          placeholder="you@example.com"
-          placeholderTextColor={p.muted}
-          accessibilityLabel="Email"
-          onSubmitEditing={mode === 'forgot' ? submit : undefined}
-        />
-        {mode !== 'forgot' ? (
-          <PasswordField
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-            placeholder="At least 8 characters"
-            onSubmitEditing={submit}
-            hideSignal={hideSignal}
-          />
-        ) : null}
-        {mode === 'signin' ? (
-          <Pressable onPress={() => switchMode('forgot')} accessibilityRole="button" style={styles.forgot} hitSlop={6}>
-            <Text style={[styles.forgotText, { color: p.accentInk }]}>Forgot password?</Text>
-          </Pressable>
-        ) : null}
-        {error ? (
-          <Text style={[styles.message, { color: p.up }]} accessibilityRole="alert">
-            {error}
+    <ScreenShell tab="me" title={HEADERS[mode]}>
+      <View style={[styles.panel, wide && [styles.panelWide, { backgroundColor: p.surface, borderColor: p.border }]]}>
+        <View style={styles.head}>
+          <Text style={[styles.title, { color: p.ink, fontSize: wide ? font.title : 28 }]} accessibilityRole="header">
+            {TITLES[mode]}
+          </Text>
+          <Text style={[styles.sub, { color: p.inkSoft }]}>
+            {mode === 'forgot'
+              ? 'Enter the email you signed up with. We’ll send a link to choose a new password.'
+              : mode === 'signup'
+                ? 'It’s free. Pick your favorite topics and get a “For you” feed built from them and the cards you like.'
+                : 'An account gives you a “For you” feed built from the topics you pick and the cards you like. Reading the feed never needs one.'}
+          </Text>
+        </View>
+        {acct.notice && mode === 'signin' ? (
+          <Text style={[styles.note, { backgroundColor: p.dataSoft, color: p.dataInk }]} accessibilityRole="alert">
+            {acct.notice}
           </Text>
         ) : null}
-        {info ? (
-          <Text style={[styles.message, { color: p.accentInk }]} accessibilityLiveRegion="polite">
-            {info}
+        {acct.account.sample ? (
+          <Text style={[styles.note, { backgroundColor: p.dataSoft, color: p.dataInk }]}>
+            {mode === 'forgot'
+              ? 'Sample mode: no email is sent. After you press the button, a test reset link appears here.'
+              : 'Sample mode: any email and an 8+ character password work. Nothing leaves this device.'}
           </Text>
         ) : null}
-        {acct.account.sample && sentTo && Platform.OS === 'web' ? (
-          <Pressable
-            onPress={() => window.location.assign(`/reset-password#access_token=${encodeURIComponent(`mock-recovery:${sentTo}`)}&type=recovery`)}
-            accessibilityRole="link"
-          >
-            <Text style={[styles.forgotText, { color: p.accentInk }]}>Open the test reset link</Text>
-          </Pressable>
-        ) : null}
-        <Button label={label} onPress={submit} />
-        {mode === 'forgot' ? (
-          <Pressable onPress={() => switchMode('signin')} accessibilityRole="button" style={styles.switch}>
-            <Text style={[styles.switchText, { color: p.accentInk }]}>Back to sign in</Text>
-          </Pressable>
-        ) : (
-          <Pressable onPress={() => switchMode(mode === 'signin' ? 'signup' : 'signin')} accessibilityRole="button" style={styles.switch}>
-            <Text style={[styles.switchText, { color: p.accentInk }]}>
-              {mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'}
+
+        <View style={styles.form}>
+          <View style={styles.field}>
+            <Text style={[fieldStyles.label, { color: p.ink }]}>Email</Text>
+            <TextInput
+              style={[fieldStyles.input, { borderColor: p.borderStrong, backgroundColor: p.surface, color: p.ink }]}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              inputMode="email"
+              keyboardType="email-address"
+              placeholder="you@example.com"
+              placeholderTextColor={p.muted}
+              accessibilityLabel="Email"
+              onSubmitEditing={mode === 'forgot' ? submit : undefined}
+            />
+          </View>
+          {mode !== 'forgot' ? (
+            <PasswordField
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              placeholder={mode === 'signin' ? 'Your password' : 'At least 8 characters'}
+              onSubmitEditing={mode === 'signin' ? submit : undefined}
+              hideSignal={hideSignal}
+            />
+          ) : null}
+          {mode === 'signup' ? (
+            <PasswordField
+              label="Confirm password"
+              value={confirm}
+              onChangeText={setConfirm}
+              autoComplete="new-password"
+              placeholder="Type it again"
+              onSubmitEditing={submit}
+              hideSignal={hideSignal}
+            />
+          ) : null}
+          {mode === 'signin' ? (
+            <Pressable onPress={() => switchMode('forgot')} accessibilityRole="button" style={styles.forgot}>
+              <Text style={[styles.linkText, { color: p.accent }]}>Forgot password?</Text>
+            </Pressable>
+          ) : null}
+          {error ? (
+            <Text style={[styles.message, { color: p.up }]} accessibilityRole="alert">
+              {error}
             </Text>
+          ) : null}
+          {info ? (
+            <Text style={[styles.message, { color: p.accentInk }]} accessibilityLiveRegion="polite">
+              {info}
+            </Text>
+          ) : null}
+          {acct.account.sample && sentTo && Platform.OS === 'web' ? (
+            <Pressable
+              onPress={() => window.location.assign(`/reset-password#access_token=${encodeURIComponent(`mock-recovery:${sentTo}`)}&type=recovery`)}
+              accessibilityRole="link"
+            >
+              <Text style={[styles.linkText, { color: p.accentInk }]}>Open the test reset link</Text>
+            </Pressable>
+          ) : null}
+          <PrimaryButton label={label} onPress={submit} />
+        </View>
+
+        {mode === 'signin' ? (
+          <>
+            <View style={[styles.tintBox, { backgroundColor: p.accentSoft }]}>
+              <Text style={[styles.tintText, { color: p.accentInk }]}>
+                <Text style={styles.bold}>New to Element?</Text>
+                {'\n'}Create a free account in a minute.
+              </Text>
+              <Pressable
+                onPress={() => switchMode('signup')}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.pill, { backgroundColor: p.accent, opacity: pressed ? 0.85 : 1 }]}
+              >
+                <Text style={[styles.pillText, { color: p.onAccent }]}>Create account</Text>
+              </Pressable>
+            </View>
+            <View style={styles.or}>
+              <View style={[styles.rule, { backgroundColor: p.border }]} />
+              <Text style={[styles.orText, { color: p.muted }]}>or</Text>
+              <View style={[styles.rule, { backgroundColor: p.border }]} />
+            </View>
+            <OutlineButton label="Browse as a guest" onPress={() => router.dismissTo('/')} />
+          </>
+        ) : mode === 'signup' ? (
+          <View style={styles.switchRow}>
+            <Text style={[styles.sub, { color: p.inkSoft }]}>Already have an account?</Text>
+            <Pressable onPress={() => switchMode('signin')} accessibilityRole="button" style={styles.switchBtn}>
+              <Text style={[styles.linkText, { color: p.accent, fontSize: font.nav }]}>Sign in</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable onPress={() => switchMode('signin')} accessibilityRole="button" style={styles.switchBtn}>
+            <Text style={[styles.linkText, { color: p.accent, fontSize: font.nav }]}>Back to sign in</Text>
           </Pressable>
         )}
+
+        <Text style={[styles.fine, { color: p.muted }]}>
+          Your password goes straight to our sign-in service (Supabase Auth), which stores only a one-way hash of it, never the password itself. We
+          store your email, the topics you pick and what you like, view or open, only to tailor your feed. You can delete that data, or your whole
+          account, on the Account screen.
+        </Text>
+        <Text style={[styles.fine, { color: p.muted }]}>{disclaimerText(config)}</Text>
       </View>
-      <Text style={[styles.note2, { color: p.muted }]}>
-        Your password goes straight to our sign-in service (Supabase Auth), which stores only a one-way hash of it, never the password itself. We
-        store your email, the topics you pick and what you like, view or open, only to tailor your feed. You can delete that data, or your whole
-        account, on the Account screen.
-      </Text>
-    </Shell>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { fontFamily: fonts.serif, fontSize: 34, lineHeight: 37, letterSpacing: -0.5 },
-  sub: { fontFamily: fonts.sans, fontSize: 15, lineHeight: 21 },
-  note: { fontFamily: fonts.sansMedium, fontSize: 13, lineHeight: 18, padding: 12, borderRadius: 12, overflow: 'hidden' },
-  card: { borderWidth: 1, borderRadius: 24, padding: 24, gap: 10 },
-  gap: { marginBottom: 4 },
-  forgot: { alignSelf: 'flex-end', paddingVertical: 2 },
-  forgotText: { fontFamily: fonts.sansSemi, fontSize: 14 },
-  message: { fontFamily: fonts.sansMedium, fontSize: 14, lineHeight: 20 },
-  switch: { alignSelf: 'center', paddingVertical: 10 },
-  switchText: { fontFamily: fonts.sansSemi, fontSize: 15 },
-  note2: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 18 },
+  panel: { gap: 20, paddingHorizontal: 8, paddingTop: 4 },
+  panelWide: {
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderRadius: radius.card,
+    paddingHorizontal: 36,
+    paddingTop: 36,
+    paddingBottom: 30,
+  },
+  head: { gap: 8 },
+  title: { fontFamily: fonts.serif, letterSpacing: -0.4 },
+  sub: { fontFamily: fonts.sans, fontSize: font.nav, lineHeight: 22 },
+  note: { fontFamily: fonts.sansMedium, fontSize: font.meta, lineHeight: 18, padding: 12, borderRadius: radius.sm, overflow: 'hidden' },
+  form: { gap: 14 },
+  field: { gap: 6 },
+  forgot: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  linkText: { fontFamily: fonts.sansSemi, fontSize: font.chip },
+  message: { fontFamily: fonts.sansMedium, fontSize: font.chip, lineHeight: 20 },
+  tintBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderRadius: radius.sm + 4 },
+  tintText: { flex: 1, fontFamily: fonts.sans, fontSize: font.nav, lineHeight: 20 },
+  bold: { fontFamily: fonts.sansSemi },
+  pill: { minHeight: 44, paddingHorizontal: 16, borderRadius: radius.chip, alignItems: 'center', justifyContent: 'center' },
+  pillText: { fontFamily: fonts.sansSemi, fontSize: font.nav },
+  or: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rule: { flex: 1, height: 1 },
+  orText: { fontFamily: fonts.sans, fontSize: font.meta },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  switchBtn: { minHeight: 44, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  fine: { fontFamily: fonts.sans, fontSize: font.small, lineHeight: 18, textAlign: 'center' },
 });
