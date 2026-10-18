@@ -4,9 +4,10 @@
 // Numbers and About are peers (tab-like), not modals. On the first visit the quick
 // tour (components/Tutorial.tsx) is drawn over whichever screen opened.
 
+import { lazy, Suspense } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme, View } from 'react-native';
+import { useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 // Per-weight imports so the web build ships only these 4 font files, not all 22.
@@ -20,21 +21,21 @@ import { AccountProvider } from '../lib/accountContext';
 import { light, paletteFor } from '../lib/theme';
 import { ConfigErrorScreen } from '../components/States';
 import { AppErrorBoundary } from '../components/ErrorBoundary';
-import { TutorialGate } from '../components/Tutorial';
+const TutorialGate = lazy(() => import('../components/Tutorial').then((module) => ({ default: module.TutorialGate })));
 
 export default function RootLayout() {
   const scheme = useColorScheme();
   const p = paletteFor(scheme);
   const result = getApi();
   // If a font fails to load the app still renders with the system font.
-  const [fontsLoaded, fontError] = useFonts({
+  useFonts({
     Newsreader_600SemiBold,
     InstrumentSans_400Regular,
     InstrumentSans_500Medium,
     InstrumentSans_600SemiBold,
   });
 
-  if (!fontsLoaded && !fontError) return <View style={{ flex: 1, backgroundColor: p.bg }} />;
+  // Render immediately with system fallbacks; Expo swaps to these bundled fonts when ready.
 
   return (
     <SafeAreaProvider>
@@ -57,7 +58,7 @@ export default function RootLayout() {
                 <Stack.Screen name="tutorial" />
               </Stack>
               {/* First-run tour over every screen, once per device (also at /tutorial). */}
-              <TutorialGate />
+              <Suspense fallback={null}><TutorialGate /></Suspense>
             </AccountProvider>
           </AppDataProvider>
         </AppErrorBoundary>
