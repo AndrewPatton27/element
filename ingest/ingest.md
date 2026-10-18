@@ -76,7 +76,7 @@ Keys are never printed (`[set]` / `[missing]` only), never put in URLs except wh
 
 ## Outputs
 
-- Rows in Supabase through the service-role RPCs `api.upsert_item`, `api.set_item_status`, `api.publish_blurb`, `api.upsert_macro`.
+- Rows in Supabase through the service-role RPCs `api.upsert_item`, `api.set_item_status`, `api.publish_blurb`, `api.upsert_macro`, `api.refresh_trending` (end of each run), and for `--rewrite` `api.blurbs_to_revise` / `api.revise_blurb`.
 - `state/ai-usage.json`: AI calls per provider for the current UTC day. Gemini's daily cap is `min(600, free requests per day)` = 500; Groq's is `min(80, requests per day, tokens per day / estimated tokens per call)` = 80 (`src/config.ts`).
 - `cache/`: cached page responses.
 
@@ -84,19 +84,35 @@ Keys are never printed (`[set]` / `[missing]` only), never put in URLs except wh
 
 | Path | Purpose |
 |---|---|
-| `src/config.ts` | every tunable value + environment check |
-| `src/main.ts` | command line, live and dry-run wiring |
+| `src/config.ts` | every tunable value (models, caps, pacing, limits, hosts, watch list) + environment check |
+| `src/main.ts` | command line (`--dry-run`, `--once`, `--loop`, `--rewrite`, `--only`, `--limit`, `--json`), live and dry-run wiring, end-of-run Trending refresh |
 | `src/pipeline.ts` | one run (sources, guards, summarize, publish) with injected I/O |
-| `src/allowlist.ts` | the only way to make an outbound request |
-| `src/sources/` | `sec.ts`, `fed.ts`, `bea.ts`, `fedreg.ts`, `macro.ts` parsers and formatters |
-| `src/summarizer/` | `chain.ts`, `gemini.ts`, `groq.ts`, `template.ts`, `providers.ts` |
-| `src/validate.ts` | draft and publish checks |
+| `src/allowlist.ts` | the only way to make an outbound request (host lists, https only, redirect re-check, rate limit, cache) |
+| `src/rewrite.ts` | `--rewrite`: redoes older published cards in place |
+| `src/detail.ts` | factual in-depth detail for template and data cards (no AI) |
+| `src/types.ts` | internal pipeline types (the public card shape is in `contract/types.ts`) |
+| `src/sources/sec.ts` | SEC 8-K feed and watch-company filing lists, item classification |
+| `src/sources/fed.ts` | Federal Reserve press-release RSS and release pages |
+| `src/sources/bea.ts` | BEA news-release RSS (feed text only) |
+| `src/sources/fedreg.ts` | Federal Register final rules (abstract only) |
+| `src/sources/macro.ts` | FRED series, number formatting, data cards (also a Treasury CSV parser, not used by the live run) |
+| `src/sources/wiki.ts` | Wikipedia "In the news" (CC BY-SA, attribution on every card) |
+| `src/sources/cpsc.ts` | CPSC product recalls |
+| `src/sources/usgs.ts` | USGS significant earthquakes (template cards) |
+| `src/sources/nasa.ts` | NASA news releases (RSS, news-release links only) |
+| `src/summarizer/chain.ts` | license check, then Gemini, Groq, template; daily caps, pacing, retry, relevance gate |
+| `src/summarizer/gemini.ts`, `groq.ts` | the two AI adapters (same prompt, keys in headers only) |
+| `src/summarizer/template.ts` | card built from metadata, no AI |
+| `src/summarizer/providers.ts` | builds the provider list, skips one whose key is missing |
+| `src/validate.ts` | draft checks and publish checks (shape, advice words, numbers, copy limit, license, source link) |
 | `src/dedupe.ts` | URL duplicate and per-ticker cap |
-| `src/publish.ts` | PostgREST client, dry-run publisher, payload builder |
-| `src/ranking.ts` | copy of the database ranking formula (tests only) |
+| `src/publish.ts` | PostgREST client for the service-role RPCs, dry-run publisher, payload builder |
+| `src/ranking.ts` | copy of the database importance and decay formula (tests only) |
 | `src/html.ts` | small HTML/XML helpers |
-| `src/fixtures/` | labeled sample inputs (REAL / RECONSTRUCTED / SYNTHETIC), see its README |
-| `test/` | `node:test` files |
+| `src/fixtures/` | labeled sample inputs (REAL / RECONSTRUCTED / SYNTHETIC), see its `README.md` |
+| `test/*.test.ts` | `node:test` files, run offline by `npm test`: `allowlist`, `broad-sources`, `cli`, `config`, `contract`, `dedupe`, `fedreg`, `groq`, `macro-bea`, `pacing-length`, `publish`, `ranking`, `rewrite-detail`, `sec-classify`, `sources`, `summarizer`, `trending-refresh`, `validate`, `watchlist-relevance` |
+| `package.json`, `tsconfig.json`, `.gitignore` | scripts (`test`, `dry-run`, `ingest`, `ingest:loop`), Node 22.18+ engine, type-check config; `cache/`, `state/` and `.env` are git-ignored |
+| `README.md` | short overview and command list for this folder |
 
 ## Known limits
 

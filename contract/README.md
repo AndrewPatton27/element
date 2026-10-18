@@ -7,12 +7,17 @@ The shared data contract between the back end (Supabase, `api` schema) and the a
 | File | What it is |
 |---|---|
 | `types.ts` | TypeScript types for every response the app reads: `BlurbCard`, `FeedPage`, `MacroFact`, `AppConfig`, `RequiredNotice`, `Category`, `Source`, `Ticker`, `FeedMode`, `FeedParams`. Erasable TypeScript only (no enums or namespaces), so it can be imported with `import type` from Node scripts and the Expo app. |
-| `fixtures/feed.page1.json` | `FeedPage`: first page of the `top` feed (22 cards, all 9 categories, summary and data cards) with a `next_cursor`. |
+| `account.ts` | Types and RPC bodies for signed-in users (`UserPrefs`, `ForYouPage`, `TrackParams`, ...). Described in `account.md`. |
+| `account.md` | The accounts contract: sign-in calls, account RPCs, For you behaviour and scoring, account security and dashboard settings. |
+| `fixtures/feed.page1.json` | `FeedPage`: first page of the `top` (Trending) feed (22 cards, all 9 original categories, summary and data cards) with a `next_cursor`. |
 | `fixtures/feed.page2.json` | `FeedPage`: the following page, `next_cursor: null` (end of feed). Includes one sample card each for World (a Wikipedia-style `cc_by_sa` card with its attribution), Recalls & Safety and Science & Space. |
 | `fixtures/feed.empty.json` | `FeedPage` with no cards. |
-| `fixtures/numbers_to_know.json` | `MacroFact[]` for the six series (DGS2, DGS10, DFF, CPIAUCSL, UNRATE, DCOILWTICO). |
+| `fixtures/feed_for_you.page1.json` | `ForYouPage`: 10 `[SAMPLE]` cards with `my_reaction`, for sample mode. |
+| `fixtures/prefs.json` | `UserPrefs` sample (followed and hidden topics, reactions). |
+| `fixtures/numbers_to_know.json` | `MacroFact[]` sample numbers (a subset of the live series). |
 | `fixtures/app_config.json` | `AppConfig`: disclaimer, AI notice, required notices, feature flags. |
 | `fixtures/categories.json` | `Category[]`: the 12 category slugs with display names, in display order. The live `api.categories` returns only categories that have at least one published card. |
+| `fixtures/raw/` | Small samples of what the public sources return (SEC Atom, Fed RSS, FRED JSON, Treasury CSV), labeled REAL / RECONSTRUCTED / SYNTHETIC in `fixtures/raw/README.md`. |
 
 ## Where the data comes from
 
@@ -22,6 +27,8 @@ The shared data contract between the back end (Supabase, `api` schema) and the a
 | `numbers_to_know` | `GET /rest/v1/numbers_to_know?order=sort_order` | `MacroFact[]` |
 | `app_config` | `GET /rest/v1/app_config` (one row) | `AppConfig[]` |
 | `categories` | `GET /rest/v1/categories?order=sort_order` | `Category[]` |
+
+Signed-in calls (`feed_for_you`, `get_prefs`, `set_prefs`, `track`, ...) are listed in `account.md`. The mode `top` is shown in the app as **Trending**.
 
 ## Rules
 

@@ -49,6 +49,11 @@ The script refuses to start if `SUPABASE_URL` is missing or still a placeholder,
 | `src/sources/` | `sec.ts` (8-Ks from about 150 household-name companies only: current feed plus each company's `data.sec.gov` filing list; big items only (earnings, CEO/CFO changes, deals, layoffs, cyber incidents, restatements, bankruptcy); routine director-only 5.02s and low-value 7.01/8.01/9.01-only filings skipped before any AI call; category and event type from item numbers), `fed.ts`, `bea.ts` (BEA RSS, feed text only), `fedreg.ts` (Federal Register final rules from consumer-facing agencies; the AI sees only the `abstract`; no abstract = skipped; AI cards only), `macro.ts` (12 FRED series, data cards; MORTGAGE30US refused), `wiki.ts` (Wikipedia "In the news", CC BY-SA, attribution on every card), `cpsc.ts` (product recalls), `usgs.ts` (significant earthquakes, template cards), `nasa.ts` (news releases only). |
 | `src/dedupe.ts` | Skips an item whose URL was already seen and caps cards at 3 per ticker within 24 hours. The database enforces the same rules again. |
 | `src/ranking.ts` | A TypeScript copy of the database ranking formula, used by tests only. |
+| `src/main.ts` | The command line and the live and dry-run wiring (also refreshes the Trending boosts at the end of a run). |
+| `src/pipeline.ts` | One run: sources, guards, summarize, publish. |
+| `src/publish.ts` | PostgREST client for the service-role RPCs, the dry-run publisher and the payload builder. |
+| `src/types.ts`, `src/html.ts` | Internal pipeline types and small HTML/XML helpers. |
+| `src/fixtures/` | Labeled sample inputs for tests and `--dry-run` (see its `README.md`). |
 | `test/*.test.ts` | Offline tests for all of the above plus a check of the shared contract fixtures. |
 
 ## How publishing will work
