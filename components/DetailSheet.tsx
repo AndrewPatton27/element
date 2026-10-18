@@ -13,6 +13,7 @@ import { fonts } from '../lib/theme';
 import { CloseIcon } from './Icons';
 import { AiLabel, Disclaimer, ShareAlikeLine } from './Labels';
 import { SourceList } from './SourceList';
+import { DataFacts } from './DataCard';
 
 interface Props {
   card: BlurbCard | null;
@@ -72,6 +73,8 @@ export function DetailSheet({ card, config, categories, onClose }: Props) {
                 ))}
               </View>
             ) : null}
+
+            {card.kind === 'data' ? <DataFacts card={card} config={config} /> : null}
 
             {paragraphs.map((t, i) => (
               <Text key={i} style={[styles.para, { color: p.inkBody }]}>

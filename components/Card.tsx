@@ -41,12 +41,15 @@ function metaLine(card: BlurbCard, categories: Category[]): string {
   const event = eventLabel(card.event_type);
   const parts = [category];
   if (event && !category.toLowerCase().includes(event.toLowerCase())) parts.push(event);
-  parts.push(relativeTime(card.as_of));
+  // Data cards: as_of is the observation date (the panel shows the period), so show when it was published.
+  parts.push(relativeTime(card.kind === 'data' ? card.published_at : card.as_of));
   return parts.join(' · ');
 }
 
 export function Card({ card, config, categories, onShowSources, onOpenDetail, onNext, wide, compact, reaction, onReact }: Props) {
   const hasDetail = cardDetail(card) !== null;
+  // A malformed ticker from the server is skipped, not shown as an empty chip.
+  const validTickers = card.tickers.filter((t) => t && typeof t.symbol === 'string' && t.symbol !== '');
   const p = usePalette();
   const labels = cardLabels(card, config);
   const credit = shareAlikeCredit(card, config);
@@ -54,7 +57,7 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
   // Design size is 32 (42 on wide); long headlines and short screens step down so the body fits.
   const headlineSize = wide ? 42 : compact ? 26 : card.headline.length > 60 ? 28 : 32;
   return (
-    <View style={[styles.card, wide && styles.cardWide, { backgroundColor: p.surface, borderColor: p.border }]}>
+    <View style={[styles.card, wide && styles.cardWide, compact && styles.cardCompact, { backgroundColor: p.surface, borderColor: p.border }]}>
       <View style={styles.meta}>
         <View style={[styles.badge, { backgroundColor: badge.bg }]}>
           {badge.Icon ? <badge.Icon color={badge.fg} size={14} /> : null}
@@ -68,15 +71,17 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
 
       {/* Only this middle part may shrink (and clip); the source row, AI label and
           disclaimer below never do, so they are always visible. Tapping it opens the
-          detail sheet (the source row and the buttons below keep their own actions). */}
+          detail sheet (the source row and the buttons below keep their own actions). The
+          hint is part of the label because react-native-web drops accessibilityHint. */}
       <Pressable
         onPress={onOpenDetail ? () => onOpenDetail(card) : undefined}
         disabled={!onOpenDetail}
         accessibilityRole={onOpenDetail ? 'button' : undefined}
-        accessibilityLabel={onOpenDetail ? `${card.headline}. ${OPEN_DETAIL_HINT}` : undefined} // web ignores accessibilityHint
-        style={[styles.middle, wide && { gap: 18 }]}
+        accessibilityLabel={onOpenDetail ? `${card.headline}. ${OPEN_DETAIL_HINT}` : undefined}
+        style={[styles.middle, wide && { gap: 18 }, compact && { gap: 10 }]}
       >
         <Text
+          numberOfLines={compact ? 3 : 4}
           style={[styles.headline, { color: p.ink, fontSize: headlineSize, lineHeight: headlineSize * 1.1, letterSpacing: wide ? -0.8 : -0.5 }]}
           accessibilityRole="header"
         >
@@ -85,20 +90,22 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
 
         {card.kind === 'data' ? <DataFacts card={card} config={config} compact={compact} /> : null}
 
-        {card.body ? (
+        {/* On phones a two-number data card has no room for its template sentence, which only
+            restates the numbers; it stays readable in the detail sheet. */}
+        {card.body && !(card.kind === 'data' && card.macro.length > 1 && !wide) ? (
           <Text
+            numberOfLines={compact ? 6 : wide ? undefined : 8}
             style={[styles.body, wide && styles.bodyWide, compact && styles.bodyCompact, { color: p.inkBody }]}
-            numberOfLines={card.kind === 'data' && card.macro.length > 1 && !wide ? 2 : undefined}
           >
             {card.body}
           </Text>
         ) : null}
 
-        {card.tickers.length > 0 ? (
+        {validTickers.length > 0 ? (
           <View style={styles.tickers}>
-            {card.tickers.map((t) => (
+            {validTickers.map((t, i) => (
               <Text
-                key={t.symbol}
+                key={`${t.symbol}-${i}`}
                 style={[styles.ticker, { color: p.inkSoft, borderColor: p.borderStrong }]}
                 accessibilityLabel={`${t.name}, ticker ${t.symbol}`}
               >
@@ -190,6 +197,7 @@ const styles = StyleSheet.create({
   reactText: { fontFamily: fonts.sansSemi, fontSize: 13 },
   disclaimerAlone: { flexShrink: 0, marginTop: -6 },
   card: { flex: 1, borderWidth: 1, borderRadius: 24, padding: 24, gap: 16, overflow: 'hidden' },
+  cardCompact: { padding: 20, gap: 10 }, // short screens: less air so the body text still fits
   cardWide: { padding: 32, gap: 18 },
   meta: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
   metaRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },

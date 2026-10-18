@@ -6,7 +6,7 @@ import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
 
 const OPTIONS: { mode: FeedTab; label: string; hint: string }[] = [
-  { mode: 'top', label: 'Top', hint: 'Most important and recent first' },
+  { mode: 'top', label: 'Trending', hint: 'What matters most right now' }, // display name only; the API mode stays 'top'
   { mode: 'latest', label: 'Latest', hint: 'Newest first' },
   { mode: 'for_you', label: 'For you', hint: 'Tailored to your topics and likes' },
 ];

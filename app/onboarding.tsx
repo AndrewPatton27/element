@@ -32,7 +32,7 @@ export default function OnboardingScreen() {
     setError(null);
     try {
       await acct.savePrefs(selected);
-      router.replace('/?tab=for_you' as never);
+      router.dismissTo('/?tab=for_you' as never);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save your topics.');
     } finally {
@@ -62,7 +62,7 @@ export default function OnboardingScreen() {
         <Pressable
           onPress={() => {
             acct.skipOnboarding();
-            router.replace('/');
+            router.dismissTo('/');
           }}
           accessibilityRole="button"
           style={styles.skip}

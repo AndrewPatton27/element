@@ -14,12 +14,15 @@ import { PasswordField } from '../components/PasswordField';
 import { Shell } from '../components/Shell';
 import { Button, LoadingState } from '../components/States';
 
+let consumed: RecoveryLink | null = null; // the web link, read once per page load
+
 function readLink(url: string | null): RecoveryLink | null {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    const link = parseRecoveryLink(window.location.hash, window.location.search);
+    if (consumed) return consumed;
+    consumed = parseRecoveryLink(window.location.hash, window.location.search);
     // Take the token out of the address bar (and browser history) once read.
     if (window.location.hash || window.location.search) window.history.replaceState(null, '', window.location.pathname);
-    return link;
+    return consumed;
   }
   if (!url) return null;
   const hashAt = url.indexOf('#');

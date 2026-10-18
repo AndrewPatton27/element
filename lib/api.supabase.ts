@@ -85,7 +85,16 @@ export function createSupabaseApi(opts: SupabaseOptions): Api {
 
   return {
     sample: false,
-    feed: async (req) => parseFeedPage(await call(planRequest(opts.url, opts.key, 'feed', req, opts.getToken ? await opts.getToken() : null))),
+    async feed(req) {
+      const token = opts.getToken ? await opts.getToken() : null;
+      try {
+        return parseFeedPage(await call(planRequest(opts.url, opts.key, 'feed', req, token)));
+      } catch (e) {
+        // api.feed is the same for everyone: if the user's token is rejected, read it as a guest.
+        if (e instanceof ApiError && e.status === 401 && token) return parseFeedPage(await call(planRequest(opts.url, opts.key, 'feed', req, null)));
+        throw e;
+      }
+    },
     categories: async () => parseCategories(await call(planRequest(opts.url, opts.key, 'categories'))),
     numbersToKnow: async () => parseMacroFacts(await call(planRequest(opts.url, opts.key, 'numbers'))),
     appConfig: async () => parseAppConfig(await call(planRequest(opts.url, opts.key, 'config'))),

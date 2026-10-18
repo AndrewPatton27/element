@@ -3,9 +3,10 @@
 // web the arrow keys, PageUp/PageDown and j/k move between cards too.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Platform, StyleSheet, View, type FlatListProps, type LayoutChangeEvent } from 'react-native';
+import { FlatList, Platform, Text, StyleSheet, View, type FlatListProps, type LayoutChangeEvent } from 'react-native';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { usePalette } from '../lib/useTheme';
+import { fonts } from '../lib/theme';
 import { Card } from './Card';
 import type { Feedback } from '../lib/accountLogic';
 import { LoadingState } from './States';
@@ -23,6 +24,7 @@ interface Props {
   reactions?: Record<string, Feedback>;
   onReact?: (card: BlurbCard, pressed: Feedback) => void;
   onActiveCard?: (card: BlurbCard) => void; // the card now on screen (for view tracking)
+  active?: boolean; // false when another screen or a sheet is on top: keys are left alone
 }
 
 // Below this page height the card switches to smaller type so it fits.
@@ -41,6 +43,7 @@ export function FeedPager({
   reactions,
   onReact,
   onActiveCard,
+  active,
 }: Props) {
   const p = usePalette();
   const list = useRef<FlatList<BlurbCard>>(null);
@@ -74,10 +77,10 @@ export function FeedPager({
     if (height > 0 && indexRef.current > 0) list.current?.scrollToOffset({ offset: height * indexRef.current, animated: false });
   }, [height]);
 
-  const active = items[index];
+  const current = items[index];
   useEffect(() => {
-    if (active && onActiveCard) onActiveCard(active);
-  }, [active, onActiveCard]);
+    if (current && onActiveCard) onActiveCard(current);
+  }, [current, onActiveCard]);
 
   // New filter -> new list: jump back to the first card.
   const firstId = items[0]?.id;
@@ -87,7 +90,7 @@ export function FeedPager({
   }, [firstId]);
 
   useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || active === false) return;
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -101,7 +104,7 @@ export function FeedPager({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [goTo]);
+  }, [goTo, active]);
 
   const compact = !wide && height > 0 && height < COMPACT_BELOW;
   const renderItem = useCallback(
@@ -155,6 +158,10 @@ export function FeedPager({
               <View style={{ height: 80 }}>
                 <LoadingState label="Loading more…" />
               </View>
+            ) : done && items.length > 0 ? (
+              <View style={styles.end}>
+                <Text style={[styles.endText, { color: p.muted }]}>You’re all caught up. Switch to Latest or another topic.</Text>
+              </View>
             ) : undefined
           }
         />
@@ -164,6 +171,8 @@ export function FeedPager({
 }
 
 const styles = StyleSheet.create({
+  end: { height: 120, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  endText: { fontFamily: fonts.sansMedium, fontSize: 14, textAlign: 'center' },
   fill: { flex: 1 },
   page: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   pageWide: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 12 },

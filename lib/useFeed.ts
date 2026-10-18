@@ -25,7 +25,7 @@ export function useFeed(api: Api, query: FeedQuery, account?: AccountApi): UseFe
   const inflight = useRef<string | null>(null);
 
   const load = useCallback(
-    async (k: string, cursor: string | null) => {
+    async (k: string, cursor: string | null, hops = 0): Promise<void> => {
       const tag = `${k}@${cursor ?? ''}`;
       if (inflight.current === tag) return;
       inflight.current = tag;
@@ -35,6 +35,15 @@ export function useFeed(api: Api, query: FeedQuery, account?: AccountApi): UseFe
           query.mode === 'for_you'
             ? await (account as AccountApi).feedForYou(cursor, FEED_PAGE_SIZE)
             : await api.feed({ mode: query.mode, category: query.category, cursor, limit: FEED_PAGE_SIZE });
+        if (page.items.length === 0 && page.next_cursor && page.next_cursor !== cursor) {
+          // Every card on this page was unusable: skip ahead (at most 3 pages), then end.
+          if (hops < 3) {
+            inflight.current = null;
+            return load(k, page.next_cursor, hops + 1);
+          }
+          dispatch({ type: 'page', key: k, page: { items: [], next_cursor: null } });
+          return;
+        }
         dispatch({ type: 'page', key: k, page });
       } catch (err) {
         dispatch({ type: 'fail', key: k, error: message(err) });

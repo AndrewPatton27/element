@@ -1,6 +1,7 @@
 // "Where this came from": bottom sheet listing every source of a card with a
 // link to the original, how the card was made, and the disclaimer.
 
+import { useRef } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, BlurbCard } from '../contract/types.ts';
 import { disclaimerText, howMadeText, primarySource } from '../lib/labels';
@@ -12,11 +13,15 @@ import { SourceList } from './SourceList';
 import { Disclaimer } from './Labels';
 import { openUrl } from './SourceChip';
 
-export function SourcesSheet({ card, config, onClose }: { card: BlurbCard | null; config: AppConfig | null; onClose: () => void }) {
+export function SourcesSheet({ card: openCard, config, onClose }: { card: BlurbCard | null; config: AppConfig | null; onClose: () => void }) {
   const p = usePalette();
+  // Keep the last card while the sheet slides away, so it doesn't empty out first.
+  const last = useRef(openCard);
+  if (openCard) last.current = openCard;
+  const card = openCard ?? last.current;
   const primary = card ? primarySource(card) : null;
   return (
-    <Modal visible={card !== null} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={openCard !== null} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, { backgroundColor: p.overlay }]} onPress={onClose} accessibilityLabel="Close sources" />
       <View style={styles.dock} pointerEvents="box-none">
         <View style={[styles.sheet, { backgroundColor: p.surface }]} accessibilityViewIsModal accessibilityLabel="Sources">

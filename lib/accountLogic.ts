@@ -75,3 +75,23 @@ export function forYouCoversTopics(cards: Pick<BlurbCard, 'category'>[], followe
   if (followed.length === 0 || cards.length === 0) return true;
   return cards.some((c) => followed.includes(c.category));
 }
+
+// my_reaction from the server is applied once per card per session. Applying it
+// again (each time For you reloads) would undo the user's later "clear" and, in
+// React, re-render forever. `noted` remembers which cards were already seen.
+export function unseenReactions(cards: object[], noted: Set<string>): Record<string, Feedback> | null {
+  const found: Record<string, Feedback> = {};
+  for (const c of cards) {
+    const id = (c as { id?: unknown }).id;
+    if (typeof id !== 'string' || noted.has(id)) continue;
+    noted.add(id);
+    const r = reactionOf(c);
+    if (r) found[id] = r;
+  }
+  return Object.keys(found).length ? found : null;
+}
+
+// Same signed-in user as before (a token refresh hands out a new user object).
+export function sameUser(a: { id: string; email: string } | null, b: { id: string; email: string } | null): boolean {
+  return a === b || (!!a && !!b && a.id === b.id && a.email === b.email);
+}

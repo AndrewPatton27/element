@@ -1,11 +1,11 @@
 // Sign in / create account / forgot password, with email and password. After the
 // first sign-in the topic picker opens; otherwise back to the feed.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { useAccount } from '../lib/accountContext';
+import { isOnboardingSkipped, useAccount } from '../lib/accountContext';
 import { needsOnboarding } from '../lib/accountLogic';
 import { RESET_SENT_MESSAGE, validateCredentials, validateEmail } from '../lib/session';
 import { usePalette } from '../lib/useTheme';
@@ -35,6 +35,13 @@ export default function SignInScreen() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null); // sample mode: offer the test link
+
+  // Already signed in (back button, bookmark): show the account instead of the form.
+  // Only for arriving signed in: after our own sign-in, submit() decides where to go.
+  const arrivedSignedIn = useRef(acct.user !== null);
+  useEffect(() => {
+    if (arrivedSignedIn.current && acct.user) router.replace('/account' as never);
+  }, [acct.user]);
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -79,7 +86,8 @@ export default function SignInScreen() {
       }
       acct.clearNotice();
       const prefs = await acct.refreshPrefs();
-      router.replace(needsOnboarding(true, prefs, false) ? ('/onboarding' as never) : '/');
+      if (needsOnboarding(true, prefs, isOnboardingSkipped(acct.account.currentUser()?.id))) router.replace('/onboarding' as never);
+      else router.dismissTo('/');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sign-in failed.');
     } finally {

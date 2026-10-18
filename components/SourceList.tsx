@@ -17,9 +17,9 @@ export function SourceList({ card, config }: { card: BlurbCard; config: AppConfi
   const credit = shareAlikeCredit(card, config);
   return (
     <View style={styles.list}>
-      {card.sources.map((s) => (
+      {card.sources.map((s, i) => (
         <Pressable
-          key={s.url}
+          key={`${i}-${s.url}`}
           onPress={() => openUrl(s.url, card.id)}
           accessibilityRole="link"
           accessibilityLabel={`${s.name}${s.doc_label ? ', ' + s.doc_label : ''}, ${relativeTime(s.published_at)}. Opens the original.`}
@@ -43,7 +43,10 @@ export function SourceList({ card, config }: { card: BlurbCard; config: AppConfi
             {(s.license_class as string) === 'cc_by_sa' && credit ? (
               <Text
                 style={[styles.rowMeta, styles.licenseLink, { color: p.accentInk }]}
-                onPress={() => openUrl(credit.licenseUrl)}
+                onPress={(e) => {
+                  e.stopPropagation?.(); // don't also open the article (the row's own link)
+                  openUrl(credit.licenseUrl);
+                }}
                 accessibilityRole="link"
               >
                 License: {CC_BY_SA_MARK}

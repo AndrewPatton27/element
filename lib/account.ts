@@ -158,22 +158,51 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
     return json;
   }
 
-  async function accessToken(): Promise<string | null> {
-    if (!session) return null;
-    if (!needsRefresh(session, now())) return session.access_token;
+  // Another tab may have refreshed (and rotated) the tokens: use its newer session.
+  function adoptStoredSession(): boolean {
     try {
-      const json = await authCall('token?grant_type=refresh_token', { refresh_token: session.refresh_token });
+      const raw = store.get(SESSION_KEY);
+      const saved = raw ? parseSession(JSON.parse(raw), now()) : null;
+      if (saved && session && saved.refresh_token !== session.refresh_token && saved.user.id === session.user.id) {
+        session = saved;
+        return true;
+      }
+    } catch {
+      // unreadable storage: keep what we have
+    }
+    return false;
+  }
+
+  async function doRefresh(): Promise<string | null> {
+    if (!session) return null;
+    if (adoptStoredSession() && !needsRefresh(session, now())) return session.access_token;
+    const used = session.refresh_token;
+    try {
+      const json = await authCall('token?grant_type=refresh_token', { refresh_token: used });
       const s = parseSession(json, now());
       setSession(s);
       return s ? s.access_token : null;
     } catch (e) {
-      // A rejected refresh token means the session is over; a network error keeps it.
+      // A rejected refresh token ends the session, unless another tab rotated it
+      // meanwhile; a network error keeps it.
       if (e instanceof AccountError && e.status >= 400 && e.status < 500) {
+        if (adoptStoredSession() && session && session.refresh_token !== used) {
+          return needsRefresh(session, now()) ? null : session.access_token;
+        }
         signOutReason = SIGN_IN_AGAIN_MESSAGE;
         setSession(null);
       }
       return null;
     }
+  }
+
+  // One refresh at a time: parallel calls (feed, prefs, track) share it (B3).
+  let refreshing: Promise<string | null> | null = null;
+  async function accessToken(): Promise<string | null> {
+    if (!session) return null;
+    if (!needsRefresh(session, now())) return session.access_token;
+    if (!refreshing) refreshing = doRefresh().finally(() => (refreshing = null));
+    return refreshing;
   }
 
   async function rpc(fn: string, args: object): Promise<unknown> {

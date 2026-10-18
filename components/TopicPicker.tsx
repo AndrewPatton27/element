@@ -6,9 +6,11 @@ import type { Category } from '../contract/types.ts';
 import { toggleTopic } from '../lib/accountLogic';
 import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
+import { LoadingState } from './States';
 
 export function TopicPicker({ categories, selected, onChange }: { categories: Category[]; selected: string[]; onChange: (next: string[]) => void }) {
   const p = usePalette();
+  if (categories.length === 0) return <LoadingState label="Loading topics…" />;
   return (
     <View style={styles.wrap} accessibilityRole="list">
       {categories.map((c) => {

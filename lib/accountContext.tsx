@@ -5,7 +5,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { BlurbCard } from '../contract/types.ts';
 import type { AccountApi, EmailChangeResult, SignUpResult } from './account.ts';
-import { ViewTracker, feedbackEvent, reactionOf, type Feedback, type UserPrefs } from './accountLogic.ts';
+import { ViewTracker, feedbackEvent, sameUser, unseenReactions, type Feedback, type UserPrefs } from './accountLogic.ts';
 import type { AuthUser, RecoveryLink } from './session.ts';
 import { setOpenSourceListener } from './openUrl.ts';
 import { defaultStore } from './storage.ts';
@@ -40,20 +40,29 @@ const Ctx = createContext<AccountState | null>(null);
 const store = defaultStore();
 const skipKey = (uid: string) => `element.onboarding-skipped.${uid}`;
 
+// "Skip for now" on the topic picker, remembered per user on this device.
+export function isOnboardingSkipped(uid: string | null | undefined): boolean {
+  return uid ? store.get(skipKey(uid)) === '1' : false;
+}
+
 export function AccountProvider({ account, children }: { account: AccountApi; children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(account.currentUser());
   const [prefs, setPrefs] = useState<UserPrefs | null>(null);
   const [reactions, setReactions] = useState<Record<string, Feedback>>({});
   const [skipped, setSkipped] = useState(false);
   const views = useRef(new ViewTracker());
+  const noted = useRef(new Set<string>()); // cards whose my_reaction was already applied
   const [notice, setNotice] = useState<string | null>(null);
+  const uid = user?.id ?? null;
 
   // Track the signed-in user; when the account signs us out by itself (expired
   // session), keep its reason to show "Please sign in again."
   useEffect(
     () =>
       account.onChange((u) => {
-        setUser(u);
+        // Keep the same object for the same user, so an hourly token refresh doesn't
+        // reset prefs, likes and view tracking (B4).
+        setUser((prev) => (sameUser(prev, u) ? prev : u));
         if (!u) {
           const reason = account.takeSignOutReason();
           if (reason) setNotice(reason);
@@ -73,24 +82,32 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
     }
   }, [account]);
 
-  // A different user (or sign-out) starts from a clean slate.
+  // A different user (or sign-out) starts from a clean slate. Keyed on the id only,
+  // so an email change or token refresh keeps the state.
   useEffect(() => {
     setPrefs(null);
     setReactions({});
     views.current.reset();
-    setSkipped(user ? store.get(skipKey(user.id)) === '1' : false);
-    if (user) void refreshPrefs();
-  }, [user, refreshPrefs]);
+    noted.current.clear();
+    setSkipped(isOnboardingSkipped(uid));
+    if (uid) void refreshPrefs();
+  }, [uid, refreshPrefs]);
+
+  // Stable identity: For you calls it after every load (B1: it used to re-trigger itself).
+  const noteCards = useCallback((cards: BlurbCard[]) => {
+    const found = unseenReactions(cards, noted.current);
+    if (found) setReactions((r) => ({ ...found, ...r }));
+  }, []);
 
   // Opening an original source counts as interest in that card.
   useEffect(() => {
-    if (!user) {
+    if (!uid) {
       setOpenSourceListener(null);
       return;
     }
     setOpenSourceListener((cardId) => void account.track(cardId, 'open_source').catch(() => undefined));
     return () => setOpenSourceListener(null);
-  }, [user, account]);
+  }, [uid, account]);
 
   const value = useMemo<AccountState>(
     () => ({
@@ -130,14 +147,7 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
           }),
         );
       },
-      noteCards(cards) {
-        const found: Record<string, Feedback> = {};
-        for (const c of cards) {
-          const r = reactionOf(c);
-          if (r) found[c.id] = r;
-        }
-        if (Object.keys(found).length > 0) setReactions((r) => ({ ...found, ...r }));
-      },
+      noteCards,
       trackView(card) {
         if (!user || !views.current.shouldTrack(card.id)) return;
         account.track(card.id, 'view').catch(() => undefined);
@@ -146,6 +156,7 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
         await account.deleteMyData();
         setReactions({});
         views.current.reset();
+        noted.current.clear();
         await refreshPrefs();
       },
       refreshPrefs,
@@ -159,7 +170,8 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
       changePassword: (newPassword) => account.changePassword(newPassword),
       async changeEmail(newEmail) {
         const r = await account.changeEmail(newEmail);
-        setUser(account.currentUser());
+        const next = account.currentUser();
+        setUser((prev) => (sameUser(prev, next) ? prev : next));
         return r;
       },
       async deleteAccount() {
@@ -169,7 +181,7 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
         setNotice('Your account was deleted.');
       },
     }),
-    [account, user, prefs, skipped, reactions, refreshPrefs, notice],
+    [account, user, prefs, skipped, reactions, refreshPrefs, notice, noteCards],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

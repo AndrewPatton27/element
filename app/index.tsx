@@ -4,11 +4,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import type { BlurbCard, CategorySlug } from '../contract/types.ts';
 import { useAppData } from '../lib/appData';
 import { useAccount } from '../lib/accountContext';
 import { forYouCoversTopics } from '../lib/accountLogic';
+import { SIGN_IN_AGAIN_MESSAGE } from '../lib/session';
 import type { FeedTab } from '../lib/feedLogic';
 import { categoryName } from '../lib/format';
 import { defaultStore } from '../lib/storage';
@@ -39,6 +40,15 @@ export default function FeedScreen() {
   const [category, setCategory] = useState<CategorySlug | null>(null);
   const [sheetCard, setSheetCard] = useState<BlurbCard | null>(null);
   const [detailCard, setDetailCard] = useState<BlurbCard | null>(null);
+  // The feed stays mounted under Numbers / About / Account; only drive it (keys,
+  // view tracking) while it's the screen on top (B2).
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
   const [promptHidden, setPromptHidden] = useState(() => store.get(PROMPT_KEY) === '1');
 
   // Signing out while on For you falls back to Top; arriving from onboarding opens For you.
@@ -67,7 +77,7 @@ export default function FeedScreen() {
     body = (
       <EmptyState
         message={forYou ? 'Nothing new in your topics yet.' : category ? 'No cards in this category yet.' : 'No cards yet. Check back soon.'}
-        actionLabel={forYou ? 'Show Top' : category ? 'Show all categories' : undefined}
+        actionLabel={forYou ? 'Show Trending' : category ? 'Show all categories' : undefined}
         onAction={forYou ? () => setMode('top') : category ? () => setCategory(null) : undefined}
       />
     );
@@ -85,7 +95,8 @@ export default function FeedScreen() {
         wide={wide}
         reactions={signedIn ? acct.reactions : undefined}
         onReact={signedIn ? react : undefined}
-        onActiveCard={signedIn ? trackView : undefined}
+        onActiveCard={signedIn && focused ? trackView : undefined}
+        active={focused && sheetCard === null && detailCard === null}
       />
     );
   }
@@ -98,12 +109,13 @@ export default function FeedScreen() {
     ) : null;
 
   // Guests: one quiet line under the chips, dismissible. Never blocks the feed.
+  const expired = acct.notice === SIGN_IN_AGAIN_MESSAGE; // not "Your account was deleted."
   const prompt =
-    !signedIn && (!promptHidden || acct.notice) ? (
+    !signedIn && (!promptHidden || expired) ? (
       <View style={[styles.prompt, !wide && styles.promptNarrow, { backgroundColor: p.accentSoft }]}>
         <Pressable onPress={() => router.navigate('/signin' as never)} accessibilityRole="link" style={styles.promptMain}>
           <Text style={[styles.promptText, { color: p.accentInk }]}>
-            {acct.notice ? `${acct.notice} Sign in →` : 'Sign in for a feed tailored to you →'}
+            {expired ? `${acct.notice} Sign in →` : 'Sign in for a feed tailored to you →'}
           </Text>
         </Pressable>
         <Pressable

@@ -16,6 +16,8 @@ import {
   EMPTY_PREFS,
   ViewTracker,
   forYouCoversTopics,
+  sameUser,
+  unseenReactions,
   feedbackEvent,
   mockForYouOrder,
   needsOnboarding,
@@ -362,4 +364,62 @@ test('For you header admits when followed topics have no cards', () => {
   assert.equal(forYouCoversTopics(cards, ['policy']), true);
   assert.equal(forYouCoversTopics(cards, []), true, 'no topics followed: nothing to admit');
   assert.equal(forYouCoversTopics([], ['energy']), true, 'still loading: no claim either way');
+});
+
+test('B1: my_reaction from For you is applied once per card', () => {
+  const noted = new Set<string>();
+  const cards = [
+    { id: 'a', my_reaction: 'like' },
+    { id: 'b', my_reaction: null },
+    { id: 'c', my_reaction: 'dislike' },
+  ];
+  assert.deepEqual(unseenReactions(cards, noted), { a: 'like', c: 'dislike' });
+  assert.equal(unseenReactions(cards, noted), null, 'a second call with the same cards changes nothing');
+  assert.deepEqual(unseenReactions([...cards, { id: 'd', my_reaction: 'like' }], noted), { d: 'like' }, 'only new cards count');
+});
+
+test('B4: a refreshed token with the same user is the same user', () => {
+  assert.equal(sameUser({ id: 'u', email: 'a@b.co' }, { id: 'u', email: 'a@b.co' }), true);
+  assert.equal(sameUser({ id: 'u', email: 'a@b.co' }, { id: 'u', email: 'new@b.co' }), false);
+  assert.equal(sameUser(null, null), true);
+  assert.equal(sameUser({ id: 'u', email: 'a@b.co' }, null), false);
+});
+
+test('B3: parallel calls share one refresh', async () => {
+  const store = memoryStore();
+  store.set(
+    'element.session.v1',
+    JSON.stringify({ access_token: 'old', refresh_token: 'r0', expires_at: NOW - 10, user: { id: 'u1', email: 'a@b.co' } }),
+  );
+  let refreshes = 0;
+  const { fn } = fakeFetch((url) => {
+    if (url.includes('grant_type=refresh_token')) {
+      refreshes++;
+      return { status: 200, body: tokenResponse({ access_token: 'new', refresh_token: 'r1' }) };
+    }
+    return { status: 200, body: [] };
+  });
+  const acct = createSupabaseAccount({ url: 'https://p', key: 'k', fetchFn: fn, store, now: () => NOW });
+  const tokens = await Promise.all([acct.accessToken(), acct.accessToken(), acct.accessToken()]);
+  assert.deepEqual(tokens, ['new', 'new', 'new']);
+  assert.equal(refreshes, 1);
+});
+
+test('B3: a token another tab already rotated is adopted, not treated as a sign-out', async () => {
+  const store = memoryStore();
+  const stale = { access_token: 'old', refresh_token: 'r0', expires_at: NOW - 10, user: { id: 'u1', email: 'a@b.co' } };
+  store.set('element.session.v1', JSON.stringify(stale));
+  let refreshes = 0;
+  const { fn } = fakeFetch(() => {
+    refreshes++;
+    return { status: 400, body: { msg: 'Invalid Refresh Token: Already Used' } };
+  });
+  const tabB = createSupabaseAccount({ url: 'https://p', key: 'k', fetchFn: fn, store, now: () => NOW });
+  // tab A refreshed first and saved the rotated session
+  store.set('element.session.v1', JSON.stringify({ ...stale, access_token: 'fromA', refresh_token: 'r1', expires_at: NOW + 3600 }));
+  assert.equal(await tabB.accessToken(), 'fromA');
+  assert.equal(refreshes, 0, 'no refresh needed: the stored session is fresh');
+  assert.equal(tabB.currentUser()?.id, 'u1');
+  assert.equal(tabB.takeSignOutReason(), null);
+  assert.ok(store.get('element.session.v1'), "tab A's good session is not wiped");
 });
