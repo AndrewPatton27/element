@@ -56,3 +56,6 @@ Card footer: the disclaimer is built once and placed by `disclaimerPlacement` (`
 | `FollowingWatchlist.tsx` | "Watchlist" on the Me screen (designs `Mobile-Me` / `Web-Me`): followed company tickers as removable chips and "+ Add ticker". Stored on this device via `useFollows`. News only, no prices. |
 
 | `FollowingButton.tsx` | The Follow / "✓ Following" pill. |
+
+**Design delta (2026-10-18, Drew's 07:44 design edits):** \Shell.tsx\ now shows the floating About button as a round icon-only button on both layouts (wide 48 px, left 32 / bottom 28; phones 44 px, left 16, 116 px from the bottom; hidden on About, and on the sign-in pages via \
+oFab\). \ScreenShell.tsx\ phone header takes \onBack\, \onClose\, \randTitle\, \hideTitle\ (About: back arrow + title in wordmark style; sign-in: wordmark + close X; create account: back + wordmark + close X).

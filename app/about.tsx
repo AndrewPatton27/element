@@ -6,6 +6,7 @@
 
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { useAppData } from '../lib/appData';
 import { aiNoticeText, disclaimerText, noticesFor } from '../lib/labels';
 import { APP_NAME } from '../lib/config';
@@ -57,7 +58,7 @@ export default function AboutScreen() {
   const text = [wide ? styles.textWide : styles.text, { color: p.inkSoft }];
 
   return (
-    <ScreenShell tab="about" title={`About ${APP_NAME}`}>
+    <ScreenShell tab="about" title={`About ${APP_NAME}`} brandTitle onBack={() => router.navigate('/account' as never)}>
       <View style={[styles.column, wide && styles.columnWide]}>
         <Text style={[styles.lead, wide && styles.leadWide, { color: p.ink }]}>
           Business and market news in a few minutes, without the jargon.
@@ -66,6 +67,13 @@ export default function AboutScreen() {
           A short daily briefing in plain language: business, the economy, government, the world, science and safety. Here is exactly where it comes
           from and how it is made.
         </Text>
+
+        <Section title="How a card is made">
+          <Text style={text}>
+            Summary cards are written by AI from official filings and agency releases, then checked against the source. Data cards show new
+            government numbers.
+          </Text>
+        </Section>
 
         <Section title="Where the news comes from">
           <Text style={text}>

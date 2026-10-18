@@ -7,9 +7,10 @@
 // serif title row (optional meta text on the right) and 22 px between sections.
 
 import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { usePalette, useWide } from '../lib/useTheme';
 import { fonts, font, space, MOBILE_HEADER_HEIGHT, PAGE_MAX_WIDTH } from '../lib/theme';
+import { ChevronLeftIcon, CloseIcon } from './Icons';
 import { Shell, Wordmark } from './Shell';
 import type { Tab } from './TabBar';
 
@@ -19,10 +20,17 @@ export interface ScreenShellProps {
   meta?: string; // short text beside the title, e.g. "3 stories · 2 updated"
   headerRight?: ReactNode; // replaces meta (e.g. a button)
   scroll?: boolean; // default true; false lets the screen manage its own scrolling list
+  // Phone header only (Mobile-About / SignIn / CreateAccount): a back arrow, a close X, the title
+  // in the wordmark style (About), or no title at all (the page has its own heading).
+  onBack?: () => void;
+  backLabel?: string;
+  onClose?: () => void;
+  brandTitle?: boolean;
+  hideTitle?: boolean;
   children: ReactNode;
 }
 
-export function ScreenShell({ tab, title, meta, headerRight, scroll = true, children }: ScreenShellProps) {
+export function ScreenShell({ tab, title, meta, headerRight, scroll = true, onBack, backLabel = 'Back', onClose, brandTitle, hideTitle, children }: ScreenShellProps) {
   const p = usePalette();
   const wide = useWide();
 
@@ -55,12 +63,33 @@ export function ScreenShell({ tab, title, meta, headerRight, scroll = true, chil
   }
 
   return (
-    <Shell active={tab} bare>
-      <View style={[styles.header, { backgroundColor: p.surface, borderBottomColor: p.border }]}>
-        <Wordmark size={font.headerWordmark} />
-        <Text accessibilityRole="header" style={[styles.titleNarrow, { color: p.ink }]} numberOfLines={1}>
-          {title}
-        </Text>
+    <Shell active={tab} bare noFab={Boolean(onClose)}>
+      <View
+        style={[
+          styles.header,
+          onBack && { paddingLeft: 8 },
+          onClose && { paddingRight: 8 },
+          { backgroundColor: p.surface, borderBottomColor: p.border },
+        ]}
+      >
+        <View style={styles.headerLeft}>
+          {onBack ? (
+            <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel={backLabel} style={styles.iconBtn}>
+              <ChevronLeftIcon color={p.ink} size={22} strokeWidth={2} />
+            </Pressable>
+          ) : null}
+          {brandTitle ? <Wordmark size={font.headerWordmark} text={title} /> : <Wordmark size={font.headerWordmark} />}
+        </View>
+        {brandTitle || hideTitle ? null : (
+          <Text accessibilityRole="header" style={[styles.titleNarrow, { color: p.ink }]} numberOfLines={1}>
+            {title}
+          </Text>
+        )}
+        {onClose ? (
+          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.iconBtn}>
+            <CloseIcon color={p.ink} size={20} strokeWidth={2} />
+          </Pressable>
+        ) : null}
       </View>
       {scroll ? (
         <ScrollView style={styles.fill} contentContainerStyle={styles.bodyNarrow}>
@@ -89,6 +118,8 @@ const styles = StyleSheet.create({
     paddingRight: space.page,
     borderBottomWidth: 1,
   },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   titleNarrow: { flexShrink: 1, fontSize: font.body, fontFamily: fonts.sansSemi },
   bodyNarrow: { paddingHorizontal: space.page, paddingTop: 14, paddingBottom: space.md, gap: 14 },
   metaRowNarrow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: space.xs },

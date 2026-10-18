@@ -224,6 +224,7 @@ export default function AccountScreen() {
     <View style={[card, styles.settings]} accessibilityLabel="Settings">
       <ListRow first wide={wide} chevron label="Numbers to know" onPress={() => router.navigate('/numbers' as never)} />
       <ListRow wide={wide} chevron label="About Element" onPress={() => router.navigate('/about' as never)} />
+      <ListRow wide={wide} chevron label="Replay the quick tour" onPress={() => router.navigate('/tutorial' as never)} />
       <ListRow wide={wide} chevron label="Sign in" onPress={() => router.navigate('/signin' as never)} />
     </View>
   ) : (
@@ -287,6 +288,7 @@ export default function AccountScreen() {
       </ListRow>
       <ListRow wide={wide} chevron label="Numbers to know" onPress={() => router.navigate('/numbers' as never)} />
       <ListRow wide={wide} chevron label="About Element" onPress={() => router.navigate('/about' as never)} />
+      <ListRow wide={wide} chevron label="Replay the quick tour" onPress={() => router.navigate('/tutorial' as never)} />
       <ListRow wide={wide} label="Sign out" onPress={() => void run('session', () => acct.signOut(), 'Signed out.')}>
         {panel('session', null)}
       </ListRow>

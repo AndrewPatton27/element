@@ -21,6 +21,8 @@ import { ScreenShell } from '../components/ScreenShell';
 
 type Mode = 'signin' | 'signup' | 'forgot';
 
+export const AGE_REQUIRED_MESSAGE = 'Please confirm you are 18 or older to create an account.';
+
 // Where the emailed reset link should land: this site's /reset-password page.
 function resetRedirectUrl(): string {
   if (Platform.OS === 'web' && typeof window !== 'undefined') return `${window.location.origin}/reset-password`;
@@ -40,6 +42,7 @@ export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [adult, setAdult] = useState(false); // Create account: "I am 18 or older"
   const [busy, setBusy] = useState(false);
   const [hideSignal, setHideSignal] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +63,7 @@ export default function SignInScreen() {
     setSentTo(null);
     setPassword('');
     setConfirm('');
+    setAdult(false);
   }
 
   async function submit() {
@@ -81,7 +85,8 @@ export default function SignInScreen() {
       }
       return;
     }
-    const problem = validateCredentials(email, password) ?? (mode === 'signup' && password !== confirm ? 'The two passwords don’t match.' : null);
+    const problem = validateCredentials(email, password) ?? (mode === 'signup' && password !== confirm ? 'The two passwords don’t match.' : null) ??
+      (mode === 'signup' && !adult ? AGE_REQUIRED_MESSAGE : null);
     if (problem) return setError(problem);
     setBusy(true);
     try {
@@ -113,7 +118,14 @@ export default function SignInScreen() {
   const label = busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset link';
 
   return (
-    <ScreenShell tab="me" title={HEADERS[mode]}>
+    <ScreenShell
+      tab="me"
+      title={HEADERS[mode]}
+      hideTitle
+      onBack={mode === 'signin' ? undefined : () => switchMode('signin')}
+      backLabel={mode === 'signup' ? 'Back to sign in' : 'Back'}
+      onClose={() => router.dismissTo('/')}
+    >
       <View style={[styles.panel, wide && [styles.panelWide, { backgroundColor: p.surface, borderColor: p.border }]]}>
         <View style={styles.head}>
           <Text style={[styles.title, { color: p.ink, fontSize: wide ? font.title : 28 }]} accessibilityRole="header">
@@ -180,6 +192,20 @@ export default function SignInScreen() {
               onSubmitEditing={submit}
               hideSignal={hideSignal}
             />
+          ) : null}
+          {mode === 'signup' ? (
+            <Pressable
+              onPress={() => setAdult((a) => !a)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: adult }}
+              accessibilityLabel="I am 18 or older"
+              style={styles.age}
+            >
+              <View style={[styles.box, { borderColor: adult ? p.accent : p.borderStrong, backgroundColor: adult ? p.accent : p.surface }]}>
+                {adult ? <Text style={[styles.tick, { color: p.onAccent }]}>✓</Text> : null}
+              </View>
+              <Text style={[styles.ageText, { color: p.inkSoft }]}>I am 18 or older</Text>
+            </Pressable>
           ) : null}
           {mode === 'signin' ? (
             <Pressable onPress={() => switchMode('forgot')} accessibilityRole="button" style={styles.forgot}>
@@ -276,6 +302,10 @@ const styles = StyleSheet.create({
   note: { fontFamily: fonts.sansMedium, fontSize: font.meta, lineHeight: 18, padding: 12, borderRadius: radius.sm, overflow: 'hidden' },
   form: { gap: 14 },
   field: { gap: 6 },
+  age: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
+  box: { width: 22, height: 22, borderRadius: 5, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  tick: { fontFamily: fonts.sansSemi, fontSize: 14, lineHeight: 16 },
+  ageText: { fontFamily: fonts.sans, fontSize: font.chip },
   forgot: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
   linkText: { fontFamily: fonts.sansSemi, fontSize: font.chip },
   message: { fontFamily: fonts.sansMedium, fontSize: font.chip, lineHeight: 20 },

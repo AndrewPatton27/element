@@ -23,6 +23,7 @@ import { FollowingManager } from '../components/FollowingManager';
 import { ScreenShell } from '../components/ScreenShell';
 import { SearchResults } from '../components/SearchResults';
 import { SourcesSheet } from '../components/SourcesSheet';
+import { aiNoticeText, disclaimerText } from '../lib/labels';
 
 export default function FollowingScreen() {
   const p = usePalette();
@@ -122,6 +123,8 @@ export default function FollowingScreen() {
         empty={empty}
       />
 
+      <Text style={[styles.footer, { color: p.muted }]}>{aiNoticeText(config)} · {disclaimerText(config)}</Text>
+
       <SourcesSheet card={sheetCard} config={config} onClose={() => setSheetCard(null)} />
       <DetailSheet card={detailCard} config={config} categories={categories} onClose={() => setDetailCard(null)} />
     </ScreenShell>
@@ -129,6 +132,7 @@ export default function FollowingScreen() {
 }
 
 const styles = StyleSheet.create({
+  footer: { fontFamily: fonts.sans, fontSize: 12, lineHeight: 17, textAlign: 'center', paddingTop: 4 },
   intro: { fontFamily: fonts.sans, fontSize: font.chip, lineHeight: 20, paddingHorizontal: 4 },
   introWide: { fontSize: font.body, lineHeight: 24, maxWidth: 640, paddingHorizontal: 0 },
   section: { fontFamily: fonts.sansSemi, fontSize: 12, letterSpacing: 0.6, textTransform: 'uppercase', paddingHorizontal: 4 },

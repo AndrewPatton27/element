@@ -26,11 +26,11 @@ import { go, TabBar, TopNavLinks, type Tab } from './TabBar';
 
 export type { Tab } from './TabBar';
 
-export function Wordmark({ size = 24 }: { size?: number }) {
+export function Wordmark({ size = 24, text = APP_NAME }: { size?: number; text?: string }) {
   const p = usePalette();
   return (
     <Text style={{ fontFamily: fonts.serif, fontSize: size, letterSpacing: -size * 0.01, color: p.accent }} accessibilityRole="header">
-      {APP_NAME}
+      {text}
     </Text>
   );
 }
@@ -71,11 +71,12 @@ interface ShellProps {
   left?: ReactNode; // wide only: categories column
   aside?: ReactNode; // wide only: right column
   scroll?: boolean; // wrap content in a ScrollView (Numbers, About)
+  noFab?: boolean; // phones: leave out the floating About button (sign-in pages)
   bare?: boolean; // children fill the area under the bars as-is (ScreenShell does its own layout)
   feedTab?: { mode: FeedTab; onChange: (m: FeedTab) => void }; // wide only: top bar tabs (feed screen)
 }
 
-export function Shell({ active, children, left, aside, scroll, bare, feedTab }: ShellProps) {
+export function Shell({ active, children, left, aside, scroll, bare, noFab, feedTab }: ShellProps) {
   const p = usePalette();
   const wide = useWide();
   const { api, config } = useAppData();
@@ -116,10 +117,9 @@ export function Shell({ active, children, left, aside, scroll, bare, feedTab }: 
             onPress={() => go('/about')}
             accessibilityRole="link"
             accessibilityLabel="About"
-            style={[styles.aboutPill, { backgroundColor: p.surface, borderColor: p.borderStrong }]}
+            style={[styles.aboutFabWide, { backgroundColor: p.surface, borderColor: p.borderStrong }]}
           >
-            <InfoIcon color={p.inkSoft} size={20} />
-            <Text style={{ color: p.inkSoft, fontSize: 15, fontFamily: fonts.sansMedium }}>About</Text>
+            <InfoIcon color={p.inkSoft} size={24} />
           </Pressable>
         ) : null}
       </SafeAreaView>
@@ -139,9 +139,27 @@ export function Shell({ active, children, left, aside, scroll, bare, feedTab }: 
       {api.sample ? <SampleBanner /> : null}
       {content}
       <TabBar active={active} signedIn={signedIn} />
+      {active !== 'about' && !noFab ? (
+        <Pressable
+          onPress={() => go('/about')}
+          accessibilityRole="link"
+          accessibilityLabel="About Element"
+          style={[styles.aboutFabNarrow, { backgroundColor: p.surface, borderColor: p.borderStrong }]}
+        >
+          <InfoIcon color={p.inkSoft} size={24} />
+        </Pressable>
+      ) : null}
     </SafeAreaView>
   );
 }
+
+const fabShadow = {
+  shadowColor: '#14211C',
+  shadowOpacity: 0.14,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 3,
+};
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
@@ -179,16 +197,32 @@ const styles = StyleSheet.create({
   asideContent: { paddingBottom: 90 },
   scrollWide: { width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 32, paddingTop: 28, paddingBottom: 100, gap: 16 },
   scrollNarrow: { padding: 20, paddingTop: 24, gap: 16 },
-  aboutPill: {
+  // The floating About button: a round icon button (Web: 48 px, left 32 / bottom 28;
+  // phones: 44 px, left 16, 51 px above the tab bar).
+  aboutFabWide: {
     position: 'absolute',
     left: 32,
     bottom: 28,
-    flexDirection: 'row',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
     alignItems: 'center',
-    gap: 10,
-    minHeight: 44,
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    zIndex: 5,
+    ...fabShadow,
+  },
+  aboutFabNarrow: {
+    position: 'absolute',
+    left: 16,
+    bottom: 116,
+    width: 44,
+    height: 44,
     borderRadius: 22,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+    ...fabShadow,
   },
 });

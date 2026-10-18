@@ -50,3 +50,5 @@ Both sit in the 5-tab bar (phones) and the top bar (wide web). Designs: `docs/de
 ## Signed out
 
 Every control works without an account; choices stay on the device (`lib/localPrefs.ts`) and nothing about the reader is sent. Feed: like / dislike, the card menu (hide topic / source) and Undo, the For you tab (ranked on the device by `lib/localRank.ts`, with a "Sign in to sync across devices" link), the "Edit topics" chip. `/account` shows a "You're not signed in" card plus topics, watchlist and sources saved on the device; settings are Numbers, About and Sign in. `/signin` links back to it. Brief, Search and Following apply the device's hidden topics and sources. The first sign-in merges the device's choices into the account once.
+
+**Design delta (2026-10-18):** About has a back arrow (to Me) and a "How a card is made" section; sign-in and create account have a close X (and a back arrow after the first screen), and create account needs the "I am 18 or older" checkbox; Me (signed in or not) has a "Replay the quick tour" row to `/tutorial`; Following ends with the AI + disclaimer footer line.
