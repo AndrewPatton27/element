@@ -21,6 +21,9 @@ supabase/.temp/
 # Claude Code agents and local settings (reference private docs)
 .claude/
 
+# Kiro steering/config (references private docs like CLAUDE.md)
+.kiro/
+
 # Expo extras
 expo-env.d.ts
 .metro-health-check*

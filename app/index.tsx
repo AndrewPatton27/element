@@ -2,8 +2,9 @@
 // the swipe pager, bottom nav. Wide web: left rail, feed column, Numbers to know
 // on the right. Guests see a gentle sign-in prompt; the feed never needs an account.
 
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { DwellTimer } from '../lib/dwell';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import type { BlurbCard, CategorySlug } from '../contract/types.ts';
 import { useAppData } from '../lib/appData';
@@ -111,7 +112,52 @@ export default function FeedScreen() {
   }, [acct, undo]);
   const clearUndo = useCallback(() => setUndo(null), []);
 
-  const { noteCards, trackView, react } = acct;
+  const { noteCards, trackView, react, trackDwell, trackOpenDetail } = acct;
+
+  // ---- Time spent on cards (signed in only) ----
+  // The clock runs for the card on screen and pauses while the tab is hidden, a
+  // sheet or menu is open, or another screen is on top. Detail time is sent as
+  // 'open_detail' instead. Sending is fire and forget.
+  const dwell = useRef(new DwellTimer());
+  const sendDwell = useCallback((r: { cardId: string; ms: number } | null) => r && trackDwell(r.cardId, r.ms), [trackDwell]);
+  const onActiveCard = useCallback(
+    (c: BlurbCard) => {
+      trackView(c);
+      sendDwell(dwell.current.show(c.id, Date.now()));
+    },
+    [trackView, sendDwell],
+  );
+  useEffect(() => {
+    const t = dwell.current;
+    if (focused) t.resume('away', Date.now());
+    else t.pause('away', Date.now());
+  }, [focused]);
+  const overlay = sheetCard !== null || detailCard !== null || menuCard !== null;
+  useEffect(() => {
+    const t = dwell.current;
+    if (overlay) t.pause('sheet', Date.now());
+    else t.resume('sheet', Date.now());
+  }, [overlay]);
+  useEffect(() => {
+    if (detailCard && signedIn) trackOpenDetail(detailCard);
+  }, [detailCard, signedIn, trackOpenDetail]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') dwell.current.resume('hidden', Date.now());
+      else dwell.current.pause('hidden', Date.now());
+    });
+    // Closing the tab: send what we have (best effort).
+    const onHide = () => sendDwell(dwell.current.finish(Date.now()));
+    if (Platform.OS === 'web' && typeof window !== 'undefined') window.addEventListener('pagehide', onHide);
+    return () => {
+      sub.remove();
+      if (Platform.OS === 'web' && typeof window !== 'undefined') window.removeEventListener('pagehide', onHide);
+    };
+  }, [sendDwell]);
+  useEffect(() => {
+    // Signing out (or a different user) ends the current look without sending it.
+    dwell.current.finish(Date.now());
+  }, [acct.user?.id]);
   useEffect(() => {
     if (forYou) noteCards(state.items);
   }, [forYou, state.items, noteCards]);
@@ -142,7 +188,7 @@ export default function FeedScreen() {
         wide={wide}
         reactions={signedIn ? acct.reactions : undefined}
         onReact={signedIn ? react : undefined}
-        onActiveCard={signedIn && focused ? trackView : undefined}
+        onActiveCard={signedIn && focused ? onActiveCard : undefined}
         active={focused && sheetCard === null && detailCard === null && menuCard === null}
         onMore={signedIn ? setMenuCard : undefined}
       />

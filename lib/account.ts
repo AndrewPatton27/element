@@ -3,7 +3,7 @@
 // plain fetch and the user's access token. Mock: in-memory accounts over the sample
 // fixtures, so sample mode works with no back end. No React imports.
 
-import type { BlurbCard, FeedPage } from '../contract/types.ts';
+import type { BlurbCard, Category, FeedPage } from '../contract/types.ts';
 import type { FeedForYouParams, SetPrefsParams, TrackParams } from '../contract/account.ts';
 import { clampLimit } from './feedLogic.ts';
 import { EMPTY_PREFS, mockForYouOrder, type Feedback, type TrackEvent, type UserPrefs } from './accountLogic.ts';
@@ -18,7 +18,7 @@ import {
   type Session,
 } from './session.ts';
 import { defaultStore, type KeyValueStore } from './storage.ts';
-import { parseFeedPage } from './types.ts';
+import { parseCategories, parseFeedPage } from './types.ts';
 
 export type SignUpResult = { status: 'signed_in' } | { status: 'confirm_email' };
 export type EmailChangeResult = 'changed' | 'confirm_sent';
@@ -37,7 +37,8 @@ export interface AccountApi {
   /** Saves followed topics (and optionally hidden ones); marks the user onboarded. */
   setPrefs(followed: string[], hidden?: string[], hiddenSources?: string[]): Promise<UserPrefs>;
   feedForYou(cursor: string | null, limit?: number): Promise<FeedPage>;
-  track(cardId: string, event: TrackEvent): Promise<void>;
+  /** `ms` only with 'dwell' (how long the card was looked at). */
+  track(cardId: string, event: TrackEvent, ms?: number): Promise<void>;
   /** Deletes the user's prefs and events. The login stays (deleted in the dashboard). */
   deleteMyData(): Promise<void>;
   /** Emails a reset link. Resolves the same way whether or not the email has an account. */
@@ -52,6 +53,9 @@ export interface AccountApi {
   deleteAccount(): Promise<void>;
   /** Why the user was signed out without asking (an expired session), once; null otherwise. */
   takeSignOutReason(): string | null;
+  /** Topics for the signed-in pickers, including followed or hidden ones with no cards right now
+   *  (api.my_categories, migration 070000). null when the server doesn't have it yet. */
+  myCategories(): Promise<Category[] | null>;
 }
 
 export class AccountError extends Error {
@@ -79,7 +83,14 @@ export const ACCOUNT_RPC = {
     }),
   },
   feedForYou: { fn: 'feed_for_you', args: (cursor: string | null, limit: number): FeedForYouParams => ({ p_cursor: cursor, p_limit: limit }) },
-  track: { fn: 'track', args: (cardId: string, event: TrackEvent): TrackParams => ({ p_blurb: cardId, p_kind: event }) },
+  track: {
+    fn: 'track',
+    args: (cardId: string, event: TrackEvent, ms?: number): TrackParams => ({
+      p_blurb: cardId,
+      p_kind: event,
+      ...(ms !== undefined ? { p_ms: ms } : {}),
+    }),
+  },
   deleteMyData: { fn: 'delete_my_data', args: () => ({}) },
   // supabase/migrations/20261017040000_account_delete.sql
   deleteAccount: { fn: 'delete_account', args: () => ({}) },
@@ -280,8 +291,8 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
     async feedForYou(cursor, limit) {
       return parseFeedPage(await rpc(ACCOUNT_RPC.feedForYou.fn, ACCOUNT_RPC.feedForYou.args(cursor, clampLimit(limit))));
     },
-    async track(cardId, event) {
-      await rpc(ACCOUNT_RPC.track.fn, ACCOUNT_RPC.track.args(cardId, event));
+    async track(cardId, event, ms) {
+      await rpc(ACCOUNT_RPC.track.fn, ACCOUNT_RPC.track.args(cardId, event, ms));
     },
     async deleteMyData() {
       await rpc(ACCOUNT_RPC.deleteMyData.fn, ACCOUNT_RPC.deleteMyData.args());
@@ -328,6 +339,13 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
       await rpc(ACCOUNT_RPC.deleteAccount.fn, ACCOUNT_RPC.deleteAccount.args());
       setSession(null); // the login no longer exists, so there is nothing to log out on the server
     },
+    async myCategories() {
+      try {
+        return parseCategories(await rpc('my_categories', {}));
+      } catch {
+        return null; // older server (before 070000): use the public list
+      }
+    },
     takeSignOutReason() {
       const r = signOutReason;
       signOutReason = null;
@@ -341,7 +359,13 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
 // Sample mode: any email + an 8+ character password works; nothing leaves the device.
 export function createMockAccount(cards: () => BlurbCard[], store: KeyValueStore = defaultStore()): AccountApi {
   const KEY = 'element.mock-account.v1';
-  type State = { user: AuthUser | null; prefs: Record<string, UserPrefs>; feedback: Record<string, Record<string, Feedback>> };
+  type TrackedEvent = { cardId: string; event: TrackEvent; ms?: number };
+  type State = {
+    user: AuthUser | null;
+    prefs: Record<string, UserPrefs>;
+    feedback: Record<string, Record<string, Feedback>>;
+    events?: TrackedEvent[]; // last 50 tracked events, so sample mode shows what would be sent
+  };
   let state: State = { user: null, prefs: {}, feedback: {} };
   try {
     const saved = store.get(KEY);
@@ -408,8 +432,10 @@ export function createMockAccount(cards: () => BlurbCard[], store: KeyValueStore
       const items = ordered.slice(offset, offset + n);
       return wait({ items, next_cursor: offset + items.length < ordered.length ? String(offset + items.length) : null });
     },
-    async track(cardId, event) {
+    async track(cardId, event, ms) {
       const u = need();
+      state.events = [...(state.events ?? []), { cardId, event, ...(ms !== undefined ? { ms } : {}) }].slice(-50);
+      save();
       const fb = { ...(state.feedback[u.id] ?? {}) };
       if (event === 'like' || event === 'dislike') fb[cardId] = event;
       else if (event === 'clear') delete fb[cardId];
@@ -450,5 +476,6 @@ export function createMockAccount(cards: () => BlurbCard[], store: KeyValueStore
       await wait(null);
     },
     takeSignOutReason: () => null,
+    myCategories: async () => null, // sample mode: the fixture list already has every topic
   };
 }

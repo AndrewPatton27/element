@@ -129,7 +129,7 @@ export default function AboutScreen() {
           items={[
             'Trending: the most important cards first, balanced with freshness and how much readers engage with them.',
             'Latest: newest first.',
-            'For you (with an account): learns from your favorite and hidden topics, the sources you switch off, and the cards you like or dislike. Only taps are stored, such as likes, cards viewed and sources opened.',
+            'For you (with an account): learns from your favorite and hidden topics, the sources you switch off, the cards you like or dislike, and how long you spend on each card. Only taps and time on cards are stored (likes, cards viewed, sources and details opened, seconds per card), never anything you type.',
           ]}
         />
       </Section>
@@ -138,7 +138,7 @@ export default function AboutScreen() {
         <Bullets
           items={[
             'Reading never needs an account.',
-            'With an account we store your email, the topics you pick, and your reactions and taps, only to tailor your feed.',
+            'With an account we store your email, the topics and sources you pick, your reactions and taps, and how long you look at each card, only to tailor your feed.',
             'Your password is handled by our sign-in service (Supabase Auth), which keeps only a one-way hash of it. We never see or store the password itself.',
             'On the Account screen you can delete your data or your whole account at any time.',
           ]}

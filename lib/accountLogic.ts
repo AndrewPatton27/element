@@ -4,7 +4,7 @@ import type { BlurbCard } from '../contract/types.ts';
 import { mockRankScore } from './feedLogic.ts';
 
 export type Feedback = 'like' | 'dislike';
-export type TrackEvent = 'view' | 'like' | 'dislike' | 'open_source' | 'clear';
+export type TrackEvent = 'view' | 'like' | 'dislike' | 'open_source' | 'open_detail' | 'dwell' | 'clear';
 
 export interface UserPrefs {
   followed: string[];

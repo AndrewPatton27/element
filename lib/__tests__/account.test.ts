@@ -485,3 +485,26 @@ test('mock account: prefs saved by an older build get hiddenSources filled in', 
   assert.deepEqual(p.followed, ['tech']);
   assert.deepEqual((await acct.setPrefs(['tech'], [], ['nasa'])).hiddenSources, ['nasa']);
 });
+
+test('track sends p_ms only with dwell', () => {
+  assert.deepEqual(ACCOUNT_RPC.track.args('c1', 'dwell', 4200), { p_blurb: 'c1', p_kind: 'dwell', p_ms: 4200 });
+  assert.deepEqual(ACCOUNT_RPC.track.args('c1', 'open_detail'), { p_blurb: 'c1', p_kind: 'open_detail' });
+  assert.deepEqual(ACCOUNT_RPC.track.args('c1', 'like'), { p_blurb: 'c1', p_kind: 'like' });
+});
+
+test('my_categories: used when the server has it, null before migration 070000', async () => {
+  const store = memoryStore();
+  store.set('element.session.v1', JSON.stringify({ access_token: 'acc', refresh_token: 'r', expires_at: NOW + 3600, user: { id: 'u1', email: 'a@b.co' } }));
+  let has = true;
+  const { fn } = fakeFetch((url) =>
+    url.endsWith('/rpc/my_categories')
+      ? has
+        ? { status: 200, body: [{ slug: 'deals', name: 'Deals', sort_order: 2, followed: false, hidden: true }, { slug: 'world', name: 'World', sort_order: 1, followed: true, hidden: false }] }
+        : { status: 404, body: { message: 'Could not find the function api.my_categories' } }
+      : { status: 200, body: {} },
+  );
+  const acct = createSupabaseAccount({ url: 'https://p', key: 'k', fetchFn: fn, store, now: () => NOW });
+  assert.deepEqual((await acct.myCategories())?.map((c) => c.slug), ['world', 'deals']);
+  has = false;
+  assert.equal(await acct.myCategories(), null);
+});

@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-nati
 import { SOURCES } from '../lib/sourcesInfo';
 import { SOURCE_KEYS, toggleSource } from '../lib/sourceKeys';
 import { router } from 'expo-router';
+import type { Category } from '../contract/types.ts';
 import { useAccount } from '../lib/accountContext';
 import { useAppData } from '../lib/appData';
 import { categoryName } from '../lib/format';
@@ -23,7 +24,11 @@ type Msg = { text: string; error: boolean };
 
 export default function AccountScreen() {
   const p = usePalette();
-  const { categories } = useAppData();
+  const { categories: publicCategories } = useAppData();
+  // Signed in: my_categories also lists favorite or hidden topics that have no cards right now,
+  // so a hidden topic can always be un-hidden. Falls back to the public list.
+  const [myCategories, setMyCategories] = useState<Category[] | null>(null);
+  const categories = myCategories ?? publicCategories;
   const acct = useAccount();
   const [topics, setTopics] = useState<{ followed: string[]; hidden: string[] }>({ followed: [], hidden: [] });
   const [busy, setBusy] = useState<Section | null>(null);
@@ -39,6 +44,13 @@ export default function AccountScreen() {
   useEffect(() => {
     if (!acct.user) router.replace('/signin' as never);
   }, [acct.user]);
+  useEffect(() => {
+    let alive = true;
+    if (acct.user) void acct.account.myCategories().then((c) => alive && c && c.length && setMyCategories(c));
+    return () => {
+      alive = false;
+    };
+  }, [acct.account, acct.user]);
   useEffect(() => {
     if (acct.prefs) setTopics({ followed: acct.prefs.followed, hidden: acct.prefs.hidden });
   }, [acct.prefs]);

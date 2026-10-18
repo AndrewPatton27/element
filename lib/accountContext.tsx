@@ -31,6 +31,8 @@ export interface AccountState {
   react(card: BlurbCard, pressed: Feedback): void;
   noteCards(cards: BlurbCard[]): void; // pick up my_reaction from For you cards
   trackView(card: BlurbCard): void;
+  trackDwell(cardId: string, ms: number): void;
+  trackOpenDetail(card: BlurbCard): void;
   deleteMyData(): Promise<void>;
   refreshPrefs(): Promise<UserPrefs | null>;
   /** "Please sign in again." after an expired session; cleared by clearNotice. */
@@ -191,6 +193,13 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
       trackView(card) {
         if (!user || !views.current.shouldTrack(card.id)) return;
         account.track(card.id, 'view').catch(() => undefined);
+      },
+      // Fire and forget: tracking never blocks or breaks the UI.
+      trackDwell(cardId, ms) {
+        if (user) account.track(cardId, 'dwell', ms).catch(() => undefined);
+      },
+      trackOpenDetail(card) {
+        if (user) account.track(card.id, 'open_detail').catch(() => undefined);
       },
       async deleteMyData() {
         await account.deleteMyData();
