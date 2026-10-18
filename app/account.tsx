@@ -13,6 +13,7 @@ import { useAppData } from '../lib/appData';
 import { categoryName } from '../lib/format';
 import { DELETE_CONFIRM_WORD, deleteConfirmed, validateEmail, validateNewPassword } from '../lib/session';
 import { usePalette } from '../lib/useTheme';
+import { userMessage } from '../lib/errors';
 import { fonts } from '../lib/theme';
 import { PasswordField, fieldStyles } from '../components/PasswordField';
 import { Shell } from '../components/Shell';
@@ -62,7 +63,7 @@ export default function AccountScreen() {
       const text = await work();
       setMsgs((m) => ({ ...m, [section]: { text: text || done, error: false } }));
     } catch (e) {
-      setMsgs((m) => ({ ...m, [section]: { text: e instanceof Error ? e.message : 'Something went wrong.', error: true } }));
+      setMsgs((m) => ({ ...m, [section]: { text: userMessage(e), error: true } }));
     } finally {
       setBusy(null);
     }

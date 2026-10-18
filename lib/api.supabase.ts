@@ -3,6 +3,7 @@
 // No React imports, so node --test can run it with a fake fetch.
 
 import type { Api, FeedRequest } from './api.ts';
+import { NETWORK_MESSAGE, friendlyHttpError, parseErrorBody, warnRaw } from './errors.ts';
 import { clampLimit } from './feedLogic.ts';
 import { parseAppConfig, parseCategories, parseFeedPage, parseMacroFacts } from './types.ts';
 
@@ -15,10 +16,13 @@ export interface SupabaseOptions {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** The server's own text, for developers; `message` is the short friendly line readers see. */
+  detail?: string;
+  constructor(message: string, status: number, detail?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -67,18 +71,16 @@ export function createSupabaseApi(opts: SupabaseOptions): Api {
     try {
       res = await doFetch(plan.url, plan.init);
     } catch {
-      throw new ApiError('Could not reach the server. Check your connection and try again.', 0);
+      throw new ApiError(NETWORK_MESSAGE, 0);
     }
     if (!res.ok) {
-      // PostgREST puts a short reason in `message`; never echo request headers (they hold the key).
-      let reason = '';
-      try {
-        const body = (await res.json()) as { message?: unknown };
-        if (typeof body.message === 'string') reason = `: ${body.message}`;
-      } catch {
-        // body was not JSON
-      }
-      throw new ApiError(`Server returned ${res.status}${reason}`, res.status);
+      // PostgREST puts a short reason in `message` and a `code`. Readers get a friendly line;
+      // the raw text stays on `detail` and in a dev-only console warning. Request headers
+      // (they hold the key) are never echoed.
+      const { message, code } = parseErrorBody(await res.json().catch(() => null));
+      const detail = `HTTP ${res.status}${code ? ` ${code}` : ''}${message ? `: ${message}` : ''}`;
+      warnRaw('api error', detail);
+      throw new ApiError(friendlyHttpError(res.status, message, code), res.status, detail);
     }
     return res.json();
   }

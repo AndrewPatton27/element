@@ -71,15 +71,21 @@ export default function FeedScreen() {
   }, [params.tab, signedIn]);
 
   const forYou = mode === 'for_you';
-  const { state, loadMore, retry } = useFeed(api, { mode, category: forYou ? null : category, user: acct.user?.id ?? null }, acct.account);
-  const showSources = useCallback((c: BlurbCard) => setSheetCard(c), []);
-  const openDetail = useCallback((c: BlurbCard) => setDetailCard(c), []);
-
   // Signed in: hidden topics leave the feed and the chips at once (the server filters too).
   const hidden = signedIn ? (acct.prefs?.hidden ?? []) : [];
   const hiddenSources = signedIn ? (acct.prefs?.hiddenSources ?? []) : [];
   const sourcesSupported = signedIn && acct.prefs?.hiddenSources != null;
-  const items = withoutHiddenSources(withoutHidden(state.items, hidden), hiddenSources);
+  // The same filter drives the list on screen and the paging, so "end of feed" and "load
+  // more" are decided on what the reader can actually see.
+  const visible = useCallback(
+    (cards: BlurbCard[]) => withoutHiddenSources(withoutHidden(cards, hidden), hiddenSources),
+    [hidden, hiddenSources],
+  );
+  const { state, loadMore, retry } = useFeed(api, { mode, category: forYou ? null : category, user: acct.user?.id ?? null }, acct.account, visible);
+  const showSources = useCallback((c: BlurbCard) => setSheetCard(c), []);
+  const openDetail = useCallback((c: BlurbCard) => setDetailCard(c), []);
+
+  const items = visible(state.items);
   const chipCategories = withoutHidden(categories, hidden);
   useEffect(() => {
     if (category && hidden.includes(category)) setCategory(null);
@@ -113,7 +119,7 @@ export default function FeedScreen() {
   }, [acct, undo]);
   const clearUndo = useCallback(() => setUndo(null), []);
 
-  const { noteCards, trackView, react, trackDwell, trackOpenDetail } = acct;
+  const { noteCards, trackView, react, trackDwell, trackDwellOnExit, trackOpenDetail } = acct;
 
   // ---- Time spent on cards (signed in only) ----
   // The clock runs for the card on screen and pauses while the tab is hidden, a
@@ -147,14 +153,18 @@ export default function FeedScreen() {
       if (s === 'active') dwell.current.resume('hidden', Date.now());
       else dwell.current.pause('hidden', Date.now());
     });
-    // Closing the tab: send what we have (best effort).
-    const onHide = () => sendDwell(dwell.current.finish(Date.now()));
+    // Closing the tab: send what we have. keepalive lets the request outlive the page and keeps
+    // the auth header (sendBeacon cannot set headers).
+    const onHide = () => {
+      const r = dwell.current.finish(Date.now());
+      if (r) trackDwellOnExit(r.cardId, r.ms);
+    };
     if (Platform.OS === 'web' && typeof window !== 'undefined') window.addEventListener('pagehide', onHide);
     return () => {
       sub.remove();
       if (Platform.OS === 'web' && typeof window !== 'undefined') window.removeEventListener('pagehide', onHide);
     };
-  }, [sendDwell]);
+  }, [trackDwellOnExit]);
   useEffect(() => {
     // Signing out (or a different user) ends the current look without sending it.
     dwell.current.finish(Date.now());
@@ -265,8 +275,10 @@ export default function FeedScreen() {
       {wide ? (
         <View style={styles.wideTop}>
           <NumbersTicker api={api} config={config} />
-          <Wordmark size={30} />
-          <SortToggle mode={mode} onChange={setMode} wide forYou={signedIn} />
+          <View style={styles.wideBrand}>
+            <Wordmark size={30} />
+            <SortToggle mode={mode} onChange={setMode} wide forYou={signedIn} />
+          </View>
           {chips}
           {prompt}
         </View>
@@ -303,6 +315,9 @@ const styles = StyleSheet.create({
   brand: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4, minHeight: 44, justifyContent: 'center' },
   tabs: { paddingHorizontal: 20 },
   wideTop: { paddingTop: 28, gap: 14 },
+  // Logo + the Trending/Latest tabs grouped and left-anchored, with the tabs
+  // centred under the logo (alignItems centres them on the shared vertical axis).
+  wideBrand: { alignSelf: 'flex-start', alignItems: 'center', gap: 14 },
   inlineError: { alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, marginTop: 6 },
   prompt: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingLeft: 14, paddingRight: 8, minHeight: 40 },
   promptNarrow: { marginHorizontal: 20, marginTop: 8 },

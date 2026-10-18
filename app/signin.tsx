@@ -9,6 +9,7 @@ import { isOnboardingSkipped, useAccount } from '../lib/accountContext';
 import { needsOnboarding } from '../lib/accountLogic';
 import { RESET_SENT_MESSAGE, validateCredentials, validateEmail } from '../lib/session';
 import { usePalette } from '../lib/useTheme';
+import { userMessage } from '../lib/errors';
 import { fonts } from '../lib/theme';
 import { PasswordField, fieldStyles } from '../components/PasswordField';
 import { Shell } from '../components/Shell';
@@ -64,7 +65,7 @@ export default function SignInScreen() {
         setInfo(RESET_SENT_MESSAGE);
         setSentTo(email.trim());
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not send the reset link.');
+        setError(userMessage(e, 'Could not send the reset link.'));
       } finally {
         setBusy(false);
       }
@@ -89,7 +90,7 @@ export default function SignInScreen() {
       if (needsOnboarding(true, prefs, isOnboardingSkipped(acct.account.currentUser()?.id))) router.replace('/onboarding' as never);
       else router.dismissTo('/');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Sign-in failed.');
+      setError(userMessage(e, 'Sign-in failed.'));
     } finally {
       // Never keep the password around (or on screen) after a submit.
       setPassword('');

@@ -5,7 +5,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { cardTime, categoryName, clampHeadline, eventLabel } from '../lib/format';
-import { cardLabels, shareAlikeCredit } from '../lib/labels';
+import { cardLabels, disclaimerPlacement, shareAlikeCredit } from '../lib/labels';
 import { OPEN_DETAIL_HINT, cardDetail } from '../lib/detail';
 import { usePalette } from '../lib/useTheme';
 import type { Palette } from '../lib/theme';
@@ -56,6 +56,10 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
   const labels = cardLabels(card, config);
   const credit = shareAlikeCredit(card, config);
   const badge = badgeFor(card, p);
+  const reactFn = typeof onReact === 'function' ? onReact : undefined;
+  // The disclaimer is built once and placed in exactly one slot (see disclaimerPlacement).
+  const place = disclaimerPlacement(reactFn !== undefined);
+  const disclaimer = <Disclaimer text={labels.disclaimer} />;
   // Design size is 32 (42 on wide); long headlines and short screens step down so the body fits.
   const headlineSize = wide ? 42 : compact ? 26 : card.headline.length > 60 ? 28 : 32;
   return (
@@ -149,16 +153,13 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
       <View style={styles.spacer} />
 
       <View style={[styles.footer, { borderTopColor: p.divider }]}>
-        {onReact ? (
+        {reactFn ? (
           <View style={styles.reactRow}>
-            <ReactButton kind="like" on={reaction === 'like'} onPress={() => onReact(card, 'like')} />
-            <ReactButton kind="dislike" on={reaction === 'dislike'} onPress={() => onReact(card, 'dislike')} />
+            <ReactButton kind="like" on={reaction === 'like'} onPress={() => reactFn(card, 'like')} />
+            <ReactButton kind="dislike" on={reaction === 'dislike'} onPress={() => reactFn(card, 'dislike')} />
           </View>
-        ) : (
-          <View style={styles.footerText}>
-            <Disclaimer text={labels.disclaimer} />
-          </View>
-        )}
+        ) : null}
+        {place.inline ? <View style={styles.footerText}>{disclaimer}</View> : null}
         {onNext ? (
           <Pressable onPress={onNext} accessibilityRole="button" accessibilityLabel="Next card" style={styles.next}>
             {wide ? null : <ChevronUpIcon color={p.muted} />}
@@ -166,11 +167,7 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
           </Pressable>
         ) : null}
       </View>
-      {onReact ? (
-        <View style={styles.disclaimerAlone}>
-          <Disclaimer text={labels.disclaimer} />
-        </View>
-      ) : null}
+      {place.below ? <View style={styles.disclaimerAlone}>{disclaimer}</View> : null}
     </View>
   );
 }

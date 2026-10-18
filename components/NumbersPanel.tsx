@@ -9,6 +9,7 @@ import { changeText, factA11yLabel, shortDate } from '../lib/format';
 import { noticesFor } from '../lib/labels';
 import { plainExplainer } from '../lib/seriesCopy';
 import { usePalette } from '../lib/useTheme';
+import { userMessage } from '../lib/errors';
 import { fonts } from '../lib/theme';
 import { changeColor } from './DataCard';
 import { openUrl } from './SourceChip';
@@ -24,7 +25,7 @@ export function useNumbers(api: Api) {
     api
       .numbersToKnow()
       .then((f) => alive && setFacts(f))
-      .catch((e: unknown) => alive && setError(e instanceof Error ? e.message : 'Could not load numbers.'));
+      .catch((e: unknown) => alive && setError(userMessage(e, 'Could not load numbers.')));
     return () => {
       alive = false;
     };

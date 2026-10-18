@@ -32,6 +32,7 @@ export interface AccountState {
   noteCards(cards: BlurbCard[]): void; // pick up my_reaction from For you cards
   trackView(card: BlurbCard): void;
   trackDwell(cardId: string, ms: number): void;
+  trackDwellOnExit(cardId: string, ms: number): void;
   trackOpenDetail(card: BlurbCard): void;
   deleteMyData(): Promise<void>;
   refreshPrefs(): Promise<UserPrefs | null>;
@@ -197,6 +198,10 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
       // Fire and forget: tracking never blocks or breaks the UI.
       trackDwell(cardId, ms) {
         if (user) account.track(cardId, 'dwell', ms).catch(() => undefined);
+      },
+      // Page is closing: keepalive send (see AccountApi.trackDwellOnExit).
+      trackDwellOnExit(cardId, ms) {
+        if (user) account.trackDwellOnExit(cardId, ms);
       },
       trackOpenDetail(card) {
         if (user) account.track(card.id, 'open_detail').catch(() => undefined);

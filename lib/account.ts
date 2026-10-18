@@ -7,6 +7,7 @@ import type { BlurbCard, Category, FeedPage } from '../contract/types.ts';
 import type { FeedForYouParams, SetPrefsParams, TrackParams } from '../contract/account.ts';
 import { clampLimit } from './feedLogic.ts';
 import { EMPTY_PREFS, mockForYouOrder, type Feedback, type TrackEvent, type UserPrefs } from './accountLogic.ts';
+import { NETWORK_MESSAGE, friendlyHttpError, parseErrorBody, warnRaw } from './errors.ts';
 import {
   RESET_RATE_LIMIT_MESSAGE,
   SIGN_IN_AGAIN_MESSAGE,
@@ -39,6 +40,10 @@ export interface AccountApi {
   feedForYou(cursor: string | null, limit?: number): Promise<FeedPage>;
   /** `ms` only with 'dwell' (how long the card was looked at). */
   track(cardId: string, event: TrackEvent, ms?: number): Promise<void>;
+  /** The last dwell when the page is closing: fire and forget, sent with fetch `keepalive` so it
+   *  survives the unload and keeps the auth header. Uses the stored token as it is (no refresh
+   *  is possible while closing); skipped when signed out or the token has expired. */
+  trackDwellOnExit(cardId: string, ms: number): void;
   /** Deletes the user's prefs and events. The login stays (deleted in the dashboard). */
   deleteMyData(): Promise<void>;
   /** Emails a reset link. Resolves the same way whether or not the email has an account. */
@@ -60,11 +65,39 @@ export interface AccountApi {
 
 export class AccountError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** The server's own text, for developers; `message` is the short friendly line readers see. */
+  detail?: string;
+  constructor(message: string, status: number, detail?: string) {
     super(message);
     this.name = 'AccountError';
     this.status = status;
+    this.detail = detail;
   }
+}
+
+export interface PlannedRpc {
+  url: string;
+  init: { method: 'POST'; headers: Record<string, string>; body: string; keepalive?: boolean };
+}
+
+// One place builds an `api` schema RPC request (normal calls and the page-hide send).
+export function planRpc(base: string, key: string, token: string, fn: string, args: object, keepalive = false): PlannedRpc {
+  return {
+    url: `${base}/rest/v1/rpc/${fn}`,
+    init: {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'Accept-Profile': 'api',
+        'Content-Profile': 'api',
+      },
+      body: JSON.stringify(args),
+      ...(keepalive ? { keepalive: true } : {}),
+    },
+  };
 }
 
 const SESSION_KEY = 'element.session.v1';
@@ -226,28 +259,24 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
 
   async function rpc(fn: string, args: object): Promise<unknown> {
     const token = await accessToken();
-    if (!token) throw new AccountError('Please sign in again.', 401);
+    if (!token) throw new AccountError(SIGN_IN_AGAIN_MESSAGE, 401);
+    const plan = planRpc(opts.url, opts.key, token, fn, args);
     let res: Response;
     try {
-      res = await doFetch(`${opts.url}/rest/v1/rpc/${fn}`, {
-        method: 'POST',
-        headers: {
-          apikey: opts.key,
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          'Accept-Profile': 'api',
-          'Content-Profile': 'api',
-        },
-        body: JSON.stringify(args),
-      });
+      res = await doFetch(plan.url, plan.init);
     } catch {
-      throw new AccountError('Could not reach the server. Check your connection and try again.', 0);
+      throw new AccountError(NETWORK_MESSAGE, 0);
     }
     if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { message?: unknown } | null;
-      const reason = body && typeof body.message === 'string' ? `: ${body.message}` : '';
-      throw new AccountError(`Server returned ${res.status}${reason}`, res.status);
+      const { message, code } = parseErrorBody(await res.json().catch(() => null));
+      const detail = `HTTP ${res.status}${code ? ` ${code}` : ''}${message ? `: ${message}` : ''}`;
+      warnRaw(`rpc ${fn} failed`, detail);
+      // The account delete has its own wording: the generic "no access" line would confuse.
+      const friendly =
+        fn === ACCOUNT_RPC.deleteAccount.fn && res.status !== 0 && res.status !== 401
+          ? 'We could not delete the account right now. Try again later.'
+          : friendlyHttpError(res.status, message, code);
+      throw new AccountError(friendly, res.status, detail);
     }
     if (res.status === 204) return null;
     const text = await res.text();
@@ -293,6 +322,16 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
     },
     async track(cardId, event, ms) {
       await rpc(ACCOUNT_RPC.track.fn, ACCOUNT_RPC.track.args(cardId, event, ms));
+    },
+    trackDwellOnExit(cardId, ms) {
+      // Synchronous on purpose: nothing may be awaited while the page unloads.
+      if (!session || session.expires_at <= now()) return;
+      const plan = planRpc(opts.url, opts.key, session.access_token, ACCOUNT_RPC.track.fn, ACCOUNT_RPC.track.args(cardId, 'dwell', ms), true);
+      try {
+        void doFetch(plan.url, plan.init).catch(() => undefined);
+      } catch {
+        // tracking never breaks closing the page
+      }
     },
     async deleteMyData() {
       await rpc(ACCOUNT_RPC.deleteMyData.fn, ACCOUNT_RPC.deleteMyData.args());
@@ -441,6 +480,11 @@ export function createMockAccount(cards: () => BlurbCard[], store: KeyValueStore
       else if (event === 'clear') delete fb[cardId];
       else return;
       state.feedback[u.id] = fb;
+      save();
+    },
+    trackDwellOnExit(cardId, ms) {
+      if (!state.user) return;
+      state.events = [...(state.events ?? []), { cardId, event: 'dwell' as const, ms }].slice(-50);
       save();
     },
     async deleteMyData() {

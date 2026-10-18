@@ -9,6 +9,7 @@ import * as Linking from 'expo-linking';
 import { useAccount } from '../lib/accountContext';
 import { parseRecoveryLink, validateNewPassword, type RecoveryLink } from '../lib/session';
 import { usePalette } from '../lib/useTheme';
+import { userMessage } from '../lib/errors';
 import { fonts } from '../lib/theme';
 import { PasswordField } from '../components/PasswordField';
 import { Shell } from '../components/Shell';
@@ -56,7 +57,7 @@ export default function ResetPasswordScreen() {
       await acct.completePasswordRecovery(link, password);
       setDone(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not set the new password.');
+      setError(userMessage(e, 'Could not set the new password.'));
     } finally {
       setPassword('');
       setConfirm('');

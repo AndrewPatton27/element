@@ -1,11 +1,24 @@
 // Loads the feed page by page for one mode + category. Switching either resets
 // the list and cursor; late responses for an old filter are dropped by the reducer.
+// Paging looks at the list the reader can SEE (hidden topics and sources removed): a page
+// that filters down to nothing keeps fetching, a bounded number of times (lib/feedLogic).
 
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { Api } from './api.ts';
 import type { AccountApi } from './account.ts';
 import { FEED_PAGE_SIZE } from './config.ts';
-import { canLoadMore, feedKey, feedReducer, initialFeedState, type FeedQuery, type FeedState } from './feedLogic.ts';
+import { isInvalidCursor, rawDetail, userMessage } from './errors.ts';
+import {
+  feedKey,
+  feedReducer,
+  initialFeedState,
+  loadFeedPages,
+  needsRefill,
+  shouldLoadMore,
+  type CardFilter,
+  type FeedQuery,
+  type FeedState,
+} from './feedLogic.ts';
 
 export interface UseFeed {
   state: FeedState;
@@ -13,42 +26,48 @@ export interface UseFeed {
   retry: () => void;
 }
 
-function message(err: unknown): string {
-  return err instanceof Error ? err.message : 'Something went wrong.';
-}
+const SHOW_ALL: CardFilter = (cards) => cards;
 
-export function useFeed(api: Api, query: FeedQuery, account?: AccountApi): UseFeed {
+// `filter` removes what the reader hid (its identity may change on every render).
+export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter: CardFilter = SHOW_ALL): UseFeed {
   const key = feedKey(query);
   const [state, dispatch] = useReducer(feedReducer, key, initialFeedState);
   const stateRef = useRef(state);
   stateRef.current = state;
-  const inflight = useRef<string | null>(null);
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
+  // The fetch chain now running (one per key at a time). A newer chain makes an older one stop.
+  const busy = useRef<{ id: number; key: string } | null>(null);
+  const nextId = useRef(0);
+  // The last failure was a rejected cursor: retry must start the list again.
+  const restart = useRef(false);
 
   const load = useCallback(
-    async (k: string, cursor: string | null, hops = 0): Promise<void> => {
-      const tag = `${k}@${cursor ?? ''}`;
-      if (inflight.current === tag) return;
-      inflight.current = tag;
-      dispatch({ type: 'request', key: k });
+    async (k: string, cursor: string | null): Promise<void> => {
+      if (busy.current?.key === k) return;
+      const id = ++nextId.current;
+      busy.current = { id, key: k };
+      restart.current = false;
       try {
-        const page =
-          query.mode === 'for_you'
-            ? await (account as AccountApi).feedForYou(cursor, FEED_PAGE_SIZE)
-            : await api.feed({ mode: query.mode, category: query.category, cursor, limit: FEED_PAGE_SIZE });
-        if (page.items.length === 0 && page.next_cursor && page.next_cursor !== cursor) {
-          // Every card on this page was unusable: skip ahead (at most 3 pages), then end.
-          if (hops < 3) {
-            inflight.current = null;
-            return load(k, page.next_cursor, hops + 1);
-          }
-          dispatch({ type: 'page', key: k, page: { items: [], next_cursor: null } });
-          return;
-        }
-        dispatch({ type: 'page', key: k, page });
+        await loadFeedPages({
+          cursor,
+          // From the first page nothing is known yet (the reducer resets in the same tick).
+          known: cursor === null ? [] : stateRef.current.items,
+          filter: (cards) => filterRef.current(cards),
+          fetchPage: (c) =>
+            query.mode === 'for_you'
+              ? (account as AccountApi).feedForYou(c, FEED_PAGE_SIZE)
+              : api.feed({ mode: query.mode, category: query.category, cursor: c, limit: FEED_PAGE_SIZE }),
+          onRequest: () => dispatch({ type: 'request', key: k }),
+          onPage: (page) => dispatch({ type: 'page', key: k, page }),
+          alive: () => busy.current?.id === id,
+        });
       } catch (err) {
-        dispatch({ type: 'fail', key: k, error: message(err) });
+        const status = err && typeof err === 'object' ? Number((err as { status?: unknown }).status) : NaN;
+        restart.current = isInvalidCursor(status, rawDetail(err));
+        dispatch({ type: 'fail', key: k, error: userMessage(err) });
       } finally {
-        if (inflight.current === tag) inflight.current = null;
+        if (busy.current?.id === id) busy.current = null;
       }
     },
     [api, account, query.mode, query.category],
@@ -61,12 +80,26 @@ export function useFeed(api: Api, query: FeedQuery, account?: AccountApi): UseFe
 
   const loadMore = useCallback(() => {
     const s = stateRef.current;
-    if (s.key === key && canLoadMore(s) && s.items.length > 0) void load(key, s.cursor);
+    if (shouldLoadMore(s, key)) void load(key, s.cursor);
   }, [key, load]);
+
+  // A list that filtered down to nothing (everything fetched is hidden) while the server has
+  // more: fetch on, without waiting for a scroll that can never happen. Each fetch chain is
+  // bounded and ends in a visible card, the end of the feed, or an error, so this cannot loop.
+  const visibleCount = filter(state.items).length;
+  useEffect(() => {
+    if (needsRefill(state, key, visibleCount)) void load(key, state.cursor);
+  }, [state, key, visibleCount, load]);
 
   const retry = useCallback(() => {
     const s = stateRef.current;
-    void load(key, s.items.length > 0 ? s.cursor : null);
+    if (restart.current || s.cursor === null) {
+      restart.current = false;
+      dispatch({ type: 'reset', key });
+      void load(key, null);
+    } else {
+      void load(key, s.cursor);
+    }
   }, [key, load]);
 
   return { state, loadMore, retry };

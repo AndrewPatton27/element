@@ -72,6 +72,84 @@ export function canLoadMore(state: FeedState): boolean {
   return !state.loading && !state.done && state.error === null;
 }
 
+// ---- Loading pages against the VISIBLE list ----
+//
+// Hidden topics and sources are also filtered on the device, so a fetched page can add
+// nothing the reader can see. The rules below keep fetching (bounded) in that case, and
+// always stop when the server's cursor is null or repeats, so a loop is impossible.
+
+export const MAX_EMPTY_HOPS = 3; // extra pages fetched in one go when a page adds nothing visible
+
+export type CardFilter = (cards: BlurbCard[]) => BlurbCard[];
+
+// accept: keep the page as it is. hop: keep it, then fetch the next one. end: keep the cards
+// but treat the feed as finished (cursor dropped).
+export type PageDecision = 'accept' | 'hop' | 'end';
+
+export function decidePage(p: {
+  visibleNew: number; // cards from this page the reader can see (new, valid, not hidden)
+  nextCursor: string | null;
+  seenCursors: ReadonlySet<string>; // every cursor already requested in this chain
+  hops: number; // extra pages already fetched in this chain
+  maxHops?: number;
+}): PageDecision {
+  if (p.nextCursor === null) return 'accept'; // the reducer marks the feed done
+  if (p.seenCursors.has(p.nextCursor)) return 'end'; // repeated cursor: the server is not moving
+  if (p.visibleNew > 0) return 'accept';
+  return p.hops >= (p.maxHops ?? MAX_EMPTY_HOPS) ? 'end' : 'hop';
+}
+
+export interface LoadPagesOptions {
+  fetchPage: (cursor: string | null) => Promise<FeedPage>;
+  filter: CardFilter; // hides topics and sources the reader switched off
+  known: BlurbCard[]; // cards already in the list ([] when starting from the first page)
+  cursor: string | null; // where to start
+  onRequest: () => void;
+  onPage: (page: FeedPage) => void;
+  alive?: () => boolean; // false once the query changed: stop fetching
+  maxHops?: number;
+}
+
+// Fetches a page; if it adds nothing visible, up to maxHops more. Resolves when it has
+// something to show, the feed ended, or the query changed. A failed fetch throws (the
+// pages already handed to onPage stay).
+export async function loadFeedPages(o: LoadPagesOptions): Promise<void> {
+  let cursor = o.cursor;
+  let known = o.known;
+  const seen = new Set<string>(cursor === null ? [] : [cursor]);
+  for (let hops = 0; ; hops++) {
+    if (o.alive && !o.alive()) return;
+    o.onRequest();
+    const page = await o.fetchPage(cursor);
+    if (o.alive && !o.alive()) return;
+    const after = appendPage(known, page);
+    const visibleNew = o.filter(after).length - o.filter(known).length;
+    const decision = decidePage({ visibleNew, nextCursor: page.next_cursor, seenCursors: seen, hops, maxHops: o.maxHops });
+    known = after;
+    if (decision === 'end') {
+      o.onPage({ items: page.items, next_cursor: null });
+      return;
+    }
+    o.onPage(page);
+    if (decision === 'accept' || page.next_cursor === null) return;
+    cursor = page.next_cursor;
+    seen.add(cursor);
+  }
+}
+
+// Whether the end-of-list should ask for more: the reader has scrolled to the end of what
+// they can see, a next page exists, and nothing is loading or failed. `visibleCount` is the
+// FILTERED list length, so a list that filtered down to nothing keeps asking (bounded by
+// loadFeedPages) instead of sitting on a spinner.
+export function shouldLoadMore(state: FeedState, key: string): boolean {
+  return state.key === key && canLoadMore(state) && state.cursor !== null;
+}
+
+// A filtered-to-empty list with more pages on the server needs a fetch without any scroll.
+export function needsRefill(state: FeedState, key: string, visibleCount: number): boolean {
+  return visibleCount === 0 && shouldLoadMore(state, key);
+}
+
 // ---- Mock paging (used by the mock API with the sample fixtures) ----
 
 export interface MockFeedParams extends FeedQuery {

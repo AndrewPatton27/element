@@ -2,7 +2,7 @@
 // text was written by a model. Strings come from lib/labels.ts.
 
 import { StyleSheet, Text } from 'react-native';
-import { CC_BY_SA_MARK, type ShareAlikeCredit } from '../lib/labels';
+import { CC_BY_SA_MARK, disclaimerText, type ShareAlikeCredit } from '../lib/labels';
 import { openUrl } from '../lib/openUrl';
 import { usePalette } from '../lib/useTheme';
 import { font, fonts } from '../lib/theme';
@@ -18,7 +18,8 @@ export function AiLabel({ text }: { text: string }) {
 
 export function Disclaimer({ text, center }: { text: string; center?: boolean }) {
   const p = usePalette();
-  return <Text style={[styles.small, { color: p.muted }, center && styles.center]}>{text}</Text>;
+  // Never blank: an empty string falls back to the built-in wording.
+  return <Text style={[styles.small, { color: p.muted }, center && styles.center]}>{disclaimerText({ disclaimer: text })}</Text>;
 }
 
 // 'Adapted from Wikipedia ("Title") · CC BY-SA 4.0': the credit links to the article,

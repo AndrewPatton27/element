@@ -30,3 +30,6 @@ UI pieces used by the screens in `app/`. Plain React Native (works on web throug
 Rules kept here: every card shows the disclaimer; the AI label text comes from `app_config`, not from the card; direction is never shown by colour alone; every source links to the original URL from the sources sheet.
 
 Accessibility note: react-native-web ignores `accessibilityState` and `accessibilityHint`, so selected or pressed states use `aria-selected`, `aria-checked`, `aria-pressed` and `aria-disabled`, and hints are part of the label.
+
+
+Card footer: the disclaimer is built once and placed by `disclaimerPlacement` (`lib/labels.ts`), so it renders exactly once whether or not `onReact` is passed (a non-function `onReact` counts as absent). `Disclaimer` falls back to the built-in wording if its text is empty.

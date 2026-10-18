@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { useAccount } from '../lib/accountContext';
 import { useAppData } from '../lib/appData';
 import { usePalette } from '../lib/useTheme';
+import { userMessage } from '../lib/errors';
 import { fonts } from '../lib/theme';
 import { Shell } from '../components/Shell';
 import { Button } from '../components/States';
@@ -38,7 +39,7 @@ export default function OnboardingScreen() {
       );
       router.dismissTo('/?tab=for_you' as never);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save your topics.');
+      setError(userMessage(e, 'Could not save your topics.'));
     } finally {
       setBusy(false);
     }
