@@ -1,20 +1,244 @@
-// Brief screen. Stub from the UI foundation (P0.4); another builder fills it in.
-// Keep the file name and the default export.
+// Brief screen: the daily and weekly brief (designs Mobile-Brief, Mobile-Final-2, Web-Brief,
+// Web-Weekly). A Daily / Weekly toggle; headline stories, category sections, key numbers and,
+// for the weekly brief, the movers (12-week charts). Each story opens the same DetailSheet as
+// the feed. Topics and sources the reader hid stay out, like in the feed. The back end may not
+// have the brief yet (the client then returns an empty one), so empty and error states matter.
 
-import { StyleSheet, Text } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import type { BlurbCard } from '../contract/types.ts';
+import type { Api } from '../lib/api.ts';
+import { useAppData } from '../lib/appData';
+import { useAccount } from '../lib/accountContext';
+import { withoutHidden } from '../lib/accountLogic';
+import {
+  briefCards,
+  briefDate,
+  briefDateLabel,
+  briefFooter,
+  briefIsEmpty,
+  briefView,
+  dayLabelShort,
+  generatedLine,
+  headlineLabel,
+  toBriefData,
+  type BriefData,
+  type BriefMode,
+} from '../lib/briefLogic';
+import { userMessage } from '../lib/errors';
+import { isRenderableKind, noticesFor } from '../lib/labels';
+import { withoutHiddenSources } from '../lib/sourceKeys';
+import { usePalette, useWide } from '../lib/useTheme';
+import { MOBILE_HEADER_HEIGHT, fonts, space } from '../lib/theme';
+import { BriefEmpty, BriefMeta, BriefTabs } from '../components/BriefChrome';
+import { BriefMovers, BriefNumbers } from '../components/BriefNumbers';
+import { BriefStories } from '../components/BriefStories';
+import { DetailSheet } from '../components/DetailSheet';
 import { ScreenShell } from '../components/ScreenShell';
-import { usePalette } from '../lib/useTheme';
-import { fonts, font } from '../lib/theme';
+import { Shell, Wordmark } from '../components/Shell';
+import { ErrorState, LoadingState } from '../components/States';
+
+// A brief older than this is fetched again when the reader comes back to the tab.
+const STALE_MS = 10 * 60_000;
+
+interface Slot {
+  data: BriefData | null;
+  loading: boolean; // a request is in flight
+  error: string | null;
+  loadedAt: number;
+}
+const EMPTY_SLOT: Slot = { data: null, loading: false, error: null, loadedAt: 0 };
+
+// Daily and weekly are kept apart, so switching back and forth does not refetch.
+function useBrief(api: Api, mode: BriefMode) {
+  const [slots, setSlots] = useState<Record<BriefMode, Slot>>({ daily: EMPTY_SLOT, weekly: EMPTY_SLOT });
+  const seq = useRef<Record<BriefMode, number>>({ daily: 0, weekly: 0 });
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
+  const load = useCallback(
+    (m: BriefMode) => {
+      const id = ++seq.current[m]; // a newer request for the same brief wins
+      setSlots((s) => ({ ...s, [m]: { ...s[m], loading: true, error: null } }));
+      const request = m === 'daily' ? api.dailyBrief() : api.weeklyBrief();
+      request
+        .then((raw) => {
+          if (alive.current && id === seq.current[m]) setSlots((s) => ({ ...s, [m]: { data: toBriefData(raw), loading: false, error: null, loadedAt: Date.now() } }));
+        })
+        .catch((e: unknown) => {
+          if (alive.current && id === seq.current[m]) {
+            setSlots((s) => ({ ...s, [m]: { ...s[m], loading: false, error: userMessage(e, 'Could not load the brief.') } }));
+          }
+        });
+    },
+    [api],
+  );
+
+  const slot = slots[mode];
+  const needsLoad = slot.data === null && !slot.loading && slot.error === null;
+  useEffect(() => {
+    if (needsLoad) load(mode);
+  }, [needsLoad, load, mode]);
+
+  // Back on this tab after a while: fetch fresh content quietly.
+  const loadedAt = slot.loadedAt;
+  const busy = slot.loading;
+  useFocusEffect(
+    useCallback(() => {
+      if (loadedAt > 0 && !busy && Date.now() - loadedAt > STALE_MS) load(mode);
+    }, [loadedAt, busy, load, mode]),
+  );
+
+  const refresh = useCallback(() => load(mode), [load, mode]);
+  return { slot, refresh };
+}
 
 export default function BriefScreen() {
   const p = usePalette();
+  const wide = useWide();
+  const { api, config, categories } = useAppData();
+  const acct = useAccount();
+  const signedIn = acct.user !== null;
+  const [mode, setMode] = useState<BriefMode>('daily');
+  const [detailCard, setDetailCard] = useState<BlurbCard | null>(null);
+  const { slot, refresh } = useBrief(api, mode);
+  const { data, loading, error } = slot;
+
+  // The same hidden topics / sources the feed uses.
+  const hidden = signedIn ? (acct.prefs?.hidden ?? []) : [];
+  const hiddenSources = signedIn ? (acct.prefs?.hiddenSources ?? []) : [];
+  const visible = useCallback(
+    (cards: BlurbCard[]) => withoutHiddenSources(withoutHidden(cards, hidden), hiddenSources),
+    [hidden, hiddenSources],
+  );
+
+  const { trackOpenDetail } = acct;
+  useEffect(() => {
+    if (detailCard && signedIn) trackOpenDetail(detailCard);
+  }, [detailCard, signedIn, trackOpenDetail]);
+
+  const view = data ? briefView(data, categories, visible, (c) => isRenderableKind(c.kind)) : null;
+  const unfiltered = data ? briefView(data, categories, undefined, (c) => isRenderableKind(c.kind)) : null;
+  const refreshing = loading && data !== null;
+  const goFeed = () => router.navigate('/' as never);
+  const goNumbers = () => router.navigate('/numbers' as never);
+  const goAccount = () => router.navigate('/account' as never);
+
+  const switchTabs = <BriefTabs mode={mode} onChange={setMode} wide={wide} />;
+
+  let body;
+  if (!data && error) {
+    body = <ErrorState title="Could not load the brief" message={error} onRetry={refresh} />;
+  } else if (!data || !view || !unfiltered) {
+    body = (
+      <View style={styles.center}>
+        <LoadingState label={`Loading your ${mode} brief…`} />
+      </View>
+    );
+  } else if (briefIsEmpty(view)) {
+    const hiddenAll = !briefIsEmpty(unfiltered);
+    body = <BriefEmpty mode={mode} hidden={hiddenAll} onRefresh={refresh} onFeed={goFeed} onSettings={signedIn ? goAccount : undefined} />;
+  } else {
+    const label = headlineLabel(mode, data.window_hours);
+    const stories = (
+      <>
+        <BriefStories
+          label={label}
+          right={wide ? undefined : dayLabelShort(briefDate(data))}
+          cards={view.headlines}
+          categories={categories}
+          onOpen={setDetailCard}
+          wide={wide}
+          ranked
+          showTeaser={mode === 'daily'}
+        />
+        {view.sections.map((s) => (
+          <BriefStories key={s.category} label={s.title} cards={s.cards} categories={categories} onOpen={setDetailCard} wide={wide} />
+        ))}
+      </>
+    );
+    const numbers = <BriefNumbers facts={view.numbers} notices={noticesFor(config, 'numbers_panel')} onAll={goNumbers} wide={wide} />;
+    const movers = mode === 'weekly' ? <BriefMovers movers={view.movers} wide={wide} /> : null;
+    body = wide ? (
+      <View style={styles.columns}>
+        <View style={styles.main}>{stories}</View>
+        <View style={styles.aside}>
+          {movers}
+          {numbers}
+        </View>
+      </View>
+    ) : (
+      <>
+        {stories}
+        {movers}
+        {numbers}
+      </>
+    );
+  }
+
+  const inlineError =
+    data && error ? (
+      <Text onPress={refresh} accessibilityRole="button" style={[styles.inlineError, { color: p.dataInk, backgroundColor: p.dataSoft }]}>
+        Could not refresh the brief. Tap to retry.
+      </Text>
+    ) : null;
+  const meta = data ? <BriefMeta line={generatedLine(data)} refreshing={refreshing} onRefresh={refresh} /> : null;
+  const footer = (
+    <Text style={[styles.footer, { color: p.muted }]}>{briefFooter(view ? briefCards(view) : [], config)}</Text>
+  );
+
+  if (wide) {
+    return (
+      <ScreenShell tab="brief" title={mode === 'weekly' ? 'Weekly brief' : 'Daily brief'} meta={briefDateLabel(mode, data)}>
+        {switchTabs}
+        {meta}
+        {inlineError}
+        {body}
+        {footer}
+        <DetailSheet card={detailCard} config={config} categories={categories} onClose={() => setDetailCard(null)} />
+      </ScreenShell>
+    );
+  }
+
+  // Phones: the header carries the wordmark and the Daily / Weekly tabs (Mobile-Brief).
   return (
-    <ScreenShell tab="brief" title="Brief">
-      <Text style={[styles.soon, { color: p.inkSoft }]}>Your daily and weekly brief is coming soon.</Text>
-    </ScreenShell>
+    <Shell active="brief" bare>
+      <View style={[styles.header, { backgroundColor: p.surface, borderBottomColor: p.border }]}>
+        <View style={styles.brand}>
+          <Wordmark size={22} />
+        </View>
+        {switchTabs}
+      </View>
+      <ScrollView
+        style={styles.fill}
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={p.accent} colors={[p.accent]} />}
+      >
+        {meta}
+        {inlineError}
+        {body}
+        {footer}
+      </ScrollView>
+      <DetailSheet card={detailCard} config={config} categories={categories} onClose={() => setDetailCard(null)} />
+    </Shell>
   );
 }
 
 const styles = StyleSheet.create({
-  soon: { fontSize: font.body, lineHeight: 24, fontFamily: fonts.sans },
+  fill: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'flex-end', height: MOBILE_HEADER_HEIGHT, paddingLeft: 16, paddingRight: 12, borderBottomWidth: 1 },
+  brand: { height: MOBILE_HEADER_HEIGHT - 1, justifyContent: 'center', marginRight: 6 },
+  scroll: { paddingHorizontal: space.page, paddingTop: 14, paddingBottom: space.md, gap: 18 },
+  center: { minHeight: 260 },
+  columns: { flexDirection: 'row', alignItems: 'flex-start', gap: 36 },
+  main: { flex: 1, minWidth: 0 },
+  aside: { width: 320, gap: 16 },
+  inlineError: { alignSelf: 'flex-start', overflow: 'hidden', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, fontFamily: fonts.sansSemi, fontSize: 14 },
+  footer: { fontFamily: fonts.sans, fontSize: 12, lineHeight: 17, textAlign: 'center', paddingTop: 4 },
 });
