@@ -17,7 +17,7 @@ import { cardSourceKey } from './sourceKeys.ts';
 
 export const RANK = { favorite: 24, likeTopic: 8, likeSource: 4, dislikeTopic: 8, dislikeSource: 4, maxCount: 3, repeat: 6, window: 3 } as const;
 
-type Prefs = Pick<LocalPrefs, 'reactions' | 'hiddenTopics' | 'hiddenSources'> & { follows: { topics: string[] } };
+type Prefs = Pick<LocalPrefs, 'reactions' | 'hiddenTopics' | 'hiddenSources'> & { follows: { topics: string[]; sources?: string[]; tickers?: string[] } };
 
 export function localScore(card: BlurbCard, prefs: Prefs): number {
   let likeT = 0, likeS = 0, disT = 0, disS = 0;
@@ -31,6 +31,8 @@ export function localScore(card: BlurbCard, prefs: Prefs): number {
   const m = (n: number) => Math.min(n, RANK.maxCount);
   let s = mockRankScore(card);
   if (prefs.follows.topics.includes(card.category)) s += RANK.favorite;
+  if (card.sources.some((source) => prefs.follows.sources?.includes(source.name))) s += RANK.favorite;
+  if (card.tickers.some((ticker) => prefs.follows.tickers?.includes(ticker.symbol.toUpperCase()))) s += RANK.favorite;
   s += RANK.likeTopic * m(likeT) + RANK.likeSource * m(likeS);
   s -= RANK.dislikeTopic * m(disT) + RANK.dislikeSource * m(disS);
   return s;

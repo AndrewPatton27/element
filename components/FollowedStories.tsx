@@ -14,10 +14,22 @@ import { PulseIcon } from './Icons';
 
 const updatesCache = new Map<string, { at: number; list: BlurbCard[] }>();
 const UPDATES_TTL_MS = 120_000;
+const updateListeners = new Set<() => void>();
+
+export function clearStoryUpdates(): void {
+  updatesCache.clear();
+  updateListeners.forEach((listener) => listener());
+}
 
 export function useStoryRows(api: Api, stories: FollowedStory[]): { rows: StoryRow[]; loading: boolean } {
   const [updates, setUpdates] = useState<Record<string, BlurbCard[]>>({});
   const [loading, setLoading] = useState(true);
+  const [cacheRevision, setCacheRevision] = useState(0);
+  useEffect(() => {
+    const listener = () => setCacheRevision((revision) => revision + 1);
+    updateListeners.add(listener);
+    return () => { updateListeners.delete(listener); };
+  }, []);
   const ids = stories.map((s) => s.id).join(',');
   useEffect(() => {
     let live = true;
@@ -44,7 +56,7 @@ export function useStoryRows(api: Api, stories: FollowedStory[]): { rows: StoryR
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, ids]);
+  }, [api, ids, cacheRevision]);
   const rows = sortStories(stories.flatMap((s) => (s.card ? [{ story: s.card, updates: updates[s.id] ?? [] }] : [])));
   return { rows, loading };
 }

@@ -4,7 +4,8 @@
 // Nothing followed yet: a prompt to pick topics, with the top stories below.
 // Topics follow the account when signed in; see lib/useFollows.ts.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { BlurbCard } from '../contract/types.ts';
 import { useAppData } from '../lib/appData';
@@ -21,13 +22,14 @@ import { go } from '../components/TabBar';
 import { DetailSheet } from '../components/DetailSheet';
 import { FollowingManager } from '../components/FollowingManager';
 import { ScreenShell } from '../components/ScreenShell';
-import { FollowedStories, useStoryRows } from '../components/FollowedStories';
+import { clearStoryUpdates, FollowedStories, useStoryRows } from '../components/FollowedStories';
 import { UndoToast } from '../components/UndoToast';
 import { storiesHeader } from '../lib/followedStories';
 import { useFollowedStories } from '../lib/useFollowedStories';
 import { FollowingFeed } from '../components/FollowingFeed';
 import { SourcesSheet } from '../components/SourcesSheet';
 import { aiNoticeText, disclaimerText } from '../lib/labels';
+import { rerankFollowing } from '../lib/followingRerank';
 
 export default function FollowingScreen() {
   const p = usePalette();
@@ -70,7 +72,35 @@ export default function FollowingScreen() {
     (cursor, limit) => api.followingFeed({ topics: follows.topics, sources: follows.sources, tickers: follows.tickers, cursor, limit }),
     visible,
   );
-  const items = visible(state.items);
+  const [freshItems, setFreshItems] = useState<BlurbCard[] | null>(null);
+  const focusId = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlight = useRef(false);
+  const focused = useRef(false);
+  const refreshRef = useRef<(id: number) => void>(() => undefined);
+  const refresh = useCallback(async (id: number) => {
+    if (inFlight.current || !focused.current || id !== focusId.current || key === null) return;
+    inFlight.current = true;
+    try {
+      const page = await api.followingFeed({ topics: follows.topics, sources: follows.sources, tickers: follows.tickers, cursor: null, limit: 20 });
+      if (focused.current && id === focusId.current) setFreshItems(page.items);
+    } catch { /* retain the last visible list on transient refresh errors */ }
+    finally {
+      inFlight.current = false;
+      if (focused.current && id !== focusId.current) refreshRef.current(focusId.current);
+    }
+  }, [api, follows, key]);
+  refreshRef.current = (id) => { void refresh(id); };
+  useFocusEffect(useCallback(() => {
+    focused.current = true;
+    const id = ++focusId.current;
+    clearStoryUpdates();
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => { void refresh(id); }, 300);
+    return () => { focused.current = false; if (timer.current) clearTimeout(timer.current); };
+  }, [refresh]));
+  const rawItems = freshItems ?? state.items;
+  const items = visible(rerankFollowing(rawItems, acct.localPrefs));
 
   const empty = following ? (
     <View style={styles.none} accessibilityLiveRegion="polite">
