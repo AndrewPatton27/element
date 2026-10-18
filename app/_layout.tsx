@@ -1,7 +1,8 @@
 // Root layout: loads the fonts, picks the API (sample fixtures or Supabase),
 // shows a full-screen error if the build is misconfigured, and provides shared
 // data to every screen. The five tabs (Feed, Brief, Search, Following, Me) plus
-// Numbers and About are peers (tab-like), not modals.
+// Numbers and About are peers (tab-like), not modals. On the first visit the quick
+// tour (components/Tutorial.tsx) is drawn over whichever screen opened.
 
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -19,6 +20,7 @@ import { AccountProvider } from '../lib/accountContext';
 import { light, paletteFor } from '../lib/theme';
 import { ConfigErrorScreen } from '../components/States';
 import { AppErrorBoundary } from '../components/ErrorBoundary';
+import { TutorialGate } from '../components/Tutorial';
 
 export default function RootLayout() {
   const scheme = useColorScheme();
@@ -52,7 +54,10 @@ export default function RootLayout() {
                 <Stack.Screen name="signin" />
                 <Stack.Screen name="onboarding" />
                 <Stack.Screen name="reset-password" />
+                <Stack.Screen name="tutorial" />
               </Stack>
+              {/* First-run tour over every screen, once per device (also at /tutorial). */}
+              <TutorialGate />
             </AccountProvider>
           </AppDataProvider>
         </AppErrorBoundary>

@@ -73,3 +73,8 @@ Files in `lib/__tests__/`: `account`, `api`, `detail`, `dwell`, `feedLogic`, `fi
 - `accountContext.tsx` exposes `viewPrefs` (account prefs when signed in, device prefs when signed out) and `localPrefs`; `react`, `savePrefs`, `hideTopic`, `restoreTopics`, `hideSource`, `saveSources` write to the device when signed out and send nothing.
 - `storage.ts`: `onStoreChange(fn)` fires on every `defaultStore()` write, so the context sees a follow saved on the Following screen at once. Off web the memory store is shared app-wide.
 - `useFeed(api, query, account, filter, rankPage?)`: signed out, For you calls the same public `api.feed` as Trending and applies `rankPage` per page (earlier pages never move).
+
+## First-run tour (`tutorialSteps.ts`, `tutorialLogic.ts`)
+
+- `tutorialSteps.ts`: copy for the 4 steps, `mobile` and `web` variants. Design copy is kept where true; the header comment lists the minimal changes (no follow button on cards, no ←/→ like keys, ticker opens sources, no 7 AM push, Search added).
+- `tutorialLogic.ts`: seen flag `element.tutorial-seen.v1` (bump `TUTORIAL_VERSION` to show a new tour once), step clamping, key → action, `shouldAutoShow` (never on `/tutorial`, `/reset-password`). Unreadable storage counts as seen. Tests: `__tests__/tutorialLogic.test.ts`.
