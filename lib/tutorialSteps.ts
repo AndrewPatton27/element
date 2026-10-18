@@ -8,7 +8,7 @@
 //   recap says you follow topics, companies and sources (that is what Following does);
 // - web feed keys are ↓/j next and ↑/k back; like/dislike is the thumbs buttons
 //   (the design's ← / → like/dislike keys do not exist);
-// - tapping a number on the strip opens its official source (not the weekly brief);
+// - tapping a number on the strip opens Numbers to know, where every figure links to its official source;
 // - there is no 7 AM push yet, so that sentence is dropped;
 // - Search was not in the design: one recap line added.
 
@@ -128,7 +128,7 @@ export function getTutorialSteps(variant: TutorialVariant): TutorialStep[] {
         {
           label: 'Numbers to know.',
           text:
-            `The strip keeps key numbers moving past, like interest rates, inflation and jobs. ${tap} a number to open its official source.` +
+            `The strip keeps key numbers moving past, like interest rates, inflation and jobs. ${tap} a number to open Numbers to know, with every figure and its official source.` +
             (web ? ' Example: “10-YR 5.10% ▼ 0.09” means that rate is 5.10% and fell 0.09 points.' : ''),
         },
         web
