@@ -17,6 +17,7 @@ import { rankLocal } from '../lib/localRank';
 import { sourceName, withoutHiddenSources } from '../lib/sourceKeys';
 import { SIGN_IN_AGAIN_MESSAGE } from '../lib/session';
 import type { FeedTab } from '../lib/feedLogic';
+import { topicParam } from '../lib/briefLogic';
 import { categoryName } from '../lib/format';
 import { defaultStore } from '../lib/storage';
 import { useFeed } from '../lib/useFeed';
@@ -46,7 +47,7 @@ export default function FeedScreen() {
   const { api, config, categories } = useAppData();
   const acct = useAccount();
   const signedIn = acct.user !== null;
-  const params = useLocalSearchParams<{ tab?: string; t?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; t?: string; category?: string }>();
   const { width } = useWindowDimensions();
   const [mode, setMode] = useState<FeedTab>(params.tab === 'for_you' ? 'for_you' : 'top');
   const [category, setCategory] = useState<CategorySlug | null>(null);
@@ -75,6 +76,12 @@ export default function FeedScreen() {
   useEffect(() => {
     if (params.tab === 'for_you' || params.tab === 'top' || params.tab === 'latest') setMode(params.tab);
   }, [params.tab, params.t]);
+
+  // The Brief's "See all N" opens the feed on one topic: /?tab=top&category=<slug>.
+  useEffect(() => {
+    const topic = topicParam(params.category);
+    if (topic) setCategory(topic as CategorySlug);
+  }, [params.category, params.t]);
 
   const forYou = mode === 'for_you';
   // Hidden topics and sources leave the feed and the chips at once: the account's when signed
