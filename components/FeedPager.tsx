@@ -1,5 +1,5 @@
 // Vertical one-card-per-screen pager. FlatList with paging and snap. On web the
-// the up and down arrow keys (and only those) move between cards; wide web also shows a
+// the arrow keys (and only those): up and down move between cards, right likes and left dislikes like a swipe; wide web also shows a
 // "Next: press ↓ or scroll" button in the card footer.
 //
 // Swipe to react (touch, phone layouts, signed in): drag right = like, left =
@@ -355,11 +355,18 @@ export function FeedPager({
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         goTo(indexRef.current - 1);
+      } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && canReact) {
+        // Drew: the right arrow is a right swipe (like) and the left arrow a left swipe (dislike).
+        const card = items[indexRef.current];
+        if (card) {
+          e.preventDefault();
+          swiped(card, e.key === 'ArrowRight' ? 'like' : 'dislike');
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [goTo, active]);
+  }, [goTo, active, canReact, items, swiped]);
 
   const compact = !wide && shouldUseCompactCard(windowHeight, height);
   const renderItem = useCallback(

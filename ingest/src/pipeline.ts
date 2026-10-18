@@ -25,6 +25,7 @@ import { createChainState, summarizeWithChain, type ChainState, type UsageCounte
 import type { RawItem, Summarizer } from './types.ts';
 import { hasFigures, requiresFigures, validatePublish } from './validate.ts';
 import { createTopicFilterState, filterTopic, recordTopic, type TopicFilterState } from './topicFilter.ts';
+import { scoreCardWithCodex } from './reportCard.ts';
 
 export type SourceName = 'macro' | 'fed' | 'bea' | 'fedreg' | 'sec' | 'wiki' | 'cpsc' | 'usgs' | 'nasa';
 export const SOURCE_NAMES: readonly SourceName[] = ['macro', 'fed', 'bea', 'fedreg', 'sec', 'wiki', 'cpsc', 'usgs', 'nasa'];
@@ -437,14 +438,41 @@ async function processItems(
         deps.log(`skip template_not_allowed (no AI relevance score): ${it.title}`);
         continue;
       }
-      const payload = buildPublishPayload(it, r.draft, { itemId: row.id, aiGenerated: r.ai_generated, model: r.model });
-      const v = validatePublish(payload);
+      let draft = r.draft;
+      let payload = buildPublishPayload(it, draft, { itemId: row.id, aiGenerated: r.ai_generated, model: r.model });
+      let v = validatePublish(payload);
       if (!v.ok) throw new Error(v.errors.join('; '));
+      let cardScore: Awaited<ReturnType<typeof scoreCardWithCodex>> | null = null;
+      if (process.env.INGEST_WRITER === 'codex' || process.env.INGEST_FORMAT_CHECK === '1') {
+        const recent = await deps.publisher.auditCards?.().catch(() => []) ?? [];
+        const candidate = { ...payload, id: row.id } as any;
+        cardScore = await scoreCardWithCodex(candidate, recent.slice(0, 30));
+        if (cardScore.decision === 'REVISE') {
+          const writer = deps.providers.find(p => p.name === 'codex');
+          if (writer) {
+            try {
+              draft = await writer.summarize({ item: it, text, retryErrors: cardScore.recommendations });
+              payload = buildPublishPayload(it, draft, { itemId: row.id, aiGenerated: true, model: 'codex-cli' });
+              v = validatePublish(payload);
+              if (v.ok) cardScore = await scoreCardWithCodex({ ...payload, id: row.id } as any, recent.slice(0, 30));
+              else cardScore.decision = 'REVISE';
+            } catch { cardScore.decision = 'REVISE'; }
+          }
+        }
+        if (cardScore.decision !== 'PASS') {
+          const code = cardScore.relation === 'DUPLICATE' ? 'duplicate_story' : cardScore.decision === 'ABANDON' ? 'report_card_abandon' : 'report_card_revise_failed';
+          stats.skipped++; deps.log(`skip ${code}: ${it.title}`);
+          await deps.publisher.setItemStatus(row.id, 'skipped', code).catch(() => {});
+          continue;
+        }
+      }
       const res = await deps.publisher.publishBlurb(payload);
       stats[res.status === 'published' ? 'published' : res.status]++;
       if (res.status === 'published') {
         stats[r.ai_generated ? 'ai' : 'template']++;
         guard.record(cand);
+        if (cardScore?.related_id && ['UPDATE','ANGLE','RELATED'].includes(cardScore.relation) && res.id)
+          await deps.publisher.setStoryLink?.(res.id, cardScore.related_id, cardScore.relation.toLowerCase()).catch(() => {});
       }
       const notes = r.log.length > 1 ? [...r.log] : [];
       if (r.relevance !== null) notes.push(`relevance ${r.relevance}`);

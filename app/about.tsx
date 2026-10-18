@@ -4,13 +4,16 @@
 // comes from, how it is collected, filtered and written, how the feeds are
 // ordered, what is stored for an account, and the disclaimer.
 
-import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { StyleSheet, Switch, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useAppData } from '../lib/appData';
 import { aiNoticeText, disclaimerText, noticesFor } from '../lib/labels';
 import { APP_NAME } from '../lib/config';
 import { SOURCES } from '../lib/sourcesInfo';
+import { SOURCE_KEYS, toggleSource } from '../lib/sourceKeys';
+import { useAccount } from '../lib/accountContext';
+import { userMessage } from '../lib/errors';
 import { usePalette, useWide } from '../lib/useTheme';
 import { fonts, font } from '../lib/theme';
 import { openUrl } from '../components/SourceChip';
@@ -55,6 +58,8 @@ export default function AboutScreen() {
   const p = usePalette();
   const wide = useWide();
   const { api, config } = useAppData();
+  const acct = useAccount();
+  const [sourceError, setSourceError] = useState<string | null>(null);
   const notices = noticesFor(config, 'about'); // FRED and CC BY-SA wording, from app_config
   const text = [wide ? styles.textWide : styles.text, { color: p.inkSoft }];
 
@@ -83,17 +88,37 @@ export default function AboutScreen() {
             Almost everything is a public record from the U.S. government, which anyone may reuse. The one exception is Wikipedia, which is shared
             under a Creative Commons license. We use no paywalled news, no publisher photos and no stock prices.
           </Text>
+          <Text style={[styles.small, { color: p.muted }]}>Turn a source off to stop seeing its cards.</Text>
+          {sourceError ? <Text style={[styles.small, { color: p.up }]} accessibilityRole="alert">{sourceError}</Text> : null}
           <View>
-            {SOURCES.map((s) => (
+            {SOURCES.map((s) => {
+              const source = SOURCE_KEYS.find((x) => x.key === s.key);
+              const hidden = acct.viewPrefs?.hiddenSources ?? [];
+              const on = !hidden.includes(s.key);
+              return (
               <View key={s.name} style={[styles.source, { borderTopColor: p.border }]}>
-                <Text style={[styles.sourceName, { color: p.ink }]}>{s.name}</Text>
+                <View style={styles.sourceHeading}>
+                  <Text style={[styles.sourceName, { color: on ? p.ink : p.muted }]}>{s.name}</Text>
+                  {source ? <Switch
+                    value={on}
+                    onValueChange={() => {
+                      const next = toggleSource(hidden, source.key);
+                      if (!next) { setSourceError('Keep at least one source on.'); return; }
+                      setSourceError(null);
+                      void acct.saveSources(next).catch((e) => setSourceError(userMessage(e)));
+                    }}
+                    trackColor={{ false: p.borderStrong, true: p.accent }}
+                    accessibilityLabel={`${s.name}: ${on ? 'on' : 'off'}`}
+                    style={styles.switch}
+                  /> : null}
+                </View>
                 <Text style={[styles.small, { color: p.muted }]}>{s.gives}</Text>
                 <View style={styles.links}>
                   <Link label="Website" url={s.site} />
                   <Link label={s.terms.label} url={s.terms.url} />
                 </View>
               </View>
-            ))}
+            );})}
           </View>
           {notices.map((n) => (
             <Text
@@ -198,6 +223,8 @@ const styles = StyleSheet.create({
   bulletRow: { flexDirection: 'row', gap: 10 },
   bullet: { fontFamily: fonts.sansSemi, fontSize: font.body, lineHeight: 23 },
   source: { borderTopWidth: 1, paddingVertical: 12, gap: 2 },
+  sourceHeading: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  switch: { minHeight: 44 },
   sourceName: { fontFamily: fonts.sansSemi, fontSize: font.nav },
   links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 16, paddingTop: 2 },
   link: { fontFamily: fonts.sansSemi, fontSize: font.meta, textDecorationLine: 'underline', paddingVertical: 10 },

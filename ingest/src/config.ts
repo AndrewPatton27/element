@@ -64,6 +64,7 @@ export const config = {
   // v4: plain USGS headline+body and plain Federal Register headline. v5: sentence-case template headlines,
   // generic CPSC template (no product codes), figure-less earnings and low-interest quake template cards dropped.
   templateVersion: 'tpl-v5',
+  codex: { exe: 'C:\\Users\\andre\\AppData\\Local\\OpenAI\\Codex\\bin\\896a0166b774037a\\codex.exe', timeoutMs: 120_000, maxConcurrency: 2 },
   providerOrder: ['gemini', 'groq', 'template'] as const, // a list on purpose: adding a provider is one entry
 
   // Deterministic editorial gate, before any model call. Per-run narrow-source diversity cap.
@@ -233,7 +234,7 @@ export const config = {
   secTickersUrl: 'https://www.sec.gov/files/company_tickers_exchange.json',
   // Per-company filing list (JSON, data.sec.gov, API host list). {cik} = 10-digit CIK.
   secSubmissionsUrl: 'https://data.sec.gov/submissions/CIK{cik}.json',
-  secLookbackDays: 10,                         // per-company 8-Ks filed within this many days
+  secLookbackDays: 10,                        // per-company 8-Ks filed within this many days
   // Earnings press release. An Item 2.02 8-K is usually a cover page; the figures sit in the EX-99.1
   // exhibit (a page on www.sec.gov, so the page host list already allows it). For a filing with one of
   // these items the exhibit is fetched through the same limiter and cache and its text goes to the AI
