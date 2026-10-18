@@ -19,6 +19,7 @@ node src/main.ts --once --only sec --limit 3
 node src/main.ts --dry-run --only bea   # sources: sec, fed, bea, fedreg, macro, wiki, cpsc, usgs, nasa
 node src/main.ts --rewrite --limit 20   # redo older published cards in plain words, in place (needs migration 20261017050000)
 node src/main.ts --dry-run --rewrite    # the same on sample cards, no network
+node src/main.ts --backfill-macro --weeks 16   # one-off: FRED history so the Trends charts have ~12 points (needs FRED_API_KEY; no new cards; safe to re-run)
 ```
 
 ## Environment variables

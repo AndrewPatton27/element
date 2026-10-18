@@ -4,6 +4,8 @@
 //   --loop     run every config.pollIntervalMinutes until stopped (Ctrl+C)
 //   --rewrite  redo published cards written with an older prompt/template version, in place
 //              (--limit = max cards; with --dry-run: the cards in src/fixtures/rewrite-cards.json)
+//   --backfill-macro  one-off: FRED history for the Trends charts via api.upsert_macro (no data cards);
+//              --weeks N = weeks of history (default 16); with --dry-run: DGS10 fixture only
 //   --only     comma-separated subset of sources (macro, fed, bea, fedreg, sec, wiki, cpsc, usgs, nasa)
 //   --limit    max news items summarized per run (default 20)
 //   --json     with --dry-run: print the card payloads as JSON
@@ -16,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { fetchAllowed } from './allowlist.ts';
 import { config, describeEnv, fedRegisterUrls, readEnv } from './config.ts';
 import { runOnce, SOURCE_NAMES, type Deps, type SourceName } from './pipeline.ts';
+import { runBackfill } from './backfill.ts';
 import { runRewrite } from './rewrite.ts';
 import type { RevisableCard } from './types.ts';
 import { createDryRunPublisher, createSupabasePublisher } from './publish.ts';
@@ -33,11 +36,13 @@ export interface Args {
   limit: number;
   json: boolean;
   rewrite: boolean;
+  backfillMacro: boolean;
+  weeks: number;
 }
 
 /** Parses CLI flags (see the header). Throws on an unknown option, an unknown --only source or a bad --limit. */
 export function parseArgs(argv: string[]): Args {
-  const a: Args = { dryRun: false, loop: false, only: [], limit: 20, json: false, rewrite: false };
+  const a: Args = { dryRun: false, loop: false, only: [], limit: 20, json: false, rewrite: false, backfillMacro: false, weeks: config.backfillWeeksDefault };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--dry-run') a.dryRun = true;
@@ -45,6 +50,12 @@ export function parseArgs(argv: string[]): Args {
     else if (k === '--loop') a.loop = true;
     else if (k === '--json') a.json = true;
     else if (k === '--rewrite') a.rewrite = true;
+    else if (k === '--backfill-macro') a.backfillMacro = true;
+    else if (k === '--weeks') {
+      const n = Number(argv[++i]);
+      if (!Number.isInteger(n) || n < 1 || n > 520) throw new Error('--weeks needs a whole number from 1 to 520');
+      a.weeks = n;
+    }
     else if (k === '--only') {
       const v = (argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
       for (const s of v) if (!(SOURCE_NAMES as readonly string[]).includes(s)) throw new Error(`--only: unknown source "${s}" (use ${SOURCE_NAMES.join(', ')})`);
@@ -144,6 +155,7 @@ export async function main(argv: string[]): Promise<number> {
   const log = (s: string) => console.log(s);
 
   if (args.rewrite && args.loop) throw new Error('--rewrite cannot be combined with --loop');
+  if (args.backfillMacro && (args.rewrite || args.loop)) throw new Error('--backfill-macro cannot be combined with --rewrite or --loop');
   if (args.dryRun) {
     const dry = createDryRunPublisher(args.rewrite ? (JSON.parse(fixture('rewrite-cards.json')) as { cards: RevisableCard[] }).cards : []);
     const deps: Deps = {
@@ -155,6 +167,12 @@ export async function main(argv: string[]): Promise<number> {
       now: DRY_NOW,                                           // fixtures are from this day
       log,
     };
+    if (args.backfillMacro) {
+      const bs = await runBackfill(deps, { weeks: args.weeks, pauseMs: 0 });
+      log(`dry run backfill: ${JSON.stringify(bs)}`);
+      if (args.json) console.log(JSON.stringify(dry.macro, null, 2));
+      return 0;
+    }
     if (args.rewrite) {
       const rs = await runRewrite(deps, { limit: args.limit });
       log(`dry run rewrite: ${JSON.stringify(rs)}`);
@@ -182,6 +200,11 @@ export async function main(argv: string[]): Promise<number> {
     now: new Date(),
     log,
   };
+  if (args.backfillMacro) {
+    const bs = await runBackfill(deps, { weeks: args.weeks });
+    log(`backfill finished: ${JSON.stringify(bs)}`);
+    return bs.failed > 0 ? 1 : 0;
+  }
   if (args.rewrite) {
     const rs = await runRewrite(deps, { limit: args.limit });
     log(`rewrite finished: ${JSON.stringify(rs)}`);

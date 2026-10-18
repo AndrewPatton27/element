@@ -171,6 +171,8 @@ export const config = {
     ICSA: 5.0,           // percent, weekly
   } as Record<string, number>,
   fredLookbackDays: 500,                       // enough history for CPI year-over-year
+  backfillWeeksDefault: 16,                    // --backfill-macro: weeks of history (Trends charts show 12 weekly points)
+  backfillPauseMs: 700,                        // --backfill-macro: pause between FRED requests (limit is 120/minute)
   fedMaxAgeDays: 7,                            // ignore older press releases
   // BEA releases come 2-5 a week; on 2026-10-17 the newest was 11 days old, so 7 days would show none.
   beaMaxAgeDays: 30,
