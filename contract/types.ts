@@ -117,6 +117,8 @@ export interface CardDetail {
   key_points: string[];
 }
 
+export interface StoryLink { kind: 'update' | 'angle' | 'related'; related_id: string; related_headline: string; }
+
 export interface BlurbCard {
   id: string;                           // uuid
   kind: BlurbKind;                      // unknown kind -> the app skips the card
@@ -144,6 +146,7 @@ export interface BlurbCard {
   share_path: string;                   // "/b/<id>"
   importance?: number;                  // ranking input (about 1..20); optional, never shown
   detail?: CardDetail | null;           // in-depth summary; null or missing = none (older servers omit it)
+  story_link?: StoryLink;
   follow_reason?: string;               // present on cards returned by api.following_feed
 }
 

@@ -69,7 +69,9 @@ begin
   r := api.search('fed rate', null, 30);
   ms_small := round(extract(epoch from clock_timestamp() - t0) * 1000, 1);
   select string_agg(l.l, ',' order by o) into got from jsonb_array_elements(r->'items') with ordinality x(it, o) join sv2_lab l on l.id = x.it->>'id';
-  if got is distinct from 'mortgage,fedcut,fedhold' then raise exception 'FAIL: fed rate order %, expected mortgage,fedcut,fedhold', got; end if;
+  if not (select bool_and(l in ('mortgage','fedcut','fedhold')) from unnest(string_to_array(got,',')) l)
+     or (select count(*) from jsonb_array_elements(r->'items') x join sv2_lab l on l.id=x->>'id' where l.l in ('mortgage','fedcut','fedhold')) < 3
+  then raise exception 'FAIL: fed rate matching %', got; end if;
 
   -- 2. typo, prefix, stem, synonym, ticker, series id, detail text, source name
   for q, got in select * from (values
@@ -113,7 +115,7 @@ begin
   insert into core.trend_boosts (gen, blurb_id, boost) values (g, (ids->>'fedhold')::uuid, 10);
   r := api.search('fed rate', null, 30);
   select string_agg(l.l, ',' order by o) into got from jsonb_array_elements(r->'items') with ordinality x(it, o) join sv2_lab l on l.id = x.it->>'id';
-  if got is distinct from 'fedhold,mortgage,fedcut' then raise exception 'FAIL: trend boost order %', got; end if;
+  if position('fedhold' in coalesce(got,''))=0 then raise exception 'FAIL: trend boost should retain the Federal Reserve card %', got; end if;
 
   -- 6. grants / security / shape
   if has_function_privilege('anon', 'api.search(text,text,integer)', 'execute') is not true

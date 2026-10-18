@@ -51,6 +51,7 @@ export function isBlurbCard(x: unknown): x is BlurbCard {
   if (!isNum(x.source_count)) return false;
   if (!Array.isArray(x.tickers) || !x.tickers.every((ticker) => isObj(ticker) && isStr(ticker.symbol) && ticker.symbol.trim() !== '') || !Array.isArray(x.macro)) return false;
   if (!isObj(x.ai) || typeof x.ai.generated !== 'boolean') return false;
+  if (x.story_link !== undefined && !(isObj(x.story_link) && ['update','angle','related'].includes(String(x.story_link.kind)) && isStr(x.story_link.related_id) && isStr(x.story_link.related_headline))) return false;
   if (x.kind === 'data' && (x.macro.length === 0 || !x.macro.every(isMacroFact))) return false;
   return true;
 }

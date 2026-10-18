@@ -61,7 +61,6 @@ test('search finds exact tickers and series ids', () => {
 });
 
 test('multiple words: any word matches; ordered by trending with a x1.3 bonus per extra word', () => {
-  // mortgage +5 (1 word) > fedcut +0 + 8*log2(1.3) = +3.03 (2 words) > fedhold +1 (1 word)
   assert.deepEqual(ids('fed rate'), ['mortgage', 'fedcut', 'fedhold']);
   assert.ok(Math.abs(searchScore(0, 2) - 8 * Math.log2(SEARCH_TERM_BONUS)) < 1e-9);
 });
@@ -73,6 +72,14 @@ test('ordering by trending: a more trending match comes first; empty and no-matc
   hours.set('fedhold', 1);
   assert.deepEqual(ids(''), []);
   assert.deepEqual(ids('qqqxxnomatch'), []);
+});
+
+test('quality gate blocks source-prefix false positives and weak metadata; short oil cannot typo-match quake', () => {
+  const faa = mk('faa', 'FAA updates aviation rule', 'New Federal Register notice.', 100,
+    { sources: [{ ...card().sources[0], name: 'Federal Register' }], category: 'safety' });
+  assert.deepEqual(rankSearch([faa], 'fed rate', trend), []);
+  assert.deepEqual(rankSearch([cards.find((c) => c.id === 'chile')!], 'oil', trend), []);
+  assert.ok(ids('recall').includes('chile') === false);
 });
 
 test('mock api search pages through the same results without repeats', () => {

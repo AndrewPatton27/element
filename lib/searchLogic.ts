@@ -83,10 +83,10 @@ export function serializeRecents(list: string[]): string {
   return JSON.stringify(list.slice(0, RECENT_MAX));
 }
 
-// ---- Matching and ranking (mock mode; mirrors api.search v2, 20261018020000_search_v2.sql) ----
+// ---- Matching and ranking (mock mode; mirrors api.search v3, 20261018050000_search_v3.sql) ----
 //
-// A card matches when ANY query word matches (stem/prefix, curated synonym, typo, exact ticker or
-// series id). Results are ordered by the Trending score; each extra matched word adds a x1.3 bonus.
+// Each query term contributes its best evidence score; weak metadata and ambiguous short synonyms
+// cannot dominate. Search order keeps the Trending score and existing multi-term bonus.
 
 export const SEARCH_MAX_TERMS = 6; // settings.md: search_max_terms
 export const SEARCH_TERM_BONUS = 1.3; // settings.md: search_term_bonus
@@ -104,10 +104,10 @@ export const SYNONYM_GROUPS: readonly (readonly string[])[] = [
   ['rate', 'rates', 'interest'],
   ['inflation', 'cpi', 'prices'],
   ['jobs', 'employment', 'unemployment', 'payrolls'],
-  ['oil', 'crude', 'wti', 'energy'],
+  ['oil', 'crude', 'wti'],
   ['stocks', 'equities', 'markets'],
   ['quake', 'earthquake', 'tremor'],
-  ['recall', 'recalls', 'safety'],
+  ['recall', 'recalls'],
   ['gdp', 'growth', 'economy'],
   ['deal', 'merger', 'acquisition'],
 ];
@@ -161,13 +161,25 @@ function wordMatches(alt: string, words: string[], allowPrefix: boolean): boolea
   return words.some((w) => w === alt || stem(w) === s || (allowPrefix && alt.length >= SEARCH_PREFIX_MIN_LEN && stem(w).startsWith(s)));
 }
 
-function termMatches(term: string, words: string[], text: string, card: BlurbCard): boolean {
+function termQuality(term: string, card: BlurbCard): number {
   const upper = term.toLocaleUpperCase();
-  if (card.tickers.some((t) => t.symbol === upper) || card.macro.some((m) => m.series_id === upper)) return true;
+  const content = [card.headline, card.body, card.detail?.paragraphs.join(' '), card.detail?.key_points.join(' '), ...card.tickers.map((t) => `${t.symbol} ${t.name}`), ...card.macro.map((m) => `${m.series_id} ${m.label}`)].filter(Boolean).join(' ').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const words = content.split(' ');
+  let best = card.tickers.some((t) => t.symbol === upper) || card.macro.some((m) => m.series_id === upper) ? 1 : 0;
+  const fedQuery = ['fed', 'federal', 'federl'].includes(term);
+  if (words.includes(term) && !fedQuery) best = Math.max(best, 1);
+  if (term === 'fed' && words.includes('fed')) best = Math.max(best, 0.5);
+  if ((term === 'federal' || term === 'fed') && content.includes('federal reserve')) best = Math.max(best, 1);
   for (const alt of alternatives(term)) {
-    if (alt.includes(' ') ? ` ${text} `.includes(` ${alt}`) : wordMatches(alt, words, true)) return true;
+    if (alt === term || (fedQuery && !['federal reserve', 'fomc'].includes(alt))) continue;
+    if (alt.includes(' ') ? ` ${content} `.includes(` ${alt} `) : words.includes(alt)) best = Math.max(best, 0.6);
   }
-  return words.some((w) => isTypo(term, w));
+  const s = stem(term);
+  if (!fedQuery && words.some((w) => stem(w) === s || (term.length >= SEARCH_PREFIX_MIN_LEN && stem(w).startsWith(s)))) best = Math.max(best, 0.8);
+  if (words.some((w) => isTypo(term, w) && (!fedQuery || content.includes('federal reserve')))) best = Math.max(best, 0.5);
+  const meta = [card.category, card.event_type?.replace(/_/g, ' '), ...card.sources.map((x) => x.name)].filter(Boolean).join(' ').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ');
+  if (meta.includes(term)) best = Math.max(best, 0.25);
+  return best;
 }
 
 // Everything a search looks at, lowercased with punctuation removed.
@@ -182,9 +194,11 @@ export function searchText(card: BlurbCard): string {
 
 // How many query words the card matches (0 = not a result).
 export function matchedTermCount(card: BlurbCard, terms: string[]): number {
-  const text = searchText(card);
-  const words = text.split(' ');
-  return terms.filter((t) => termMatches(t, words, text, card)).length;
+  return terms.filter((t) => termQuality(t, card) > 0).length;
+}
+
+export function matchQuality(card: BlurbCard, terms: string[]): number {
+  return terms.reduce((sum, term) => sum + termQuality(term, card), 0);
 }
 
 // Trending score in hours (+8 h = twice as important), plus log2(1.3) half-lives per extra matched word.
@@ -197,9 +211,10 @@ export function rankSearch(cards: BlurbCard[], raw: string, trendingHours: (c: B
   const terms = searchTerms(raw);
   if (terms.length === 0) return [];
   return cards
-    .map((c) => ({ c, n: matchedTermCount(c, terms) }))
-    .filter((x) => x.n > 0)
-    .map((x) => ({ c: x.c, k: searchScore(trendingHours(x.c), x.n) }))
+    .map((c) => ({ c, n: matchedTermCount(c, terms), q: matchQuality(c, terms) }))
+    .filter((x) => x.q >= 0.5)
+    .map((x) => ({ c: x.c, k: trendingHours(x.c) * (0.5 + x.q / terms.length)
+      + TRENDING_HALF_LIFE_HOURS * Math.log2(SEARCH_TERM_BONUS) * Math.max(0, x.n - 1) }))
     .sort((a, b) => b.k - a.k || (b.c.importance ?? 1) - (a.c.importance ?? 1)
       || Date.parse(b.c.sort_at) - Date.parse(a.c.sort_at) || (a.c.id < b.c.id ? 1 : a.c.id > b.c.id ? -1 : 0))
     .map((x) => x.c);
