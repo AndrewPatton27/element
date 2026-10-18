@@ -22,19 +22,21 @@ export function BriefNumbers({
   notices,
   onAll,
   wide,
+  title = 'Numbers to know',
 }: {
   facts: MacroFact[];
   notices: RequiredNotice[];
   onAll?: () => void;
   wide: boolean;
+  title?: string;
 }) {
   const p = usePalette();
   if (facts.length === 0) return null;
   return (
-    <View accessibilityLabel="Numbers to know" style={[styles.card, wide && styles.cardWide, { backgroundColor: p.surface, borderColor: p.border }]}>
+    <View accessibilityLabel={title} style={[styles.card, wide && styles.cardWide, { backgroundColor: p.surface, borderColor: p.border }]}>
       <View style={styles.cardHead}>
         <Text accessibilityRole="header" style={[styles.label, { color: p.muted }]}>
-          Numbers to know
+          {title}
         </Text>
         {onAll ? (
           <Pressable onPress={onAll} accessibilityRole="link" accessibilityLabel="See all numbers" style={styles.all}>

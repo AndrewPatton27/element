@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import type { BlurbCard } from '../contract/types.ts';
 import type { Api } from '../lib/api.ts';
 import { useAppData } from '../lib/appData';
@@ -20,9 +20,12 @@ import {
   briefIsEmpty,
   briefView,
   dayLabelShort,
+  feedTopicHref,
   generatedLine,
   headlineLabel,
+  SECTION_PREVIEW,
   toBriefData,
+  tokenParam,
   type BriefData,
   type BriefMode,
 } from '../lib/briefLogic';
@@ -32,8 +35,12 @@ import { withoutHiddenSources } from '../lib/sourceKeys';
 import { usePalette, useWide } from '../lib/useTheme';
 import { MOBILE_HEADER_HEIGHT, fonts, space } from '../lib/theme';
 import { BriefEmpty, BriefMeta, BriefTabs } from '../components/BriefChrome';
+import { BriefMarkets } from '../components/BriefMarkets';
 import { BriefMovers, BriefNumbers } from '../components/BriefNumbers';
+import { BriefSignup } from '../components/BriefSignup';
+import { BriefManage } from '../components/BriefSignupManage';
 import { BriefStories } from '../components/BriefStories';
+import { BriefSummary } from '../components/BriefSummary';
 import { NumbersTicker } from '../components/NumbersTicker';
 import { DetailSheet } from '../components/DetailSheet';
 import { ScreenShell } from '../components/ScreenShell';
@@ -108,6 +115,10 @@ export default function BriefScreen() {
   const signedIn = acct.user !== null;
   const [mode, setMode] = useState<BriefMode>('daily');
   const [detailCard, setDetailCard] = useState<BlurbCard | null>(null);
+  // brief?manage=<token> (the link in every brief email) opens the small manage card.
+  const params = useLocalSearchParams<{ manage?: string | string[] }>();
+  const manageToken = tokenParam(params.manage);
+  const [manageOpen, setManageOpen] = useState(true);
   const { slot, refresh } = useBrief(api, mode);
   const { data, loading, error } = slot;
 
@@ -130,7 +141,15 @@ export default function BriefScreen() {
   const goFeed = () => router.navigate('/' as never);
   const goNumbers = () => router.navigate('/numbers' as never);
   const goAccount = () => router.navigate('/account' as never);
+  const goTopic = (slug: string) => router.navigate(feedTopicHref(slug) as never);
 
+  const signup = <BriefSignup api={api} initialKind={mode} wide={wide} />;
+  const closeManage = () => {
+    setManageOpen(false);
+    router.setParams({ manage: '' });
+  };
+  const manageCard =
+    manageToken && manageOpen ? <BriefManage api={api} token={manageToken} wide={wide} onClose={closeManage} /> : null;
   const switchTabs = <BriefTabs mode={mode} onChange={setMode} wide={wide} />;
 
   let body;
@@ -144,11 +163,17 @@ export default function BriefScreen() {
     );
   } else if (briefIsEmpty(view)) {
     const hiddenAll = !briefIsEmpty(unfiltered);
-    body = <BriefEmpty mode={mode} hidden={hiddenAll} onRefresh={refresh} onFeed={goFeed} onSettings={goAccount} />;
+    body = (
+      <>
+        <BriefEmpty mode={mode} hidden={hiddenAll} onRefresh={refresh} onFeed={goFeed} onSettings={goAccount} />
+        {signup}
+      </>
+    );
   } else {
     const label = headlineLabel(mode, data.window_hours);
     const stories = (
       <>
+        <BriefSummary summary={view.summary} mode={mode} config={config} wide={wide} />
         <BriefStories
           label={label}
           right={wide ? undefined : dayLabelShort(briefDate(data))}
@@ -160,8 +185,30 @@ export default function BriefScreen() {
           ranked
           showTeaser={mode === 'daily'}
         />
+        <BriefMarkets
+          cards={view.marketCards}
+          numbers={view.marketNumbers}
+          total={view.marketsTotal}
+          notices={noticesFor(config, 'numbers_panel')}
+          categories={categories}
+          config={config}
+          onOpen={setDetailCard}
+          onSeeAll={() => goTopic('markets')}
+          wide={wide}
+        />
         {view.sections.map((s) => (
-          <BriefStories key={s.category} label={s.title} cards={s.cards} categories={categories} config={config} onOpen={setDetailCard} wide={wide} />
+          <BriefStories
+            key={s.category}
+            label={s.title}
+            cards={s.cards}
+            categories={categories}
+            config={config}
+            onOpen={setDetailCard}
+            wide={wide}
+            preview={SECTION_PREVIEW}
+            total={s.total}
+            onSeeAll={() => goTopic(s.slug)}
+          />
         ))}
       </>
     );
@@ -173,6 +220,7 @@ export default function BriefScreen() {
         <View style={styles.aside}>
           {movers}
           {numbers}
+          {signup}
         </View>
       </View>
     ) : (
@@ -180,6 +228,7 @@ export default function BriefScreen() {
         {stories}
         {movers}
         {numbers}
+        {signup}
       </>
     );
   }
@@ -198,6 +247,7 @@ export default function BriefScreen() {
     return (
       <ScreenShell tab="brief" title={mode === 'weekly' ? 'Weekly brief' : 'Daily brief'} meta={briefDateLabel(mode, data)}>
         {switchTabs}
+        {manageCard}
         {meta}
         {inlineError}
         {body}
@@ -226,6 +276,7 @@ export default function BriefScreen() {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={p.accent} colors={[p.accent]} />}
       >
+        {manageCard}
         {meta}
         {inlineError}
         {body}

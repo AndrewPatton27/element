@@ -3,16 +3,19 @@
 // to show from the result: hidden topics and sources, no card twice, the "Generated"
 // line, the date labels, the one-line teaser and the footer wording.
 
-import type { AppConfig, BlurbCard, Brief, Category, MacroFact, NumberTrend } from '../contract/types.ts';
+import type { AppConfig, BlurbCard, Brief, BriefKind, BriefMarkets, BriefSubscribeStatus, BriefSummary, Category, MacroFact, NumberTrend } from '../contract/types.ts';
 import { categoryName, clampText, relativeTime } from './format.ts';
 import { cardLabels, cardNotices, disclaimerText, primarySource, shareAlikeCredit, type ShareAlikeCredit } from './labels.ts';
+import type { KeyValueStore } from './storage.ts';
 import { isHttpUrl } from './types.ts';
 
 export type BriefMode = 'daily' | 'weekly';
 
-/** A brief as the screen holds it. `movers` is only filled for the weekly brief. */
-export interface BriefData extends Brief {
+/** A brief as the screen holds it. movers is only filled for the weekly brief. */
+export interface BriefData extends Omit<Brief, 'summary' | 'markets'> {
   movers: NumberTrend[];
+  summary: BriefSummary | null;
+  markets: BriefMarkets | null;
 }
 
 export const BRIEF_MODES: { mode: BriefMode; label: string }[] = [
@@ -24,6 +27,8 @@ export interface BriefSectionView {
   category: string;
   title: string;
   cards: BlurbCard[];
+  slug: string; // category slug the feed filter understands
+  total: number; // eligible stories in the window (>= cards.length)
 }
 
 export interface BriefView {
@@ -31,13 +36,26 @@ export interface BriefView {
   sections: BriefSectionView[];
   numbers: MacroFact[];
   movers: NumberTrend[];
+  summary: BriefSummary | null;
+  marketCards: BlurbCard[];
+  marketNumbers: MacroFact[];
+  marketsTotal: number;
 }
 
 // ---- Normalising what the API returned ----
 
 /** Fills the optional parts so the screen can read every field without checks. */
 export function toBriefData(raw: Brief & { movers?: NumberTrend[] }): BriefData {
+  const m = raw.markets;
+  const markets: BriefMarkets | null =
+    m && typeof m === 'object'
+      ? { cards: Array.isArray(m.cards) ? m.cards : [], numbers: Array.isArray(m.numbers) ? m.numbers : [], total: typeof m.total === 'number' ? m.total : 0 }
+      : null;
+  const s = raw.summary;
+  const summary = s && typeof s.text === 'string' && s.text.trim() !== '' ? s : null;
   return {
+    summary,
+    markets,
     generated_at: raw.generated_at,
     window_hours: raw.window_hours,
     headline_cards: raw.headline_cards ?? [],
@@ -81,19 +99,86 @@ export function briefView(
       return true;
     });
   const headlines = take(data.headline_cards);
+  const marketCards = take(data.markets?.cards ?? []);
   const sections = data.sections
-    .map((s) => ({ category: s.category, title: sectionTitle(s, categories), cards: take(s.cards) }))
+    .map((s) => {
+      const cards = take(s.cards);
+      return { category: s.category, title: sectionTitle(s, categories), cards, slug: s.slug ?? s.category, total: Math.max(s.total ?? 0, cards.length) };
+    })
     .filter((s) => s.cards.length > 0);
-  return { headlines, sections, numbers: data.numbers, movers: data.movers };
+  const marketNumbers = data.markets?.numbers ?? [];
+  return {
+    headlines,
+    sections,
+    numbers: data.numbers,
+    movers: data.movers,
+    summary: data.summary,
+    marketCards,
+    marketNumbers,
+    marketsTotal: Math.max(data.markets?.total ?? 0, marketCards.length),
+  };
 }
 
 export function briefIsEmpty(view: BriefView): boolean {
-  return view.headlines.length === 0 && view.sections.length === 0 && view.numbers.length === 0 && view.movers.length === 0;
+  return (
+    view.headlines.length === 0 &&
+    view.sections.length === 0 &&
+    view.numbers.length === 0 &&
+    view.movers.length === 0 &&
+    view.marketCards.length === 0 &&
+    view.marketNumbers.length === 0 &&
+    view.summary === null
+  );
 }
 
 /** Every card the brief shows, headlines first. Used for the AI label. */
 export function briefCards(view: BriefView): BlurbCard[] {
-  return [...view.headlines, ...view.sections.flatMap((s) => s.cards)];
+  return [...view.headlines, ...view.marketCards, ...view.sections.flatMap((s) => s.cards)];
+}
+
+// ---- Depth: first 3 per topic, "Show more", "See all N" ----
+
+/** Cards shown before the "Show more" toggle. */
+export const SECTION_PREVIEW = 3;
+
+export interface SectionSplit {
+  shown: BlurbCard[];
+  hidden: number; // how many sit behind "Show more"
+}
+
+/** The first `preview` cards, and how many wait behind the toggle (all shown when expanded). */
+export function splitSection(cards: BlurbCard[], expanded: boolean, preview = SECTION_PREVIEW): SectionSplit {
+  if (expanded || cards.length <= preview) return { shown: cards, hidden: 0 };
+  return { shown: cards.slice(0, preview), hidden: cards.length - preview };
+}
+
+/** "See all 14" text, or null when the topic has nothing more than what is listed. */
+export function seeAllLabel(total: number, shown: number): string | null {
+  return Number.isFinite(total) && total > Math.max(shown, 1) ? `See all ${total}` : null;
+}
+
+/** Feed address filtered to one topic (app/index.tsx reads ?category=). */
+export function feedTopicHref(slug: string, stamp?: number): string {
+  return `/?tab=top&category=${encodeURIComponent(slug)}${stamp === undefined ? '' : `&t=${stamp}`}`;
+}
+
+/** The ?category= value as a safe slug, or null. */
+export function topicParam(value: string | string[] | undefined | null): string | null {
+  const v = Array.isArray(value) ? value[0] : value;
+  return typeof v === 'string' && /^[a-z0-9_-]{1,40}$/.test(v) ? v : null;
+}
+
+// ---- AI summary box ----
+
+export const SUMMARY_LABEL = 'AI-generated summary · may contain errors';
+
+export function summaryTitle(mode: BriefMode): string {
+  return mode === 'weekly' ? 'Weekly summary' : 'Daily summary';
+}
+
+/** The muted line under the summary: the AI label (always) then the disclaimer. */
+export function summaryFooter(config: AppConfig | null | undefined): string {
+  return [SUMMARY_LABEL, disclaimerText(config)].filter(Boolean).join(' · ');
 }
 
 // ---- Text ----
@@ -222,4 +307,128 @@ export function trendA11yLabel(t: Pick<NumberTrend, 'name' | 'value' | 'change' 
   const word = t.direction === 'up' ? 'up' : t.direction === 'down' ? 'down' : 'unchanged';
   const change = t.change.replace(/^[^\p{L}\p{N}]+/u, '').trim();
   return `${t.name} ${t.value}, ${word}${change ? `, ${change}` : ''}. Source: ${t.source}`;
+}
+
+// ---- Email sign-up (double opt-in; docs/work/spec-brief-email.md) ----
+
+export const BRIEF_KIND_OPTIONS: { kind: BriefKind; label: string; hint: string }[] = [
+  { kind: 'daily', label: 'Daily', hint: 'Every morning' },
+  { kind: 'weekly', label: 'Weekly', hint: 'Mondays' },
+  { kind: 'both', label: 'Both', hint: 'Daily and weekly' },
+];
+
+export const DEFAULT_SEND_HOUR = 7;
+/** Hours offered in the time list: 5 AM to 10 PM, in the reader's own time. */
+export const SEND_HOURS: number[] = Array.from({ length: 18 }, (_, i) => i + 5);
+
+/** 7 -> "7 AM", 12 -> "12 PM", 22 -> "10 PM". */
+export function hourLabel(hour: number): string {
+  const h = ((Math.round(hour) % 24) + 24) % 24;
+  const suffix = h < 12 ? 'AM' : 'PM';
+  return `${h % 12 === 0 ? 12 : h % 12} ${suffix}`;
+}
+
+/** The reader's IANA time zone from the device; "UTC" when the device will not say. */
+export function detectTimezone(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof tz === 'string' && tz.length > 0 && tz.length <= 64 ? tz : 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+export const BRIEF_CONSENT = 'We email your brief. One click to unsubscribe in every email.';
+export const BRIEF_PROMPT_TITLE = 'Stay up to date';
+export const BRIEF_PROMPT_TEXT = 'The brief in your inbox, free. Pick daily, weekly or both, and the time that suits you.';
+
+/** About > Your data: what is stored when someone subscribes (app/about.tsx imports this). */
+export const BRIEF_DATA_TEXT =
+  'If you subscribe to the email brief we store your email address, the kind of brief you chose, your send time and your time zone. You can unsubscribe any time with one click in any email, and nothing is sold or shared.';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Same shape check as the server (api.subscribe_brief): trimmed, lowercased, <= 254 chars. */
+export function cleanEmail(raw: string): string | null {
+  const e = (raw ?? '').trim().toLowerCase();
+  return e.length >= 3 && e.length <= 254 && EMAIL_RE.test(e) ? e : null;
+}
+
+export interface SignupInput {
+  email: string;
+  kind: BriefKind;
+  hour: number;
+  tz: string;
+}
+
+export type SignupCheck = { ok: true; value: SignupInput } | { ok: false; error: string };
+
+export function validateSignup(input: SignupInput): SignupCheck {
+  const email = cleanEmail(input.email);
+  if (email === null) return { ok: false, error: 'Enter a valid email address, like name@example.com.' };
+  if (!BRIEF_KIND_OPTIONS.some((o) => o.kind === input.kind)) return { ok: false, error: 'Choose daily, weekly or both.' };
+  if (!SEND_HOURS.includes(input.hour)) return { ok: false, error: 'Choose a time between 5 AM and 10 PM.' };
+  return { ok: true, value: { email, kind: input.kind, hour: input.hour, tz: input.tz || 'UTC' } };
+}
+
+export interface SignupMessage {
+  tone: 'ok' | 'error';
+  title: string;
+  text: string;
+}
+
+/**
+ * What to tell the reader for each server answer. 'pending' is the answer for every valid
+ * address (new, already waiting or already subscribed), so the text never reveals whether
+ * someone is already on the list.
+ */
+export function signupMessage(status: BriefSubscribeStatus): SignupMessage {
+  switch (status) {
+    case 'pending':
+      return { tone: 'ok', title: 'Check your email to confirm', text: 'If that address can receive the brief, a message with a confirmation link is on its way. It can take a minute. Nothing is sent until you confirm.' };
+    case 'invalid':
+      return { tone: 'error', title: 'That email does not look right', text: 'Check the address and try again.' };
+    case 'limited':
+      return { tone: 'error', title: 'Too many tries', text: 'Please wait a little while and try again.' };
+    default:
+      return { tone: 'error', title: 'Email briefs are not available right now', text: 'We could not reach the sign-up service. Nothing was saved. Please try again later.' };
+  }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A ?token= / ?manage= value as a UUID, or null (never sent to the server otherwise). */
+export function tokenParam(value: string | string[] | undefined | null): string | null {
+  const v = Array.isArray(value) ? value[0] : value;
+  return typeof v === 'string' && UUID_RE.test(v.trim()) ? v.trim().toLowerCase() : null;
+}
+
+export const BRIEF_EMAIL_KEY = 'element.brief-email';
+
+/** The email the reader chose to keep on this device ('' when none). */
+export function readRememberedEmail(store: KeyValueStore): string {
+  return cleanEmail(store.get(BRIEF_EMAIL_KEY) ?? '') ?? '';
+}
+
+/** Keeps the address on this device only when `remember`; otherwise forgets any saved one. */
+export function saveRememberedEmail(store: KeyValueStore, email: string, remember: boolean): void {
+  const e = cleanEmail(email);
+  if (remember && e) store.set(BRIEF_EMAIL_KEY, e);
+  else store.remove(BRIEF_EMAIL_KEY);
+}
+
+// ---- Running an email call ----
+
+export type MailOutcome = 'done' | 'failed' | 'unavailable';
+
+/** Runs an api email call; a thrown error becomes 'unavailable', never a crash. */
+export async function runMail(call: (() => Promise<{ ok: boolean; status?: string }>) | null): Promise<MailOutcome> {
+  if (!call) return 'unavailable';
+  try {
+    const r = await call();
+    if (r.ok) return 'done';
+    return r.status === 'unavailable' ? 'unavailable' : 'failed';
+  } catch {
+    return 'unavailable';
+  }
 }
