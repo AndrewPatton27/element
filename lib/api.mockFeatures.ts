@@ -22,7 +22,7 @@ export function createMockFeatureApi(cards: BlurbCard[], numbers: MacroFact[], t
     for (const c of ranked) groups.set(c.category, [...(groups.get(c.category) ?? []), c]);
     return {
       generated_at: new Date().toISOString(), window_hours,
-      headline_cards: ranked.slice(0, 3),
+      headline_cards: [...groups.values()].slice(0, 3).map((g) => g[0]),
       sections: [...groups.entries()].slice(0, 5).map(([category, grouped]) => ({ category, label: category, cards: grouped.slice(0, 3) })),
       numbers: numbers.slice(0, 4),
     };
