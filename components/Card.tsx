@@ -1,4 +1,4 @@
-// One feed card (design Mobile-Final / Web-Final): badge and meta, headline,
+﻿// One feed card (design Mobile-Final / Web-Final): badge and meta, headline,
 // (numbers), body, facts (Agency / Type / Published, on phones too), tickers, then
 // the source row and a footer: small print on the left, like / dislike / share icon
 // buttons on the right. The disclaimer appears once per card: under the card on
@@ -6,7 +6,7 @@
 // no prices. Link-out cards (reserved, the parser skips them in v1) have their
 // own layout from the Feed-LinkOut draft. Swiping to react lives in FeedPager.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, Share, ScrollView, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
 import { router } from 'expo-router';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
@@ -24,6 +24,7 @@ import { Disclaimer, ShareAlikeLine } from './Labels';
 import { SourceRow } from './SourceChip';
 import { FollowPill } from './FollowPill';
 import { footerLabels, linkOutCredit, linkOutDelay, shareUrl } from './cardFooter';
+import { msSinceSwipeEnd, shouldOpenDetail, wasCardSwiped, type PointerPoint } from '../lib/swipeLogic';
 
 interface Props {
   card: BlurbCard;
@@ -31,7 +32,7 @@ interface Props {
   categories: Category[];
   onShowSources: (card: BlurbCard) => void;
   onOpenDetail?: (card: BlurbCard) => void; // tap on the card body
-  onMore?: (card: BlurbCard) => void; // "⋯" options (signed in only)
+  onMore?: (card: BlurbCard) => void; // "â‹¯" options (signed in only)
   onNext?: () => void;
   wide?: boolean;
   compact?: boolean; // short screens: smaller type so the card fits
@@ -107,7 +108,7 @@ function factsFor(card: BlurbCard): { label: string; value: string }[] {
   return out;
 }
 
-// "World · 2 h ago", or "Recalls & Safety · Recall · 2 h ago" when the event adds something.
+// "World Â· 2 h ago", or "Recalls & Safety Â· Recall Â· 2 h ago" when the event adds something.
 function metaLine(card: BlurbCard, categories: Category[]): string {
   const category = categoryName(card.category, categories);
   if (card.kind === 'link_out') return [category, linkOutDelay(card.freshness?.delayed_hours)].filter(Boolean).join(' · ');
@@ -122,6 +123,23 @@ function metaLine(card: BlurbCard, categories: Category[]): string {
 export function Card(props: Props) {
   const { card, config, categories, onShowSources, onOpenDetail, onNext, wide, compact, peek, reaction, onReact, onMore, followedTopic, onToggleTopicFollow } = props;
   const p = usePalette();
+  const pressStart = useRef<{ point: PointerPoint | null; at: number } | null>(null);
+  const recordPressStart = (x?: number, y?: number) => {
+    pressStart.current = { point: Number.isFinite(x) && Number.isFinite(y) ? { x: x!, y: y! } : null, at: Date.now() };
+  };
+  const detailPressIn = (event: { nativeEvent: { pageX?: number; pageY?: number } }) =>
+    recordPressStart(event.nativeEvent.pageX, event.nativeEvent.pageY);
+  const detailMouseDown = (event: { pageX: number; pageY: number }) => recordPressStart(event.pageX, event.pageY);
+  const openDetailFromPress = (event: { nativeEvent: { pageX?: number; pageY?: number } }) => {
+    const start = pressStart.current;
+    pressStart.current = null;
+    const up = Number.isFinite(event.nativeEvent.pageX) && Number.isFinite(event.nativeEvent.pageY)
+      ? { x: event.nativeEvent.pageX!, y: event.nativeEvent.pageY! }
+      : null;
+    const duration = start ? Date.now() - start.at : 0;
+    if (wasCardSwiped(card.id)) return;
+    if (shouldOpenDetail(start?.point ?? null, up, duration, msSinceSwipeEnd())) onOpenDetail?.(card);
+  };
   const labels = cardLabels(card, config);
   const credit = shareAlikeCredit(card, config);
   const badge = badgeFor(card, p);
@@ -286,7 +304,10 @@ export function Card(props: Props) {
               nestedScrollEnabled
             >
             <Pressable
-              onPress={opensDetail ? () => onOpenDetail?.(card) : undefined}
+              onPress={opensDetail ? openDetailFromPress : undefined}
+              onPressIn={opensDetail ? detailPressIn : undefined}
+              onTouchStart={opensDetail ? detailPressIn : undefined}
+              {...(Platform.OS === 'web' ? { onMouseDown: detailMouseDown } as any : {})}
               disabled={!opensDetail && a11yActions.length === 0}
               accessible={opensDetail || a11yActions.length > 0}
               accessibilityRole={opensDetail ? 'button' : undefined}
@@ -351,7 +372,7 @@ export function Card(props: Props) {
 
             <View style={styles.sourceBlock}>
               {opensDetail ? (
-                <Pressable onPress={() => onOpenDetail?.(card)} accessibilityRole="button" accessibilityLabel={`More detail. ${OPEN_DETAIL_HINT}`} style={styles.more}>
+                <Pressable onPress={openDetailFromPress} onPressIn={detailPressIn} onTouchStart={detailPressIn} {...(Platform.OS === 'web' ? { onMouseDown: detailMouseDown } as any : {})} accessibilityRole="button" accessibilityLabel={`More detail. ${OPEN_DETAIL_HINT}`} style={styles.more}>
                   <Text style={[styles.moreText, { color: p.accentInk }]}>More detail ›</Text>
                 </Pressable>
               ) : null}

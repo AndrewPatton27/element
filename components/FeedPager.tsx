@@ -42,12 +42,12 @@ import {
   swipeEnabled,
   undoPress,
   type Axis,
+  markCardSwiped,
 } from '../lib/swipeLogic';
 import { defaultStore } from '../lib/storage';
 import { Card } from './Card';
 import { CardErrorBoundary } from './ErrorBoundary';
 import type { Feedback } from '../lib/accountLogic';
-import { LoadingState } from './States';
 import { ThumbDownIcon, ThumbUpIcon } from './Icons';
 import { UndoToast } from './UndoToast';
 import { shouldUseCompactCard } from '../lib/cardFit';
@@ -198,7 +198,7 @@ export function FeedPager({
   items,
   config,
   categories,
-  loadingMore,
+  loadingMore: _loadingMore,
   done,
   onEndReached,
   onShowSources,
@@ -290,6 +290,7 @@ export function FeedPager({
       const sent = reactionToSend(previous, r);
       if (sent) {
         onReact(card, sent);
+        markCardSwiped(card.id);
         setUndo({ card, previous, sent, message: sent === 'like' ? 'Liked. More like this.' : 'Disliked. Less like this.' });
       }
       const i = items.findIndex((c) => c.id === card.id);
@@ -400,6 +401,7 @@ export function FeedPager({
         <FlatList
           ref={list}
           data={items.slice(0, revealed)}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           keyExtractor={(c) => c.id}
           renderItem={renderItem}
           pagingEnabled
@@ -418,11 +420,7 @@ export function FeedPager({
           maxToRenderPerBatch={5}
           removeClippedSubviews={Platform.OS !== 'web'}
           ListFooterComponent={
-            loadingMore ? (
-              <View style={{ height: 80 }}>
-                <LoadingState label="Loading more…" />
-              </View>
-            ) : done && items.length > 0 ? (
+            done && items.length > 0 ? (
               <View style={styles.end}>
                 <Text style={[styles.endText, { color: p.muted }]}>You’re all caught up. Switch to Latest or another topic.</Text>
               </View>

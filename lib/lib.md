@@ -87,3 +87,7 @@ Files in `lib/__tests__/`: `account`, `api`, `detail`, `dwell`, `feedLogic`, `fi
 - localPrefs.ts now also exports DEVICE_DATA_KEYS and clearAll(store): removes the device choices, follows, recent searches and quick-tour flag (local only; the login session stays). Test in __tests__/localPrefs.test.ts.
 
 - Feed queue: useFeed.ts fetches 10-card API pages, maintains the cursor, prefetches when the unseen visible buffer falls below the confidence target (3–7), and reranks only the unseen tail when local preferences change. queueLogic.ts owns confidence, five-card reveal sizing and reranking; pagerLogic.ts owns five-card pager reveal windows. Tests: __tests__/queueLogic.test.ts, __tests__/pagerLogic.test.ts.
+
+## Seamless feed queue (2026-10-18)
+
+Pages append by card id, so overlap is deduplicated and existing order/keys stay stable. FeedPager reveals additional rows without resetting its offset, pins the visible list position, and has no loading footer while cards are queued. Prefetch targets 3â€“7 unseen cards. Reranking pins the current and next card (index and index + 1), then ranks farther ahead. Background fetch errors leave queued cards available and retry with capped exponential backoff; an empty feed keeps the normal error/retry state. Tests: `__tests__/queueLogic.test.ts`, `__tests__/pagerLogic.test.ts`.

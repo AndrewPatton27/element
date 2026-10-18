@@ -1,4 +1,4 @@
-// Swipe to react on phone-sized layouts (pure, no React; tested in
+﻿// Swipe to react on phone-sized layouts (pure, no React; tested in
 // lib/__tests__/swipeLogic.test.ts). Right = like, left = dislike, the same
 // signals as the thumb buttons. components/FeedPager.tsx does the gesture.
 
@@ -73,3 +73,24 @@ export function hasTouch(env: { native: boolean; matchMedia?: ((q: string) => { 
 export function showCoach(o: { enabled: boolean; seen: string | null; index: number }): boolean {
   return o.enabled && o.seen !== '1' && o.index === 0;
 }
+
+export interface PointerPoint { x: number; y: number; }
+const MAX_TAP_MOVEMENT_PX = 10;
+const MAX_TAP_DURATION_MS = 400;
+const SWIPE_COOLDOWN_MS = 350;
+let lastSwipeEndAt = Number.NEGATIVE_INFINITY;
+
+export function shouldOpenDetail(down: PointerPoint | null, up: PointerPoint | null, durationMs: number, msAfterSwipeEnd: number): boolean {
+  if (durationMs > MAX_TAP_DURATION_MS || (msAfterSwipeEnd >= 0 && msAfterSwipeEnd < SWIPE_COOLDOWN_MS)) return false;
+  if (!down || !up) return true; // keyboard activation has no pointer coordinates
+  return Math.hypot(up.x - down.x, up.y - down.y) <= MAX_TAP_MOVEMENT_PX;
+}
+
+// Drew: a story that was swiped to like or dislike can never open its More detail sheet from
+// the trailing touch of that swipe (or by a stray tap while the card flies off).
+const swipedCards = new Set<string>();
+export function markCardSwiped(id: string): void { swipedCards.add(id); }
+export function wasCardSwiped(id: string): boolean { return swipedCards.has(id); }
+
+export function markSwipeEnd(): void { lastSwipeEndAt = Date.now(); }
+export function msSinceSwipeEnd(): number { return Date.now() - lastSwipeEndAt; }

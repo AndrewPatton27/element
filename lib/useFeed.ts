@@ -47,6 +47,8 @@ export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter
   const nextId = useRef(0);
   // The last failure was a rejected cursor: retry must start the list again.
   const restart = useRef(false);
+  const failures = useRef(0);
+  const retryAt = useRef(0);
 
   const load = useCallback(
     async (k: string, cursor: string | null): Promise<void> => {
@@ -72,10 +74,21 @@ export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter
           onPage: (page) => dispatch({ type: 'page', key: k, page }),
           alive: () => busy.current?.id === id,
         });
+        failures.current = 0;
+        retryAt.current = 0;
       } catch (err) {
         const status = err && typeof err === 'object' ? Number((err as { status?: unknown }).status) : NaN;
         restart.current = isInvalidCursor(status, rawDetail(err));
-        dispatch({ type: 'fail', key: k, error: userMessage(err) });
+        if (filterRef.current(stateRef.current.items).length > 0) {
+          failures.current += 1;
+          const delay = Math.min(30_000, 1_000 * 2 ** Math.min(5, failures.current - 1));
+          retryAt.current = Date.now() + delay;
+          dispatch({ type: 'fail', key: k, error: '' });
+          setTimeout(() => {
+            if (restart.current) { dispatch({ type: 'reset', key: k }); void load(k, null); }
+            else void load(k, stateRef.current.cursor);
+          }, delay);
+        } else dispatch({ type: 'fail', key: k, error: userMessage(err) });
       } finally {
         if (busy.current?.id === id) busy.current = null;
       }
@@ -120,7 +133,13 @@ export function useFeed(api: Api, query: FeedQuery, account?: AccountApi, filter
   // load() owns in-flight suppression and existing cursor/error handling.
   const buffered = Math.max(0, visibleCount - 1);
   useEffect(() => {
-    if (shouldFetchAhead(buffered, aheadTarget) && shouldLoadMore(state, key)) void load(key, state.cursor);
+    if (!shouldFetchAhead(buffered, aheadTarget) || !shouldLoadMore(state, key)) return;
+    const wait = Math.max(0, retryAt.current - Date.now());
+    if (wait === 0) void load(key, state.cursor);
+    else {
+      const timer = setTimeout(() => void load(key, stateRef.current.cursor), wait);
+      return () => clearTimeout(timer);
+    }
   }, [buffered, aheadTarget, state, key, load]);
 
   return { state, loadMore, retry, rerank };

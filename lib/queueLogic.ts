@@ -24,9 +24,12 @@ export function shouldFetchAhead(buffered: number, target: number): boolean {
 
 /** Preserve the visible/seen prefix; only local For-you ranking moves the unseen tail. */
 export function rerankQueue(queue: BlurbCard[], signals: LocalPrefs, seenCount: number, signedIn = false): BlurbCard[] {
-  const prefix = queue.slice(0, Math.max(0, seenCount));
+  // Keep the visible card and the next card fixed: the latter may already be
+  // rendered or partway through a swipe animation.
+  const prefix = queue.slice(0, Math.max(0, seenCount + 2));
   const tail = queue.slice(prefix.length);
-  const unique = tail.filter((c, i) => tail.findIndex((x) => x.id === c.id) === i);
+  const pinned = new Set(prefix.map((c) => c.id));
+  const unique = tail.filter((c, i) => !pinned.has(c.id) && tail.findIndex((x) => x.id === c.id) === i);
   // Signed-in server order is already personal; retain its base order here.
   return [...prefix, ...(signedIn ? unique : rankLocal(unique, signals))];
 }

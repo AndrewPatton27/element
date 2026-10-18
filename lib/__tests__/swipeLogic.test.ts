@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   hasTouch,
@@ -75,4 +75,23 @@ test('coach hint: first card only, until seen', () => {
   assert.equal(showCoach({ enabled: true, seen: '1', index: 0 }), false);
   assert.equal(showCoach({ enabled: true, seen: null, index: 1 }), false);
   assert.equal(showCoach({ enabled: false, seen: null, index: 0 }), false);
+});
+
+import { shouldOpenDetail } from '../swipeLogic.ts';
+
+const down = { x: 100, y: 100 };
+const tap = { x: 103, y: 104 };
+test('a clean tap opens detail', () => assert.equal(shouldOpenDetail(down, tap, 180, 1000), true));
+test('a 40 px horizontal drag does not open detail', () => assert.equal(shouldOpenDetail(down, { x: 140, y: 100 }, 180, 1000), false));
+test('a 12 px movement does not open detail', () => assert.equal(shouldOpenDetail(down, { x: 112, y: 100 }, 180, 1000), false));
+test('a long press does not open detail', () => assert.equal(shouldOpenDetail(down, tap, 401, 1000), false));
+test('a tap 100 ms after a swipe does not open detail', () => assert.equal(shouldOpenDetail(down, tap, 100, 100), false));
+test('a tap 500 ms after a swipe opens detail', () => assert.equal(shouldOpenDetail(down, tap, 100, 500), true));
+
+test('a card swiped to like or dislike never opens More detail afterwards', async () => {
+  const { markCardSwiped, wasCardSwiped } = await import('../swipeLogic.ts');
+  assert.equal(wasCardSwiped('card-x'), false);
+  markCardSwiped('card-x');
+  assert.equal(wasCardSwiped('card-x'), true);
+  assert.equal(wasCardSwiped('card-y'), false);
 });
