@@ -1,11 +1,15 @@
 // Gemini (free tier) summarizer. Only public-domain and SEC filing text is sent
 // (the chain checks the license before any provider is called).
+// Inputs: SummarizeInput (item + licensed text + optional retry errors) and the API key (header only).
+// Outputs: an unvalidated SummaryDraft; also exports the shared prompt builder, relevance rubric
+// and the provider error classes used by groq.ts and chain.ts.
 
 import { aiDailyCap, config, minIntervalMs } from '../config.ts';
 import { fetchAllowed, type FetchLike } from '../allowlist.ts';
 import { AI_CATEGORY_SLUGS } from '../validate.ts';
 import type { SummarizeInput, Summarizer, SummaryDraft } from '../types.ts';
 
+/** A provider answered 429; the chain puts it in a cooldown and moves on. */
 export class RateLimitedError extends Error {
   constructor(provider: string) {
     super(`${provider}: rate limited`);
@@ -13,6 +17,7 @@ export class RateLimitedError extends Error {
   }
 }
 
+/** Any other provider failure (HTTP error, non-JSON or empty reply); the chain moves on. */
 export class ProviderError extends Error {
   constructor(message: string) {
     super(message);
@@ -26,6 +31,11 @@ export const RELEVANCE_RUBRIC = 'Would a typical college student or young adult 
   + 'phones and subscriptions, apps and brands they use, or taxes on a first job; 3 = a well-known company or a change some people will notice; '
   + '1 = institutional or routine paperwork (board seats, pay plans, small-bank enforcement, technical rules).';
 
+/**
+ * The prompt shared by every AI provider: writing rules and hard limits (from config), item
+ * metadata, a recall-specific block for safety cards, the previous validator errors on a retry,
+ * and finally the licensed source text.
+ */
 export function buildPrompt(input: SummarizeInput): string {
   const it = input.item;
   const lines = [
@@ -76,6 +86,7 @@ export function buildPrompt(input: SummarizeInput): string {
   return lines.join('\n');
 }
 
+/** Gemini structured-output schema for the draft (card + everyday_relevance + detail). */
 export const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
@@ -98,6 +109,10 @@ export const RESPONSE_SCHEMA = {
   required: ['headline', 'body', 'category', 'event_type', 'tickers', 'everyday_relevance', 'detail'],
 };
 
+/**
+ * Gemini summarizer (generateContent, JSON response schema). Daily cap and pacing default to the
+ * free-tier values in config. Throws RateLimitedError on 429, ProviderError on other failures.
+ */
 export function createGeminiSummarizer(opts: {
   apiKey: string;
   model?: string;

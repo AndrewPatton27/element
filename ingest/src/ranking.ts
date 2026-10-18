@@ -1,6 +1,7 @@
 // TypeScript mirror of the ranking SQL (core.refresh_rank + api.feed ordering).
 // Used only by tests, to check the formula and the fixtures; the database is
 // the source of truth for real ranking.
+// Inputs: card-like rows (kind, event_type, sort_at, sources). Outputs: scores, sorted lists, pages.
 
 export const RANK_DEFAULTS = {
   halfLifeHours: 8,
@@ -23,6 +24,7 @@ export interface RankInput {
 
 const round = (x: number, d: number) => Math.round(x * 10 ** d) / 10 ** d;
 
+/** Importance = event weight x source authority x (1 + k * ln(distinct sources, capped)). Data cards weigh as macro_release. */
 export function importance(c: RankInput, p = RANK_DEFAULTS): number {
   const et = c.kind === 'data' ? 'macro_release' : c.event_type;
   const w = (et && p.eventWeights[et]) || p.eventWeights.default;
@@ -33,6 +35,7 @@ export function importance(c: RankInput, p = RANK_DEFAULTS): number {
   return w * auth * (1 + p.coverageK * Math.log(Math.min(n, p.coverageCap)));
 }
 
+/** Rank score = hours since epoch + halfLife * log2(importance), rounded to 6 decimals (importance halves every halfLife hours). */
 export function rankScore(c: RankInput, p = RANK_DEFAULTS): number {
   const hours = Date.parse(c.sort_at) / 3_600_000;
   return round(hours + p.halfLifeHours * Math.log2(importance(c, p)), 6);

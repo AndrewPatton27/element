@@ -1,6 +1,7 @@
 // Factual in-depth summaries for template cards (no AI). Built only from structured fields that
 // the card already shows (company, 8-K items, agency, title, date, quake data), plus fixed plain
 // explanations of what an agency or a filing type is. No new facts, no advice, no predictions.
+// Inputs: a RawItem. Outputs: a CardDetail (paragraphs + key points) or null.
 
 import type { CardDetail } from '../../contract/types.ts';
 import { config } from './config.ts';
@@ -12,7 +13,7 @@ const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct
 const day = (iso: string) => { const d = new Date(iso); return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`; };
 
 /** Cuts a key point to the word limit (adds an ellipsis when cut). */
-export function shortPoint(s: string, max: number = config.detail.keyPointMaxWords): string {
+function shortPoint(s: string, max: number = config.detail.keyPointMaxWords): string {
   const w = s.trim().split(/\s+/);
   return w.length <= max ? w.join(' ') : `${w.slice(0, max - 1).join(' ')}…`;
 }

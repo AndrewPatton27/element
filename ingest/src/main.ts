@@ -7,6 +7,8 @@
 //   --only     comma-separated subset of sources (macro, fed, bea, fedreg, sec, wiki, cpsc, usgs, nasa)
 //   --limit    max news items summarized per run (default 20)
 //   --json     with --dry-run: print the card payloads as JSON
+// Inputs: command-line flags and, for live runs, .env / process.env (keys are never printed).
+// Outputs: log lines on stdout, cards published to Supabase (live) or printed (dry run); exit code.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -32,6 +34,7 @@ export interface Args {
   rewrite: boolean;
 }
 
+/** Parses CLI flags (see the header). Throws on an unknown option, an unknown --only source or a bad --limit. */
 export function parseArgs(argv: string[]): Args {
   const a: Args = { dryRun: false, loop: false, only: [], limit: 20, json: false, rewrite: false };
   for (let i = 0; i < argv.length; i++) {
@@ -126,6 +129,11 @@ export async function refreshTrendingSafely(publisher: Deps['publisher'], log: (
   }
 }
 
+/**
+ * CLI entry point. Dry run: fixtures, template summarizer, in-memory publisher. Live: reads the
+ * environment, builds the provider chain and the Supabase publisher, then runs once, in a loop,
+ * or --rewrite. Returns the process exit code.
+ */
 export async function main(argv: string[]): Promise<number> {
   const args = parseArgs(argv);
   const log = (s: string) => console.log(s);

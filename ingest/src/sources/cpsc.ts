@@ -2,6 +2,7 @@
 // The AI sees only Title + Description + Hazards + Remedies from the JSON; no page is downloaded
 // and Images are never read (rule 9). License: PARTLY verified (US government work, 17 U.S.C. 105;
 // the CPSC policy page could not be read on 2026-10-17). Public-domain copy limit (25 words).
+// Inputs: the Recall JSON list. Outputs: selected recalls and RawItems (safety / recall) or skip reasons.
 
 import { config } from '../config.ts';
 import type { RawItem } from '../types.ts';
@@ -17,11 +18,13 @@ export interface CpscRecall {
   Remedies?: { Name?: string }[];
 }
 
+/** Recalls API URL starting `lookbackDays` before `now`. */
 export function cpscUrl(now: Date, lookbackDays: number = config.cpsc.lookbackDays): string {
   const start = new Date(now.getTime() - lookbackDays * 86_400_000).toISOString().slice(0, 10);
   return config.cpsc.url.replace('{start}', start);
 }
 
+/** Parses the recall list (entries without a Title are dropped); throws on non-JSON or a non-list. */
 export function parseCpscJson(text: string): CpscRecall[] {
   let j: unknown;
   try { j = JSON.parse(text); } catch { throw new Error('cpsc: response is not JSON'); }
@@ -44,6 +47,7 @@ const tidy = (s: string | undefined) => (s ?? '').replace(/\s+/g, ' ').trim();
 
 export type CpscSkipReason = 'bad_url' | 'no_text';
 
+/** Recall -> RawItem (AI text = title, description, hazards, remedies), or a skip reason (non-cpsc.gov URL, no title). */
 export function cpscToItem(r: CpscRecall, now: Date): { item: RawItem } | { skip: CpscSkipReason } {
   let url: URL;
   try { url = new URL(tidy(r.URL)); } catch { return { skip: 'bad_url' }; }

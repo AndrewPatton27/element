@@ -1,5 +1,6 @@
 // Template cards: no AI. Built only from feed metadata (company, 8-K item numbers,
 // press-release title), so they are always truthful. ai_generated = false.
+// Inputs: SummarizeInput (only the item's metadata is read). Outputs: a SummaryDraft.
 
 import { config } from '../config.ts';
 import type { SummarizeInput, Summarizer, SummaryDraft } from '../types.ts';
@@ -28,7 +29,7 @@ export const ITEM_TEXT: Record<string, { short: string; explain: string }> = {
  * publishes template cards for watch-list companies and config.templateSecItems; other items fall
  * back to ITEM_TEXT wording.
  */
-export const PLAIN_ITEM: Record<string, { headline: (co: string) => string; body: (co: string) => string }> = {
+const PLAIN_ITEM: Record<string, { headline: (co: string) => string; body: (co: string) => string }> = {
   '2.02': {
     headline: (co) => `${co} shares its latest financial results`,
     body: (co) => `${co} sent the SEC a report on its latest results, like sales and profit. Open the filing to see the numbers.`,
@@ -74,7 +75,7 @@ function shortAgency(agency: string | null | undefined): string {
   if (/treasury|fiscal service/.test(a)) return 'The Treasury Dept.';
   if (/energy/.test(a)) return 'The Energy Dept.';
   if (/education/.test(a)) return 'The Education Dept.';
-  return agency ? 'A federal agency' : 'A federal agency';
+  return 'A federal agency';
 }
 
 /**
@@ -82,7 +83,7 @@ function shortAgency(agency: string | null | undefined): string {
  * like "Airworthiness Directives;" or long section citations). Says, in plain words, who made a rule
  * and what it is about. No docket, item or section numbers, no long official title.
  */
-export function fedRegHeadline(title: string, agency: string | null | undefined): string {
+function fedRegHeadline(title: string, agency: string | null | undefined): string {
   const t = (title ?? '').trim();
   const who = shortAgency(agency);
   // Airworthiness Directives: a safety fix order for aircraft. Name the planemaker if the title does.
@@ -104,6 +105,7 @@ export function fedRegHeadline(title: string, agency: string | null | undefined)
   return cutAtWord(`${who} issues a new federal rule`, config.headlineMaxChars);
 }
 
+/** Template draft per source: plain 8-K wording, a plain Federal Register headline, or the Fed/BEA release title. */
 export function templateDraft(input: SummarizeInput): SummaryDraft {
   const it = input.item;
   if (it.source === 'sec_8k') {
@@ -139,6 +141,7 @@ export function templateDraft(input: SummarizeInput): SummaryDraft {
   };
 }
 
+/** The last-resort summarizer in the chain: never calls an AI. */
 export const templateSummarizer: Summarizer = {
   name: 'template',
   usesAi: false,

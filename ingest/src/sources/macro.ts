@@ -1,5 +1,7 @@
 // FRED observations (and the Treasury CSV) -> formatted MacroObservation + data cards.
 // Citation strings mirror the core.macro_series seed: always the original agency, "via FRED".
+// Inputs: FRED observations JSON (or Treasury CSV), stored MacroFacts (--rewrite).
+// Outputs: MacroObservation rows for the Numbers panel and data-card PublishPayloads (no AI).
 
 import type { CardDetail, CategorySlug, MacroFact } from '../../../contract/types.ts';
 import { config } from '../config.ts';
@@ -181,7 +183,8 @@ export function buildObservation(seriesId: string, points: Point[]): MacroObserv
   };
 }
 
-export function toMacroFact(o: MacroObservation): MacroFact {
+/** Observation -> the MacroFact shown on a data card (label, value, change, agency citation, FRED link). */
+function toMacroFact(o: MacroObservation): MacroFact {
   const s = SERIES[o.series_id];
   return {
     series_id: o.series_id, label: s.label, value: o.display_value, change: o.change_text,
@@ -203,7 +206,13 @@ const PRIOR: Record<Frequency, string> = { daily: 'day', weekly: 'week', monthly
 /**
  * Data card for a new observation, or null if there is no change to report or the move is
  * below config.dataCardMinMove (daily and weekly series). Monthly and quarterly series get
- * one card per new period (the dedupe key is series + date).
+ * one card per new period (the dedupe key is series + date). `opts.force` skips the move threshold (--rewrite).
+ * Left as one function (the wording branches share many locals). Outline:
+ *   1. threshold check (daily/weekly only)
+ *   2. `when` / change words for the period
+ *   3. headline + body: year-over-year series vs level series
+ *   4. detail paragraphs and key points (previous value only for rates and percentages)
+ *   5. payload with the agency as the primary source
  */
 export function buildDataCard(o: MacroObservation, extra: MacroObservation[] = [], opts: { force?: boolean } = {}): PublishPayload | null {
   const s = SERIES[o.series_id];

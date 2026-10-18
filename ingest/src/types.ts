@@ -1,4 +1,6 @@
 // Internal types for the ingest pipeline (the public card shape is in contract/types.ts).
+// Types only, no runtime code: RawItem (collected item), SummaryDraft / Summarizer (AI or template
+// output), PublishPayload / RevisePayload / MacroObservation (database RPC payloads).
 
 import type { CardDetail, CategorySlug, Exchange, MacroFact, SourceKind } from '../../contract/types.ts';
 

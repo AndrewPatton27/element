@@ -1,12 +1,14 @@
 // BEA news-release RSS -> RawItem. Public domain (BEA FAQ). The AI sees only the feed
 // item's own text (title + description); BEA pages are never downloaded, and apps.bea.gov
 // is on the API host list only (not the page list).
+// Inputs: an RssItem (parsed by fed.ts parseRss). Outputs: a RawItem (economy / macro_release).
 
 import { config } from '../config.ts';
 import { htmlToText } from '../html.ts';
 import type { RawItem } from '../types.ts';
 import type { RssItem } from './fed.ts';
 
+/** BEA feed item -> RawItem with the BEA credit line; summary text = title + plain description. */
 export function beaItemToItem(i: RssItem): RawItem {
   const desc = htmlToText(i.description, config.sourceTextMaxChars);
   return {

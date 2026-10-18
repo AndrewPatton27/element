@@ -1,5 +1,7 @@
 // Builds the provider list from config.providerOrder and the environment.
 // An AI provider whose key is missing is skipped cleanly (the next one is used).
+// Inputs: the Gemini/Groq keys (null = not set) and optional test overrides.
+// Outputs: the ordered Summarizer list and a human-readable list of skipped providers.
 
 import { config } from '../config.ts';
 import type { FetchLike } from '../allowlist.ts';
@@ -8,6 +10,7 @@ import { createGroqSummarizer } from './groq.ts';
 import { templateSummarizer } from './template.ts';
 import type { Summarizer } from '../types.ts';
 
+/** Providers in config.providerOrder; AI providers without a key go to `skipped` instead. */
 export function buildProviders(
   keys: { geminiApiKey: string | null; groqApiKey: string | null },
   opts: { fetchImpl?: FetchLike; minIntervalMs?: number } = {},

@@ -1,6 +1,8 @@
 // Validates an AI (or template) draft before it can be published.
 // A draft that fails is retried once with the errors, then replaced by a
 // template card. Nothing here calls the network.
+// Inputs: a draft (headline, body, detail, ...) and the licensed source text it came from.
+// Outputs: { ok, errors } results, the license gate (assertSummarizable) and text helpers.
 
 import { config } from './config.ts';
 
@@ -18,6 +20,7 @@ export const CATEGORY_SLUGS = [...AI_CATEGORY_SLUGS, 'world', 'science', 'safety
 /** License classes whose text may be sent to the AI in this build. cc_by_sa = Wikipedia (credit + license link). */
 export const SUMMARIZABLE = ['public_domain', 'company_filing', 'cc_by_sa'] as const;
 
+/** Thrown by assertSummarizable when text of this license class may not reach the AI. */
 export class NotSummarizableError extends Error {
   constructor(licenseClass: string) {
     super(`license class "${licenseClass}" may not be summarized`);
@@ -60,6 +63,7 @@ export interface Result {
 const FORM_TOKENS = /\b(?:8-K|10-K|10-Q|20-F|6-K|S-1|S-4|13D|13G|DEF 14A|Form [345])\b/gi;
 const NUMBER = /\d[\d,]*(?:\.\d+)?/g;
 
+/** Every number in `text` as a normalized string ("1,200.50" -> "1200.5"); form names like "8-K" are ignored. */
 export function extractNumbers(text: string): string[] {
   const cleaned = text.replace(FORM_TOKENS, ' ');
   const out: string[] = [];
@@ -70,6 +74,7 @@ export function extractNumbers(text: string): string[] {
   return out;
 }
 
+/** Lower-case word tokens for the copy check (keeps ' % $ . inside words, curly quotes normalized). */
 export function words(text: string): string[] {
   return text
     .toLowerCase()
@@ -111,7 +116,7 @@ export function longestCopiedRun(draft: string, source: string, ignorePhrases: r
  * like "consumers should stop using the product" is allowed; investment advice (buy, sell,
  * price target, ...) is never in that allowlist, so it stays blocked on every category.
  */
-export function findAdvice(
+function findAdvice(
   text: string,
   category?: string,
   blocklist: readonly string[] = config.adviceBlocklist,
@@ -129,7 +134,7 @@ export function findAdvice(
 }
 
 /** 8-K item titles may be quoted verbatim; they do not count toward the copy limit. */
-export const ITEM_TITLES = [
+const ITEM_TITLES = [
   'Entry into a Material Definitive Agreement',
   'Termination of a Material Definitive Agreement',
   'Completion of Acquisition or Disposition of Assets',
@@ -158,6 +163,7 @@ export function parseDraft(raw: string): { draft: Draft | null; errors: string[]
   return { draft: errors.length ? null : (obj as Draft), errors };
 }
 
+/** Shape checks for a draft: headline length, body word count, category slug, event_type, tickers. Returns errors. */
 export function checkShape(obj: unknown): string[] {
   const e: string[] = [];
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return ['output is not a JSON object'];
@@ -189,10 +195,11 @@ export function checkRelevance(d: { everyday_relevance?: unknown }, required: bo
   return Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 5 ? [] : ['everyday_relevance must be a whole number from 1 to 5'];
 }
 
+/** Number of whitespace-separated words (0 for blank text). */
 export const countWords = (s: string): number => (s.trim() ? s.trim().split(/\s+/).length : 0);
 
 /** Validator errors that are only about length (the safety net in trimBodyToFit may fix the body one). */
-export const isLengthError = (e: string): boolean => /^(headline longer than|body longer than)/.test(e);
+const isLengthError = (e: string): boolean => /^(headline longer than|body longer than)/.test(e);
 
 // A period after these is not a sentence end ("U.S.", "Inc.", "Jan.", "No. 5").
 const ABBREV = /(?:\b[A-Z]\.)+$|\b(?:Inc|Corp|Co|Ltd|LLC|Mr|Mrs|Ms|Dr|Jr|Sr|St|No|vs|approx|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.$/;
@@ -332,6 +339,7 @@ export interface PublishSource {
   license_class: string;
 }
 
+/** Publish-time checks (same as api.publish_blurb): >= 1 https source, no dev_only, AI cards cite only summarizable text, no link_out. */
 export function validatePublish(card: { kind: string; ai_generated: boolean; sources: PublishSource[] }): Result {
   const errors: string[] = [];
   if (!Array.isArray(card.sources) || card.sources.length === 0) errors.push('card needs at least one source link');

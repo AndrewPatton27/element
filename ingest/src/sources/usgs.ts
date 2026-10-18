@@ -1,6 +1,8 @@
 // USGS significant earthquakes (GeoJSON, no key) -> template card (no AI), category science.
 // Public domain ("USGS-authored or produced data and information are considered to be in the
 // U.S. Public Domain"). Credit: U.S. Geological Survey. No page is downloaded.
+// Inputs: the significant-week GeoJSON. Outputs: RawItems (event data as JSON in summary_text)
+// and plain template drafts (headline/body without distances, bearings or clock times).
 
 import { config } from '../config.ts';
 import type { RawItem, SummaryDraft } from '../types.ts';
@@ -19,6 +21,7 @@ export interface UsgsFeature {
   };
 }
 
+/** Parses the GeoJSON feature list; throws on non-JSON or a missing list. */
 export function parseUsgsGeoJson(text: string): UsgsFeature[] {
   let j: unknown;
   try { j = JSON.parse(text); } catch { throw new Error('usgs: response is not JSON'); }
@@ -29,6 +32,7 @@ export function parseUsgsGeoJson(text: string): UsgsFeature[] {
 
 export type UsgsSkipReason = 'bad_url' | 'too_old' | 'no_data';
 
+/** Feature -> RawItem, or a skip reason (missing data, older than config.usgs.maxAgeDays, non-USGS URL). */
 export function usgsToItem(f: UsgsFeature, now: Date): { item: RawItem } | { skip: UsgsSkipReason } {
   const p = f.properties;
   if (typeof p.mag !== 'number' || !p.time || !p.title) return { skip: 'no_data' };
@@ -57,7 +61,7 @@ export function usgsToItem(f: UsgsFeature, now: Date): { item: RawItem } | { ski
 }
 
 /** US state and territory abbreviations -> full names (USGS places use "..., CA"). */
-export const US_STATES: Record<string, string> = {
+const US_STATES: Record<string, string> = {
   AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado',
   CT: 'Connecticut', DE: 'Delaware', FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho',
   IL: 'Illinois', IN: 'Indiana', IA: 'Iowa', KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana',

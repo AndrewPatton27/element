@@ -1,5 +1,7 @@
 // Writes to Supabase through the service-role RPCs in the `api` schema
 // (PostgREST, plain fetch). Also builds the publish payload from an item + draft.
+// Inputs: Supabase URL + service-role key (never logged), RawItems, drafts, observations.
+// Outputs: a Publisher (live or dry-run) and PublishPayload objects for api.publish_blurb.
 
 import { fetchAllowed, type FetchLike } from './allowlist.ts';
 import { config } from './config.ts';
@@ -20,6 +22,7 @@ export interface Publisher {
   refreshTrending?(): Promise<unknown>;
 }
 
+/** Thrown when a Supabase RPC answers with a non-2xx status (message from PostgREST, no key). */
 export class SupabaseError extends Error {
   constructor(message: string) {
     super(message);
@@ -98,7 +101,8 @@ export function createDryRunPublisher(toRevise: RevisableCard[] = []) {
   return { publisher, items, cards, macro, revisions, trending };
 }
 
-export function itemPayload(item: RawItem) {
+/** Row for api.upsert_item: the item's metadata (page text is never stored). */
+function itemPayload(item: RawItem) {
   return {
     source: item.source,
     external_id: item.external_id,

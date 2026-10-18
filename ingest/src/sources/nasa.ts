@@ -4,6 +4,7 @@
 // text from the feed's content:encoded with figures, captions and images removed (rule 9).
 // No page is downloaded; www.nasa.gov is on the API host list only. NASA text is "generally not
 // subject to copyright in the United States" (VERIFIED 2026-10-17); no NASA logo, no endorsement.
+// Inputs: the news-release RSS XML. Outputs: NasaItems and RawItems (science).
 
 import { config } from '../config.ts';
 import { blocks, htmlToText, tagText } from '../html.ts';
@@ -17,7 +18,7 @@ export interface NasaItem {
 }
 
 /** Release HTML -> plain text without figures, captions, images or scripts. */
-export function nasaReleaseText(html: string, maxChars: number = config.sourceTextMaxChars): string {
+function nasaReleaseText(html: string, maxChars: number = config.sourceTextMaxChars): string {
   const cleaned = html
     .replace(/<figure\b[\s\S]*?<\/figure>/gi, ' ')
     .replace(/<figcaption\b[\s\S]*?<\/figcaption>/gi, ' ')
@@ -25,6 +26,7 @@ export function nasaReleaseText(html: string, maxChars: number = config.sourceTe
   return htmlToText(cleaned, maxChars).replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/** Parses feed items (title, link, pubDate as ISO, cleaned content:encoded text); items without title or link are dropped. */
 export function parseNasaRss(xml: string): NasaItem[] {
   return blocks(xml, 'item').map((it) => ({
     title: tagText(it, 'title') ?? '',
@@ -43,6 +45,7 @@ export function selectNasaReleases(items: NasaItem[], now: Date): NasaItem[] {
     .sort((a, b) => Date.parse(b.pubDate) - Date.parse(a.pubDate));
 }
 
+/** Release -> RawItem; published_at is clamped to `now`, AI text = title + release text. */
 export function nasaToItem(i: NasaItem, now: Date): RawItem {
   return {
     source: 'nasa',

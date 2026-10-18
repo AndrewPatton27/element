@@ -1,5 +1,8 @@
 // Every tunable value for the ingest script lives here (one place to change).
 // Values marked UNVERIFIED must be confirmed before relying on them.
+// Inputs: none at import time; readEnv() reads process.env (or a given map) when called.
+// Outputs: the `config` object, small derived helpers (caps, pacing, Federal Register URLs) and
+// readEnv/describeEnv for the environment (key values are never printed).
 
 export const config = {
   // ---- AI summarizer --------------------------------------------------------
@@ -315,15 +318,6 @@ export interface Env {
   fredApiKey: string | null;
   secUserAgent: string;
 }
-
-export const ENV_NAMES = [
-  'SUPABASE_URL',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'GEMINI_API_KEY',
-  'GROQ_API_KEY',
-  'FRED_API_KEY',
-  'SEC_USER_AGENT',
-] as const;
 
 const PLACEHOLDER = /^$|your|example|xxx|<|>|changeme|placeholder/i;
 

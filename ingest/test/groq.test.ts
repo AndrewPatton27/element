@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { summarizeWithChain, memoryCounter } from '../src/summarizer/chain.ts';
-import { createGeminiSummarizer, RateLimitedError, ProviderError } from '../src/summarizer/gemini.ts';
+import { RateLimitedError, ProviderError } from '../src/summarizer/gemini.ts';
 import { createGroqSummarizer, parseJsonLoose } from '../src/summarizer/groq.ts';
 import { buildProviders } from '../src/summarizer/providers.ts';
 import { parseSec8kAtom, secEntryToItem, parseTickerExchangeJson } from '../src/sources/sec.ts';

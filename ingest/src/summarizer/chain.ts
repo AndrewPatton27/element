@@ -8,11 +8,13 @@
 // Pacing and caps are per provider: Groq does not wait on Gemini's timer.
 // 4. A 429 puts that provider in a cooldown (config.rateLimitCooldownMs) for the rest of
 //    the run when the caller passes a ChainState: later items skip it instead of hammering it.
-// 6. Everyday relevance (same AI call): an AI draft scored below opts.minRelevance is returned at
+// 5. Everyday relevance (same AI call): an AI draft scored below opts.minRelevance is returned at
 //    once with low_relevance = true (no validation, no retry), so a skipped item costs one AI call.
 //    With opts.requireRelevance, an AI draft without a valid 1-5 score counts as rejected.
-// 5. Safety net: if a draft's only problems are length errors and the headline fits, the
+// 6. Safety net: if a draft's only problems are length errors and the headline fits, the
 //    body is cut after the last whole sentence that fits, then the draft is re-validated.
+// Inputs: SummarizeInput, the provider list, a usage counter and options (caps, cooldown, relevance).
+// Outputs: ChainResult (draft, provider, model, relevance, log lines without text or keys).
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -64,6 +66,7 @@ async function pace(provider: string, minIntervalMs: number): Promise<void> {
 export interface ChainState {
   coolUntil: Map<string, number>;
 }
+/** Fresh ChainState (no provider cooling down). */
 export const createChainState = (): ChainState => ({ coolUntil: new Map() });
 
 export interface ChainResult {
@@ -88,6 +91,12 @@ function finishDetail(draft: SummaryDraft, source: SourceText, provider: string,
   return { ...draft, detail: null };
 }
 
+/**
+ * Summarizes one item through the provider chain (see the header for the full rules). Outline:
+ * license gate -> for each AI provider: cooldown check, then up to 2 attempts of
+ * [cap check, pace, call, shape + relevance check, low-relevance exit, validate, length trim] ->
+ * template fallback. Throws NotSummarizableError before any provider sees unlicensed text.
+ */
 export async function summarizeWithChain(
   input: SummarizeInput,
   providers: Summarizer[],

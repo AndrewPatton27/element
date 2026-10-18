@@ -3,6 +3,7 @@
 // app links the license. The AI sees only the story sentence plus the first linked article's
 // plain-text extract (both inside the JSON). No article page is downloaded and thumbnails or
 // images in the payload are never read (rule 9). en.wikipedia.org is on the API host list only.
+// Inputs: the REST featured-feed JSON. Outputs: RawItems (world, cc_by_sa) or skip reasons.
 
 import { createHash } from 'node:crypto';
 import { config } from '../config.ts';
@@ -66,6 +67,7 @@ export function storyDate(html: string, now: Date): string {
 
 export type WikiSkipReason = 'no_link' | 'bad_url' | 'empty_story';
 
+/** Story -> RawItem with the CC BY-SA credit (AI text = story + first link's extract), or a skip reason. */
 export function wikiItemToItem(n: WikiNewsItem, now: Date): { item: RawItem } | { skip: WikiSkipReason } {
   const story = storyText(n.story);
   if (!story) return { skip: 'empty_story' };

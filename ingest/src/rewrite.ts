@@ -7,6 +7,8 @@
 //   Relevance below the minimum -> the card is hidden. No valid AI draft -> the old card stays.
 // The card keeps its id, category, event type, sources and sort_at (the feed order does not jump);
 // api.revise_blurb sets revision + 1 and updated_at.
+// Inputs: Deps (same as a normal run; the publisher must support listToRevise/reviseBlurb), a card limit.
+// Outputs: RewriteStats; cards are revised or hidden through deps.publisher.
 
 import { config } from './config.ts';
 import type { Deps } from './pipeline.ts';
@@ -39,7 +41,7 @@ type Rebuilt = { item: RawItem; pageText: () => Promise<string> } | { reason: st
 const noPage = async () => '';
 
 /** Rebuilds the RawItem (and how to get its page text) for a card, from the same sources a normal run uses. */
-export async function rebuildItem(card: RevisableCard, deps: Pick<Deps, 'fetchText' | 'now'>): Promise<Rebuilt> {
+async function rebuildItem(card: RevisableCard, deps: Pick<Deps, 'fetchText' | 'now'>): Promise<Rebuilt> {
   const src = card.item;
   if (!src) return { reason: 'no collected item behind this card' };
   const url = src.url;
@@ -94,6 +96,19 @@ export async function rebuildItem(card: RevisableCard, deps: Pick<Deps, 'fetchTe
   }
 }
 
+/**
+ * --rewrite: redoes up to `opts.limit` (default 20) published cards that are not on the current
+ * prompt/template version. Left as one function because each branch ends the card with `continue`;
+ * outline per card:
+ *   1. data card     -> rebuild from its stored numbers with the current data template
+ *   2. other non-summary kinds -> kept
+ *   3. rebuild the source item (rebuildItem); not possible -> kept
+ *   4. template card -> rebuild with the current template (no AI)
+ *   5. AI card       -> license gate, page text, summarizer chain:
+ *                       low relevance -> hidden; no valid AI draft or failed publish check -> kept;
+ *                       otherwise revised in place
+ * Any error leaves the old card unchanged (counted as failed).
+ */
 export async function runRewrite(deps: Deps, opts: { limit?: number } = {}): Promise<RewriteStats> {
   const stats: RewriteStats = { selected: 0, revised: 0, hidden: 0, kept: 0, failed: 0, ai: 0 };
   const pub = deps.publisher;

@@ -1,6 +1,9 @@
 // SEC EDGAR: current 8-K Atom feed -> RawItem, plus the filing's primary document.
 // Feed shape: one <entry> per filing; items are in <summary> as escaped HTML
-// ("<br>Item 2.02: Results of Operations ...").
+// ("<br>Item 2.02: Results of Operations ..."). Also the data.sec.gov per-company submissions
+// JSON, the watch list, item -> category rules, the routine-5.02 filter and the filing text.
+// Inputs: feed/JSON/HTML text from SEC. Outputs: Sec8kEntry lists, RawItems or skip reasons,
+// classifications and plain filing text. No network calls here.
 
 import type { CategorySlug, EventType, Exchange } from '../../../contract/types.ts';
 import { config } from '../config.ts';
@@ -20,6 +23,7 @@ export interface Sec8kEntry {
   summary_text: string;              // plain text of <summary>
 }
 
+/** Parses the current 8-K Atom feed into entries (company, CIK, index URL, items, accession). Non-8-K titles are dropped. */
 export function parseSec8kAtom(xml: string): Sec8kEntry[] {
   const out: Sec8kEntry[] = [];
   for (const e of blocks(xml, 'entry')) {
@@ -113,6 +117,7 @@ export const ITEM_CLASS: Record<string, { category: CategorySlug; event_type: Ev
 /** Used when no item decides and the AI gave nothing usable. */
 const UNDECIDED = { category: 'markets' as CategorySlug, event_type: null };
 
+/** The most newsworthy item number in `items` (by ITEM_PRIORITY), or null if none is tracked there. */
 export function primaryItem(items: { number: string }[]): string | null {
   const nums = new Set(items.map((i) => i.number));
   return ITEM_PRIORITY.find((n) => nums.has(n)) ?? null;
@@ -246,7 +251,7 @@ export function resolveWatchList(json: string, watch: readonly string[] = config
 }
 
 /** true if the filing has at least one item that may become a card for a watch-list company. */
-export function hasWatchItem(items: { number: string }[]): boolean {
+function hasWatchItem(items: { number: string }[]): boolean {
   const w = config.watchItems as readonly string[];
   return items.some((i) => w.includes(i.number));
 }
@@ -325,7 +330,7 @@ export function mergeSecEntries(lists: Sec8kEntry[][]): Sec8kEntry[] {
 }
 
 /** The Item 5.02 section of the filing text (up to the next "Item n.nn"), or null if not found. */
-export function item502Section(text: string): string | null {
+function item502Section(text: string): string | null {
   const m = /Item\s*5\.02\b[\s\S]*?(?=Item\s*\d\.\d\d\b|$)/i.exec(text);
   if (!m) return null;
   // The section usually starts with the long official item title; drop it so its words do not count.

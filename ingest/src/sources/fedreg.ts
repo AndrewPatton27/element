@@ -2,6 +2,7 @@
 // The AI sees only the document's `abstract` (agency-written summary inside the JSON).
 // No page is ever downloaded: www.federalregister.gov is on the API host list only.
 // Reuse is permitted (1 CFR 2.6); treated like public-domain Fed/BLS text (25-word copy limit).
+// Inputs: documents.json API responses. Outputs: FrDoc lists and RawItems (policy) or skip reasons.
 
 import { config } from '../config.ts';
 import type { RawItem } from '../types.ts';
@@ -71,6 +72,7 @@ export function clampedPublishedAt(d: FrDoc, now: Date): string {
 
 const tidy = (s: string) => s.replace(/\s+/g, ' ').trim();
 
+/** Document -> RawItem (AI text = abstract only, agency credit line), or a skip reason (not a rule, no abstract, bad URL). */
 export function fedRegDocToItem(d: FrDoc, now: Date): { item: RawItem } | { skip: FedRegSkipReason } {
   if (d.type && d.type !== 'Rule') return { skip: 'not_a_rule' };
   const abstract = tidy(d.abstract ?? '');

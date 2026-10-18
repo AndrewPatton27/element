@@ -2,6 +2,8 @@
 // chat-completions API. Same prompt, same draft shape and same retry handling as
 // gemini.ts. Only public-domain and SEC filing text is sent (the chain checks the
 // license before any provider is called).
+// Inputs: SummarizeInput and the API key (Authorization header only).
+// Outputs: an unvalidated SummaryDraft; RateLimitedError on 429, ProviderError otherwise.
 
 import { config, groqDailyCap, groqMinIntervalMs } from '../config.ts';
 import { fetchAllowed, type FetchLike } from '../allowlist.ts';
@@ -66,6 +68,10 @@ export function parseJsonLoose(text: string): unknown {
   }
 }
 
+/**
+ * Groq summarizer (chat completions). Sends a shorter slice of the source text (token limit),
+ * asks for json_schema output and falls back once to json_object if Groq rejects the schema.
+ */
 export function createGroqSummarizer(opts: {
   apiKey: string;
   model?: string;
