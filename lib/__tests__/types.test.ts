@@ -37,6 +37,12 @@ test('cards without a usable source link are rejected', () => {
   assert.equal(isBlurbCard(bad), false);
 });
 
+test('ticker rows need a non-empty symbol', () => {
+  assert.equal(isBlurbCard(card({ tickers: [{ symbol: 'AAPL' }] })), true);
+  assert.equal(isBlurbCard(card({ tickers: [{ symbol: null }] })), false);
+  assert.equal(isBlurbCard(card({ tickers: [{ symbol: '' }] })), false);
+});
+
 test('unknown kinds, link_out, empty headlines and data cards without numbers are rejected', () => {
   assert.equal(isBlurbCard(card({ kind: 'link_out' })), false);
   assert.equal(isBlurbCard({ ...card(), kind: 'poll' }), false);

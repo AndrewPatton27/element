@@ -436,6 +436,17 @@ test('B3: a token another tab already rotated is adopted, not treated as a sign-
   assert.ok(store.get('element.session.v1'), "tab A's good session is not wiped");
 });
 
+test('B3: an unexpired token is replaced by the newer session from another tab', async () => {
+  const store = memoryStore();
+  const original = { access_token: 'old', refresh_token: 'r0', expires_at: NOW + 1800, user: { id: 'u1', email: 'a@b.co' } };
+  store.set('element.session.v1', JSON.stringify(original));
+  const { fn } = fakeFetch(() => ({ status: 200, body: {} }));
+  const tabB = createSupabaseAccount({ url: 'https://p', key: 'k', fetchFn: fn, store, now: () => NOW });
+  store.set('element.session.v1', JSON.stringify({ ...original, access_token: 'fromA', refresh_token: 'r1' }));
+  assert.equal(await tabB.accessToken(), 'fromA');
+  assert.equal(tabB.currentUser()?.id, 'u1');
+});
+
 test('hide topics: three exclusive states', () => {
   const prefs = { followed: ['tech', 'world'], hidden: ['deals'] };
   assert.equal(topicState(prefs, 'tech'), 'follow');

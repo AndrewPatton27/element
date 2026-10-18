@@ -49,7 +49,7 @@ export function isBlurbCard(x: unknown): x is BlurbCard {
   if (!isStr(x.category) || !isStr(x.as_of) || !isStr(x.sort_at)) return false;
   if (!Array.isArray(x.sources) || x.sources.length === 0 || !x.sources.every(isSource)) return false;
   if (!isNum(x.source_count)) return false;
-  if (!Array.isArray(x.tickers) || !Array.isArray(x.macro)) return false;
+  if (!Array.isArray(x.tickers) || !x.tickers.every((ticker) => isObj(ticker) && isStr(ticker.symbol) && ticker.symbol.trim() !== '') || !Array.isArray(x.macro)) return false;
   if (!isObj(x.ai) || typeof x.ai.generated !== 'boolean') return false;
   if (x.kind === 'data' && (x.macro.length === 0 || !x.macro.every(isMacroFact))) return false;
   return true;

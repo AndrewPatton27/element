@@ -252,6 +252,9 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
   let refreshing: Promise<string | null> | null = null;
   async function accessToken(): Promise<string | null> {
     if (!session) return null;
+    // localStorage is shared across browser tabs. Adopt a rotated token even
+    // while this tab's old access token still appears unexpired.
+    adoptStoredSession();
     if (!needsRefresh(session, now())) return session.access_token;
     if (!refreshing) refreshing = doRefresh().finally(() => (refreshing = null));
     return refreshing;
