@@ -21,6 +21,7 @@ import { ExternalIcon, NumbersIcon, ShareIcon, SparkleIcon, ThumbDownIcon, Thumb
 import type { Feedback } from '../lib/accountLogic';
 import { Disclaimer, ShareAlikeLine } from './Labels';
 import { SourceRow } from './SourceChip';
+import { FollowPill } from './FollowPill';
 import { footerLabels, linkOutCredit, linkOutDelay, shareUrl } from './cardFooter';
 
 interface Props {
@@ -36,6 +37,8 @@ interface Props {
   peek?: boolean; // phones: show the edge of the next card under this one
   reaction?: Feedback; // signed in: this user's like/dislike
   onReact?: (card: BlurbCard, pressed: Feedback) => void; // signed in only
+  followedTopic?: boolean;
+  onToggleTopicFollow?: (card: BlurbCard) => void;
 }
 
 type BadgeIcon = typeof SparkleIcon;
@@ -116,7 +119,7 @@ function metaLine(card: BlurbCard, categories: Category[]): string {
 }
 
 export function Card(props: Props) {
-  const { card, config, categories, onShowSources, onOpenDetail, onNext, wide, compact, peek, reaction, onReact, onMore } = props;
+  const { card, config, categories, onShowSources, onOpenDetail, onNext, wide, compact, peek, reaction, onReact, onMore, followedTopic, onToggleTopicFollow } = props;
   const p = usePalette();
   const labels = cardLabels(card, config);
   const credit = shareAlikeCredit(card, config);
@@ -234,6 +237,7 @@ export function Card(props: Props) {
           <View style={styles.metaRight}>
             {/* No "Updated" badge: every rewrite pass sets updated_at, so it said nothing (audit C1). */}
             <Text style={[styles.metaText, wide && { fontSize: 14 }, { color: p.muted }]}>{metaLine(card, categories)}</Text>
+            {onToggleTopicFollow ? <FollowPill topic={categoryName(card.category, categories)} followed={!!followedTopic} onPress={() => onToggleTopicFollow(card)} /> : null}
             {onMore ? (
               <Pressable onPress={() => onMore(card)} accessibilityRole="button" accessibilityLabel="More options for this card" style={styles.moreBtn}>
                 <Text style={[styles.moreDots, { color: p.muted }]}>⋯</Text>
@@ -399,12 +403,12 @@ const styles = StyleSheet.create({
   stack: { height: 10, marginHorizontal: 28, borderWidth: 1, borderTopWidth: 0, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
   below: { paddingTop: 6, paddingHorizontal: 4 },
   meta: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
-  metaRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  metaRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1, flexWrap: 'wrap', justifyContent: 'flex-end' },
   moreBtn: { minWidth: 44, minHeight: 44, marginVertical: -8, marginHorizontal: -6, alignItems: 'center', justifyContent: 'center' },
   moreDots: { fontSize: 20, lineHeight: 22 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingHorizontal: 10, borderRadius: 14 },
   badgeText: { fontFamily: fonts.sansSemi, fontSize: 13 },
-  metaText: { fontFamily: fonts.sans, fontSize: 13 },
+  metaText: { fontFamily: fonts.sans, fontSize: 13, flexShrink: 1, textAlign: 'right' },
   headline: { fontFamily: fonts.serif },
   body: { fontFamily: fonts.sans, fontSize: 16, lineHeight: 24 },
   bodyWide: { fontSize: 20, lineHeight: 31, maxWidth: 720 },

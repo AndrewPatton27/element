@@ -63,6 +63,8 @@ interface Props {
   wide?: boolean;
   reactions?: Record<string, Feedback>;
   onReact?: (card: BlurbCard, pressed: Feedback) => void;
+  followedTopics?: string[];
+  onToggleTopicFollow?: (card: BlurbCard) => void;
   onActiveCard?: (card: BlurbCard) => void; // the card now on screen (for view tracking)
   active?: boolean; // false when another screen or a sheet is on top: keys are left alone
 }
@@ -205,6 +207,8 @@ export function FeedPager({
   onActiveCard,
   active,
   onMore,
+  followedTopics,
+  onToggleTopicFollow,
 }: Props) {
   const p = usePalette();
   const list = useRef<FlatList<BlurbCard>>(null);
@@ -354,6 +358,8 @@ export function FeedPager({
                 onShowSources={onShowSources}
                 onOpenDetail={onOpenDetail}
                 onMore={onMore}
+                followedTopic={followedTopics?.includes(item.category)}
+                onToggleTopicFollow={onToggleTopicFollow}
                 onNext={last ? undefined : next}
                 wide={wide}
                 compact={compact}
@@ -366,7 +372,7 @@ export function FeedPager({
         </View>
       );
     },
-    [height, width, config, categories, onShowSources, onOpenDetail, onMore, next, wide, compact, items.length, done, reactions, react, swipeOn, reduced, swiped],
+    [height, width, config, categories, onShowSources, onOpenDetail, onMore, followedTopics, onToggleTopicFollow, next, wide, compact, items.length, done, reactions, react, swipeOn, reduced, swiped],
   );
 
   return (

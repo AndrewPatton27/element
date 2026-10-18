@@ -11,6 +11,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import type { BlurbCard, CategorySlug } from '../contract/types.ts';
 import { useAppData } from '../lib/appData';
 import { useAccount } from '../lib/accountContext';
+import { useFollows } from '../lib/useFollows';
 import { forYouCoversTopics, withoutHidden } from '../lib/accountLogic';
 import { favoritesFirst } from '../lib/localPrefs';
 import { rankLocal } from '../lib/localRank';
@@ -46,6 +47,7 @@ export default function FeedScreen() {
   const wide = useWide();
   const { api, config, categories } = useAppData();
   const acct = useAccount();
+  const followsState = useFollows();
   const signedIn = acct.user !== null;
   const params = useLocalSearchParams<{ tab?: string; t?: string; category?: string }>();
   const { width } = useWindowDimensions();
@@ -57,8 +59,10 @@ export default function FeedScreen() {
   const [undo, setUndo] = useState<
     | { message: string; kind: 'topic'; previous: { followed: string[]; hidden: string[] } }
     | { message: string; kind: 'source'; previous: string[] }
+    | { message: string; kind: 'follow'; slug: string }
     | null
   >(null);
+  const [followOverrides, setFollowOverrides] = useState<Record<string, boolean>>({});
   // The feed stays mounted under Numbers / About / Account; only drive it (keys,
   // view tracking) while it's the screen on top (B2).
   const [focused, setFocused] = useState(true);
@@ -109,6 +113,20 @@ export default function FeedScreen() {
 
   const items = visible(state.items);
   const followed = acct.viewPrefs?.followed ?? [];
+  const followedTopics = (signedIn ? followed : followsState.follows.topics).filter((slug) => followOverrides[slug] ?? true);
+  for (const [slug, isFollowed] of Object.entries(followOverrides)) {
+    if (isFollowed && !followedTopics.includes(slug)) followedTopics.push(slug);
+  }
+  useEffect(() => {
+    const source = signedIn ? followed : followsState.follows.topics;
+    setFollowOverrides((current) => {
+      const next = { ...current };
+      for (const [slug, value] of Object.entries(current)) {
+        if (source.includes(slug) === value) delete next[slug];
+      }
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+  }, [signedIn, followed, followsState.follows.topics]);
   const chipCategories = favoritesFirst(withoutHidden(categories, hidden), followed);
   useEffect(() => {
     if (category && hidden.includes(category)) setCategory(null);
@@ -125,6 +143,13 @@ export default function FeedScreen() {
     },
     [acct, categories],
   );
+  const toggleCardFollow = useCallback((card: BlurbCard) => {
+    const isFollowed = followedTopics.includes(card.category);
+    setFollowOverrides((current) => ({ ...current, [card.category]: !isFollowed }));
+    followsState.toggleTopic(card.category);
+    const topic = categoryName(card.category, categories);
+    setUndo({ message: `${isFollowed ? 'Unfollowed' : 'Following'} ${topic}`, kind: 'follow', slug: card.category });
+  }, [followedTopics, followsState, categories]);
   const hideSource = useCallback(
     (_c: BlurbCard, key: string) => {
       setMenuCard(null);
@@ -138,8 +163,13 @@ export default function FeedScreen() {
   const undoHide = useCallback(() => {
     if (undo?.kind === 'topic') void acct.restoreTopics(undo.previous).catch(() => undefined);
     if (undo?.kind === 'source') void acct.saveSources(undo.previous).catch(() => undefined);
+    if (undo?.kind === 'follow') {
+      const currentlyFollowed = followedTopics.includes(undo.slug);
+      setFollowOverrides((current) => ({ ...current, [undo.slug]: !currentlyFollowed }));
+      followsState.toggleTopic(undo.slug);
+    }
     setUndo(null);
-  }, [acct, undo]);
+  }, [acct, undo, followedTopics, followsState]);
   const clearUndo = useCallback(() => setUndo(null), []);
 
   const { noteCards, trackView, react, trackDwell, trackDwellOnExit, trackOpenDetail } = acct;
@@ -222,6 +252,8 @@ export default function FeedScreen() {
         wide={wide}
         reactions={acct.reactions}
         onReact={react}
+        followedTopics={followedTopics}
+        onToggleTopicFollow={toggleCardFollow}
         onActiveCard={signedIn && focused ? onActiveCard : undefined}
         active={focused && sheetCard === null && detailCard === null && menuCard === null}
         onMore={setMenuCard}

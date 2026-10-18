@@ -56,6 +56,16 @@ export function toggleValue(list: string[], value: string, max = MAX_FOLLOWS_PER
   return list.length >= max ? list : [...list, value];
 }
 
+// Card-level topic follow helpers; keep card state derived from the same slug list
+// used by Following and account/device preferences.
+export function isTopicFollowed(topics: readonly string[], slug: string): boolean {
+  return topics.includes(slug);
+}
+
+export function toggleTopicFollow(topics: readonly string[], slug: string): string[] {
+  return topics.includes(slug) ? topics.filter((topic) => topic !== slug) : [...topics, slug];
+}
+
 // "aapl" / " BA " -> "AAPL"; null when the text can't be a ticker (1 to 5 letters, optional .X class).
 export function normalizeTicker(raw: string): string | null {
   const t = raw.trim().toUpperCase();
