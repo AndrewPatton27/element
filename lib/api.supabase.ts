@@ -6,7 +6,7 @@ import type { Api, FeedRequest } from './api.ts';
 import type { BlurbCard, Brief, FeedPage, MacroFact, NumberTrend } from '../contract/types.ts';
 import { NETWORK_MESSAGE, friendlyHttpError, parseErrorBody, warnRaw } from './errors.ts';
 import { clampLimit } from './feedLogic.ts';
-import { isBlurbCard, isMacroFact, parseAppConfig, parseCategories, parseFeedPage, parseMacroFacts, parseNumberTrends } from './types.ts';
+import { isBlurbCard, isMacroFact, isValidBriefInput, normalizeBriefEmail, parseAppConfig, parseBriefMarkets, parseBriefSummary, parseCategories, parseFeedPage, parseMacroFacts, parseNumberTrends, parseSubscribeResult, parseTokenResult } from './types.ts';
 
 export interface SupabaseOptions {
   url: string; // https://<project>.supabase.co, no trailing slash
@@ -114,8 +114,27 @@ export function createSupabaseApi(opts: SupabaseOptions): Api {
       headline_cards: Array.isArray(row.headline_cards) ? row.headline_cards.filter(isBlurbCard) : [],
       sections: Array.isArray(row.sections) ? row.sections.filter((s): s is { category: string; label: string; cards: BlurbCard[] } => !!s && typeof s === 'object' && typeof (s as any).category === 'string' && typeof (s as any).label === 'string').map((s) => ({ ...s, cards: Array.isArray(s.cards) ? s.cards.filter(isBlurbCard) : [] })) : [],
       numbers: Array.isArray(row.numbers) ? row.numbers.filter(isMacroFact) : [],
+      summary: parseBriefSummary(row.summary),
+      markets: parseBriefMarkets(row.markets),
     };
   }
+  // Email-brief RPCs (migration 20261018040000_brief_email.sql). Sent as the anon key only,
+  // never with the user's token (subscriptions are keyed by email, not by account).
+  // Any failure, including a missing RPC before the migration is applied, returns null.
+  async function rpcSafe(name: string, body: Record<string, unknown>): Promise<unknown> {
+    const headers = { apikey: opts.key, Accept: 'application/json', 'Accept-Profile': 'api', 'Content-Type': 'application/json', 'Content-Profile': 'api' };
+    try {
+      return await call({ url: `${opts.url}/rest/v1/rpc/${name}`, init: { method: 'POST', headers, body: JSON.stringify(body) } });
+    } catch {
+      return null;
+    }
+  }
+  const unavailable = { ok: false, status: 'unavailable' as const };
+  const tokenCall = async (name: string, token: string, extra: Record<string, unknown> = {}) => {
+    if (!UUID.test(String(token))) return { ok: false };
+    const x = await rpcSafe(name, { p_token: token, ...extra });
+    return x === null ? unavailable : parseTokenResult(x);
+  };
   async function optional(op: Parameters<typeof planRequest>[2], args?: FeedRequest & { q?: string; cardId?: string; topics?: string[]; sources?: string[]; tickers?: string[] }): Promise<unknown> {
     try { return await call(planRequest(opts.url, opts.key, op, args)); } catch { return null; }
   }
@@ -173,5 +192,16 @@ export function createSupabaseApi(opts: SupabaseOptions): Api {
       const movers = raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).movers) ? parseNumberTrends((raw as Record<string, unknown>).movers) : [];
       return { ...brief, window_hours: 168, movers };
     },
+    async subscribeBrief(i) {
+      const email = normalizeBriefEmail(i?.email);
+      if (!email || !isValidBriefInput(i)) return { ok: false, status: 'invalid' };
+      const x = await rpcSafe('subscribe_brief', { p_email: email, p_kind: i.kind, p_hour: i.hour, p_tz: i.tz });
+      return x === null ? unavailable : parseSubscribeResult(x);
+    },
+    confirmBrief: (token) => tokenCall('confirm_brief', token),
+    updateBriefSubscription: (token, i) => (isValidBriefInput(i) ? tokenCall('update_brief_subscription', token, { p_kind: i.kind, p_hour: i.hour, p_tz: i.tz }) : Promise.resolve({ ok: false })),
+    unsubscribeBrief: (token) => tokenCall('unsubscribe_brief', token),
   };
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

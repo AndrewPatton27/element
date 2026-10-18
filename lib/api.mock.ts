@@ -59,5 +59,9 @@ export function createMockApi(): Api {
     followingFeed: (f) => wait(features.followingFeed(f)),
     dailyBrief: () => wait(features.dailyBrief()),
     weeklyBrief: () => wait(features.weeklyBrief()),
+    subscribeBrief: (i) => wait(features.subscribeBrief(i)),
+    confirmBrief: (t) => wait(features.confirmBrief(t)),
+    updateBriefSubscription: (t, i) => wait(features.updateBriefSubscription(t, i)),
+    unsubscribeBrief: (t) => wait(features.unsubscribeBrief(t)),
   };
 }

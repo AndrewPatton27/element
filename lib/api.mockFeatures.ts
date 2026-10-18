@@ -1,8 +1,14 @@
 // Pure mock implementations for search, related cards, following and briefs.
 // Kept separate from fixture-loading code so these rules can run under node:test.
-import type { BlurbCard, Brief, FeedPage, MacroFact, NumberTrend } from '../contract/types.ts';
+import type { BlurbCard, Brief, BriefSubscribeResult, BriefSubscriptionInput, BriefTokenResult, FeedPage, MacroFact, NumberTrend } from '../contract/types.ts';
 import { mockRankScore } from './feedLogic.ts';
 import { rankSearch } from './searchLogic.ts';
+import { isValidBriefInput, normalizeBriefEmail } from './types.ts';
+
+export const MARKET_CATEGORIES = new Set(['markets', 'earnings', 'deals']);
+export const MARKET_SERIES = ['DGS10', 'DGS2', 'DFF', 'DCOILWTICO'];
+/** Same caps as api.subscribe_brief (context/settings.md). */
+export const BRIEF_CAPS = { perEmailPerDay: 5, globalPerHour: 200 };
 
 export function createMockFeatureApi(cards: BlurbCard[], numbers: MacroFact[], trends: NumberTrend[]) {
   const page = (items: BlurbCard[], cursor?: string | null, limit = 20): FeedPage => {
@@ -24,21 +30,70 @@ export function createMockFeatureApi(cards: BlurbCard[], numbers: MacroFact[], t
     }
     const top = requestedWindow === 168 ? 8 : 6;
     const seen = new Set<string>();
-    const ranked = inWindow(window_hours)
+    const rankedAll = inWindow(window_hours)
       .sort((a, b) => mockRankScore(b) - mockRankScore(a) || (a.id < b.id ? 1 : -1))
       .filter((c) => (seen.has(storyKey(c)) ? false : (seen.add(storyKey(c)), true)));
-    const groups = new Map<string, BlurbCard[]>();
-    for (const c of ranked) groups.set(c.category, [...(groups.get(c.category) ?? []), c]); // each group is best-first
-    const topics = [...groups.entries()].sort((a, b) => mockRankScore(b[1][0]) - mockRankScore(a[1][0]) || b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1)).slice(0, BRIEF_MAX_SECTIONS);
+    // Markets section (migration 20261018040000_brief_email.sql): market cards leave the topic sections.
+    // headline_cards still come from every topic (top card of the top 3 topics), as in the SQL.
+    const marketCards = rankedAll.filter((c) => MARKET_CATEGORIES.has(c.category));
+    const groupTopics = (list: BlurbCard[]) => {
+      const groups = new Map<string, BlurbCard[]>();
+      for (const c of list) groups.set(c.category, [...(groups.get(c.category) ?? []), c]); // each group is best-first
+      return [...groups.entries()].sort((a, b) => mockRankScore(b[1][0]) - mockRankScore(a[1][0]) || b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1));
+    };
+    const ranked = rankedAll.filter((c) => !MARKET_CATEGORIES.has(c.category));
+    const topics = groupTopics(ranked).slice(0, BRIEF_MAX_SECTIONS);
     return {
       generated_at: new Date().toISOString(), window_hours,
-      headline_cards: topics.slice(0, 3).map(([, g]) => g[0]),
+      headline_cards: groupTopics(rankedAll).slice(0, 3).map(([, g]) => g[0]),
       sections: topics.map(([category, grouped], i) => ({
         category, slug: category, label: category, rank: i + 1, total: grouped.length, cards: grouped.slice(0, briefLimit(i + 1, top)),
       })),
       numbers: numbers.slice(0, 4),
+      summary: ranked.length + marketCards.length > 0
+        ? { text: `[SAMPLE] This is a sample ${requestedWindow === 168 ? 'weekly' : 'daily'} summary. The real one is written once a ${requestedWindow === 168 ? 'week' : 'day'} from the published cards.`, generated_at: new Date().toISOString(), model: 'sample' }
+        : null,
+      markets: { cards: marketCards.slice(0, 6), numbers: numbers.filter((n) => MARKET_SERIES.includes(n.series_id)).slice(0, 4), total: marketCards.length },
     };
-  };  return {
+  };
+  // In-memory email subscriptions with the same answers as the RPCs (never reveals an existing address).
+  type Sub = { email: string; token: string; status: 'pending' | 'active' | 'unsubscribed' } & BriefSubscriptionInput;
+  const subs = new Map<string, Sub>();
+  const attempts: { email: string; at: number }[] = [];
+  const byToken = (t: string) => [...subs.values()].find((s) => s.token === t);
+  let tokenSeq = 0;
+  const newToken = () => `00000000-0000-4000-8000-${(++tokenSeq).toString(16).padStart(12, '0')}`;
+  return {
+    subscriptions: () => [...subs.values()].map((s) => ({ ...s })), // for tests and the sample UI
+    subscribeBrief(i: { email: string } & BriefSubscriptionInput): BriefSubscribeResult {
+      const email = normalizeBriefEmail(i?.email);
+      if (!email || !isValidBriefInput(i)) return { ok: false, status: 'invalid' };
+      const now = Date.now();
+      if (attempts.filter((a) => a.email === email && a.at > now - 86_400_000).length >= BRIEF_CAPS.perEmailPerDay
+        || attempts.filter((a) => a.at > now - 3_600_000).length >= BRIEF_CAPS.globalPerHour) return { ok: false, status: 'limited' };
+      attempts.push({ email, at: now });
+      const old = subs.get(email);
+      // Active stays active (settings unchanged until confirmed via its token); otherwise a fresh pending row.
+      if (!old || old.status !== 'active') subs.set(email, { email, token: newToken(), status: 'pending', kind: i.kind, hour: i.hour, tz: i.tz });
+      return { ok: true, status: 'pending' };
+    },
+    confirmBrief(token: string): BriefTokenResult {
+      const s = byToken(token);
+      if (!s || s.status === 'unsubscribed') return { ok: false };
+      s.status = 'active';
+      return { ok: true };
+    },
+    updateBriefSubscription(token: string, i: BriefSubscriptionInput): BriefTokenResult {
+      const s = byToken(token);
+      if (!s || s.status === 'unsubscribed' || !isValidBriefInput(i)) return { ok: false };
+      Object.assign(s, { kind: i.kind, hour: i.hour, tz: i.tz });
+      return { ok: true };
+    },
+    unsubscribeBrief(token: string): BriefTokenResult {
+      const s = byToken(token);
+      if (s) s.status = 'unsubscribed';
+      return { ok: true }; // idempotent; unknown tokens look the same
+    },
     search(q: string, cursor?: string | null, limit = 20) {
       // Same rules as api.search v2: any word, similar words, typos, tickers; Trending order.
       return page(rankSearch(cards, q, mockRankScore), cursor, limit);

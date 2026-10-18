@@ -6,7 +6,8 @@ import { toBriefData } from '../briefLogic.ts';
 import type { BlurbCard } from '../../contract/types.ts';
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
-const TOPICS = ['world', 'policy', 'economy', 'markets', 'tech', 'science', 'safety', 'earnings', 'deals', 'energy'];
+// No markets/earnings/deals here: those go to the Markets section (brief_email), not topic sections.
+const TOPICS = ['world', 'policy', 'economy', 'personal-finance', 'tech', 'science', 'safety', 'energy', 'insider', 'health'];
 const PER_TOPIC = [9, 8, 7, 5, 4, 4, 3, 3, 2, 1]; // cards per topic, most important first
 
 /** Cards whose importance falls with the topic number, all published 1 h ago. */
@@ -47,9 +48,9 @@ test('brief headlines are the top card of the three most important, different to
 
 test('topic importance is the best card first, not the card count', async () => {
   const cards = supply();
-  cards.push(card({ id: 'star', category: 'energy', headline: 'Star', importance: 500, sort_at: hoursAgo(1) }));
+  cards.push(card({ id: 'star', category: 'health', headline: 'Star', importance: 500, sort_at: hoursAgo(1) }));
   const daily = await createMockFeatureApi(cards, [], []).dailyBrief();
-  assert.equal(daily.sections[0]?.category, 'energy');
+  assert.equal(daily.sections[0]?.category, 'health');
   assert.equal(daily.sections[0]?.total, 2);
 });
 

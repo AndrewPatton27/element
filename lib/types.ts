@@ -2,7 +2,7 @@
 // contract/types.ts and are imported type-only; this file adds only guards.
 // Bad rows are skipped, never allowed to crash the feed.
 
-import type { AppConfig, BlurbCard, Category, FeedPage, MacroFact, NumberTrend, RequiredNotice, Source } from '../contract/types.ts';
+import type { AppConfig, BlurbCard, BriefMarkets, BriefSubscribeResult, BriefSubscriptionInput, BriefSummary, BriefTokenResult, Category, FeedPage, MacroFact, NumberTrend, RequiredNotice, Source } from '../contract/types.ts';
 import { isRenderableKind } from './labels.ts';
 
 type Obj = Record<string, unknown>;
@@ -110,4 +110,39 @@ export function isNumberTrend(x: unknown): x is NumberTrend {
 export function parseNumberTrends(x: unknown): NumberTrend[] {
   if (!Array.isArray(x)) throw new Error('number_trends response is not a list.');
   return x.filter(isNumberTrend).map((t) => ({ ...t, points: t.points.slice(-12) }));
+}
+
+/** Brief summary from the server; anything malformed or empty becomes null (the box is hidden). */
+export function parseBriefSummary(x: unknown): BriefSummary | null {
+  if (!isObj(x) || !isStr(x.text) || x.text.trim() === '') return null;
+  return { text: x.text, generated_at: isStr(x.generated_at) ? x.generated_at : '', model: isStr(x.model) ? x.model : '' };
+}
+
+/** Markets section; bad cards/numbers are skipped. Missing = empty (the section is hidden). */
+export function parseBriefMarkets(x: unknown): BriefMarkets {
+  if (!isObj(x)) return { cards: [], numbers: [], total: 0 };
+  const cards = Array.isArray(x.cards) ? x.cards.filter(isBlurbCard).slice(0, 6) : [];
+  const numbers = Array.isArray(x.numbers) ? x.numbers.filter(isMacroFact) : [];
+  return { cards, numbers, total: isNum(x.total) ? Math.max(x.total, cards.length) : cards.length };
+}
+
+// Same checks as api.subscribe_brief: <= 254 chars, simple a@b.c pattern, lowercased.
+export function normalizeBriefEmail(email: unknown): string | null {
+  if (!isStr(email)) return null;
+  const e = email.trim().toLowerCase();
+  return e.length >= 3 && e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : null;
+}
+
+export function isValidBriefInput(i: unknown): i is BriefSubscriptionInput {
+  return isObj(i) && (i.kind === 'daily' || i.kind === 'weekly' || i.kind === 'both') && Number.isInteger(i.hour) && (i.hour as number) >= 0 && (i.hour as number) <= 23 && isStr(i.tz) && i.tz.length > 0 && i.tz.length <= 64;
+}
+
+const SUBSCRIBE_STATUSES = new Set(['pending', 'invalid', 'limited', 'unavailable']);
+export function parseSubscribeResult(x: unknown): BriefSubscribeResult {
+  if (!isObj(x) || !isStr(x.status) || !SUBSCRIBE_STATUSES.has(x.status)) return { ok: false, status: 'unavailable' };
+  return { ok: x.ok === true && x.status === 'pending', status: x.status as BriefSubscribeResult['status'] };
+}
+
+export function parseTokenResult(x: unknown): BriefTokenResult {
+  return isObj(x) && x.ok === true ? { ok: true } : { ok: false };
 }

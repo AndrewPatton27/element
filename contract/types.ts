@@ -174,6 +174,44 @@ export interface Brief {
   headline_cards: BlurbCard[];
   sections: BriefSection[];
   numbers: MacroFact[];
+  /** AI-written 3-5 sentence summary of the day/week, made once by the ingest job; null/missing = none. */
+  summary?: BriefSummary | null;
+  /** Market news cards (markets, earnings, deals) + market numbers. Empty cards = hide the section. */
+  markets?: BriefMarkets;
+}
+
+/** Row of core.brief_summaries as returned inside the brief. Show with the AI label. */
+export interface BriefSummary {
+  text: string;
+  generated_at: string;                 // ISO
+  model: string;
+}
+
+/** "Markets" section of a brief. Never stock prices (rule 9). */
+export interface BriefMarkets {
+  cards: BlurbCard[];                   // up to 6, trending order, one per story
+  numbers: MacroFact[];                 // DGS10, DGS2, DFF, DCOILWTICO when available
+  total: number;                        // eligible market stories in the window
+}
+
+export type BriefKind = 'daily' | 'weekly' | 'both';
+
+/** Input of api.subscribe_brief / api.update_brief_subscription. hour = local send hour 0..23. */
+export interface BriefSubscriptionInput {
+  kind: BriefKind;
+  hour: number;
+  tz: string;                           // IANA zone, e.g. "America/New_York"
+}
+
+/** 'pending' is returned for every valid address (never reveals if it is already subscribed). */
+export type BriefSubscribeStatus = 'pending' | 'invalid' | 'limited' | 'unavailable';
+export interface BriefSubscribeResult {
+  ok: boolean;
+  status: BriefSubscribeStatus;
+}
+export interface BriefTokenResult {
+  ok: boolean;
+  status?: 'unavailable';
 }
 
 export type NoticePlacement =
