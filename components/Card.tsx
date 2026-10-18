@@ -7,7 +7,8 @@
 // own layout from the Feed-LinkOut draft. Swiping to react lives in FeedPager.
 
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, Share, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
+import { Platform, Pressable, Share, ScrollView, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
+import { router } from 'expo-router';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { cardTime, categoryName, clampHeadline, eventLabel } from '../lib/format';
 import { cardLabels, disclaimerText, primarySource, shareAlikeCredit } from '../lib/labels';
@@ -17,7 +18,7 @@ import { usePalette } from '../lib/useTheme';
 import type { Palette } from '../lib/theme';
 import { fonts, radius } from '../lib/theme';
 import { DataFacts } from './DataCard';
-import { ExternalIcon, NumbersIcon, ShareIcon, SparkleIcon, ThumbDownIcon, ThumbUpIcon } from './Icons';
+import { ExternalIcon, InfoIcon, NumbersIcon, ShareIcon, SparkleIcon, ThumbDownIcon, ThumbUpIcon } from './Icons';
 import type { Feedback } from '../lib/accountLogic';
 import { Disclaimer, ShareAlikeLine } from './Labels';
 import { SourceRow } from './SourceChip';
@@ -194,8 +195,8 @@ export function Card(props: Props) {
   const showNextHint = !!wide && !!onNext;
   const footer =
     small.footer || reactFn || shareable || showNextHint ? (
-      <View style={[styles.footer, wide && styles.footerWide, compact && { gap: 2 }, { borderTopColor: p.divider }]}>
-        <Text style={[styles.footerText, wide && { fontSize: 13 }, { color: p.muted }]}>{small.footer ?? ''}</Text>
+      <View style={[styles.footer, wide && styles.footerWide, compact && styles.footerCompact, { borderTopColor: p.divider }]}>
+        <Text style={[styles.footerText, wide && { fontSize: 13 }, compact && styles.footerTextCompact, { color: p.muted }]}>{small.footer ?? ''}</Text>
         <View style={[styles.actions, (wide || compact) && { gap: compact ? 0 : 4 }]}>
           {reactFn ? (
             <>
@@ -243,6 +244,11 @@ export function Card(props: Props) {
                 <Text style={[styles.moreDots, { color: p.muted }]}>⋯</Text>
               </Pressable>
             ) : null}
+            {!wide ? (
+              <Pressable onPress={() => router.push('/about' as never)} accessibilityRole="link" accessibilityLabel="About Element" style={styles.aboutBtn}>
+                <InfoIcon color={p.inkSoft} size={22} />
+              </Pressable>
+            ) : null}
           </View>
         </View>
 
@@ -272,6 +278,13 @@ export function Card(props: Props) {
                 never do, so they are always visible. Tapping it opens the detail sheet, but
                 only when the card has detail. The hint is part of the label because
                 react-native-web drops accessibilityHint. */}
+            <ScrollView
+              style={styles.middleScroll}
+              contentContainerStyle={[styles.middleContent, compact && styles.middleContentCompact]}
+              scrollEnabled={!!compact}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
             <Pressable
               onPress={opensDetail ? () => onOpenDetail?.(card) : undefined}
               disabled={!opensDetail && a11yActions.length === 0}
@@ -280,7 +293,7 @@ export function Card(props: Props) {
               accessibilityLabel={opensDetail ? `${card.headline}. ${OPEN_DETAIL_HINT}` : a11yActions.length > 0 ? card.headline : undefined}
               accessibilityActions={a11yActions.length > 0 ? a11yActions : undefined}
               onAccessibilityAction={a11yActions.length > 0 ? onA11yAction : undefined}
-              style={[styles.middle, wide && { gap: tight ? 12 : 20 }, compact && { gap: 10 }, roomy && { gap: 16 }]}
+              style={[styles.middlePressable, wide && { gap: tight ? 12 : 20 }, compact && { gap: 8 }, roomy && { gap: 16 }]}
             >
               {headline}
 
@@ -290,7 +303,7 @@ export function Card(props: Props) {
                   restates the numbers; it stays readable in the detail sheet. */}
               {card.body && !(card.kind === 'data' && card.macro.length > 1 && !wide) ? (
                 <Text
-                  numberOfLines={compact ? 5 : wide ? undefined : 8}
+                  numberOfLines={wide ? undefined : compact ? undefined : 8}
                   style={[
                     styles.body,
                     wide && styles.bodyWide,
@@ -331,6 +344,7 @@ export function Card(props: Props) {
                 </View>
               ) : null}
             </Pressable>
+            </ScrollView>
 
             {/* empty space collects here, so the sources and footer sit at the bottom */}
             <View style={styles.spacer} />
@@ -422,13 +436,19 @@ const styles = StyleSheet.create({
   factValue: { fontFamily: fonts.sansSemi, fontSize: 15 },
   tickers: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   ticker: { fontFamily: fonts.sansMedium, fontSize: 13, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 3 },
-  middle: { flexShrink: 1, minHeight: 0, overflow: 'hidden', gap: 14 },
+  middleScroll: { flexShrink: 1, minHeight: 0 },
+  middleContent: { flexGrow: 1 },
+  middleContentCompact: { gap: 8 },
+  middlePressable: { gap: 14 },
   spacer: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0 },
   more: { alignSelf: 'flex-start', minHeight: 44, marginTop: -8, marginBottom: -6, justifyContent: 'center' },
   moreText: { fontFamily: fonts.sansSemi, fontSize: 14 },
   sourceBlock: { gap: 8, flexShrink: 0 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderTopWidth: 1, paddingTop: 6, marginHorizontal: -8, paddingLeft: 8, flexShrink: 0 },
   footerWide: { borderTopWidth: 0, paddingTop: 0, gap: 12, marginHorizontal: 0, paddingLeft: 0 },
+  footerCompact: { flexDirection: 'column', alignItems: 'stretch', gap: 0, paddingTop: 4 },
+  footerTextCompact: { flex: 0, width: '100%', fontSize: 11, lineHeight: 14 },
+  aboutBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   footerText: { flex: 1, fontFamily: fonts.sans, fontSize: 12, lineHeight: 16 },
   linkOutCredit: { flex: 0, lineHeight: 17 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },

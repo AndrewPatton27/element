@@ -16,6 +16,7 @@ import {
   practiceReducer,
   progressLabel,
   shouldAutoShow,
+  trapTabIndex,
   type PracticeEvent,
 } from '../tutorialLogic.ts';
 import { PRACTICE_SAMPLE, TUTORIAL_AI_LABEL, TUTORIAL_MOTION, getTutorialSteps } from '../tutorialSteps.ts';
@@ -66,6 +67,15 @@ test('keyboard: arrows move, Esc skips, Enter is left to the focused button', ()
   assert.equal(keyToAction('Escape', 2, 4), 'skip');
   assert.equal(keyToAction('Enter', 0, 4), null);
   assert.equal(keyToAction('j', 0, 4), null);
+});
+
+test('focus trap wraps Tab and Shift+Tab across dialog controls', () => {
+  assert.equal(trapTabIndex(-1, 3), 0);
+  assert.equal(trapTabIndex(-1, 3, true), 2);
+  assert.equal(trapTabIndex(0, 3, true), 2);
+  assert.equal(trapTabIndex(2, 3), 0);
+  assert.equal(trapTabIndex(1, 3), 1);
+  assert.equal(trapTabIndex(0, 0), -1);
 });
 
 test('auto-show only on first visit and never over /tutorial or a reset link', () => {

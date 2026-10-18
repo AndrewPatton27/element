@@ -40,10 +40,11 @@ import {
   nextStep,
   progressLabel,
   shouldAutoShow,
+  trapTabIndex,
 } from '../lib/tutorialLogic';
 import { PRACTICE_FOOTER, TUTORIAL_FOOTNOTE, TUTORIAL_MOTION, getTutorialSteps } from '../lib/tutorialSteps';
 import { usePalette, useWide } from '../lib/useTheme';
-import { ChevronLeftIcon, ChevronUpIcon } from './Icons';
+import { ChevronRightIcon, ChevronLeftIcon, ChevronUpIcon } from './Icons';
 import { useKeyframeLoop, useLinearLoop, useReducedMotion } from './TutorialMotion';
 import { BriefFollowingPanel, FeedTopPanel, Legend, Recap } from './TutorialParts';
 import { PracticeArea } from './TutorialPractice';
@@ -65,6 +66,23 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
   const go = useCallback((to: number) => setStep(to), []);
   const next = useCallback(() => go(nextStep(stepRef.current, count)), [go, count]);
   const back = useCallback(() => go(backStep(stepRef.current, count)), [go, count]);
+  const rootRef = useRef<ComponentRef<typeof View>>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+
+  // On web, move focus into the modal and return it to the opener when the tour closes.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const root = rootRef.current as unknown as HTMLElement | null;
+    const style = document.createElement('style');
+    style.textContent = '#element-tutorial-dialog :is(button,a,[role="button"],[role="link"],[tabindex]):focus-visible{outline:3px solid #146B61!important;outline-offset:3px!important;border-radius:6px}';
+    document.head.appendChild(style);
+    root?.focus();
+    return () => {
+      style.remove();
+      previousFocus.current?.focus();
+    };
+  }, []);
 
   // Scroll to the top and announce the new step.
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -79,6 +97,22 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        const root = rootRef.current as unknown as HTMLElement | null;
+        const nodes = root ? Array.from(root.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')).filter((el) => !el.hasAttribute('aria-hidden') && el.getAttribute('aria-disabled') !== 'true') : [];
+        if (nodes.length === 0) {
+          e.preventDefault();
+          root?.focus();
+        } else {
+          const at = nodes.indexOf(document.activeElement as HTMLElement);
+          const nextAt = trapTabIndex(at, nodes.length, e.shiftKey);
+          if (at < 0 || (e.shiftKey ? at === 0 : at === nodes.length - 1)) {
+            e.preventDefault();
+            nodes[nextAt]?.focus();
+          }
+        }
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const action = keyToAction(e.key, stepRef.current, count);
       // Swallow the feed's own keys while the tour is open, even when they do nothing here.
@@ -100,7 +134,6 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
   const contentH = useRef(0);
   const updateFits = () => (fits.current = contentH.current <= viewH.current + 2);
   const lastWheel = useRef(0);
-  const rootRef = useRef<ComponentRef<typeof View>>(null);
   useEffect(() => {
     const el = rootRef.current as unknown as HTMLElement | null;
     if (Platform.OS !== 'web' || !el || typeof el.addEventListener !== 'function') return;
@@ -143,15 +176,17 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
   return (
     <View
       ref={rootRef}
+      nativeID="element-tutorial-dialog"
+      tabIndex={-1}
       role="dialog"
       aria-modal
-      aria-label={`${APP_NAME} quick tour`}
+      aria-labelledby="element-tutorial-title"
       style={[StyleSheet.absoluteFill, styles.root, { backgroundColor: p.bg }]}
       {...pan.panHandlers}
     >
       <SafeAreaView style={styles.fill} edges={['top', 'bottom']}>
         <View style={[styles.header, web && styles.headerWeb, { borderBottomColor: web ? p.border : 'transparent', backgroundColor: web ? p.surface : p.bg }]}>
-          <Text style={[styles.wordmark, web && styles.wordmarkWeb, { color: p.accent }]} aria-hidden={false}>
+          <Text nativeID="element-tutorial-title" role="heading" aria-level={2} style={[styles.wordmark, web && styles.wordmarkWeb, { color: p.accent }]} aria-hidden={false}>
             {APP_NAME}
           </Text>
           <Pressable
@@ -256,7 +291,7 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
                 onPress={back}
                 accessibilityRole="button"
                 accessibilityLabel="Back, previous step"
-                style={({ pressed }) => [styles.back, { opacity: pressed ? 0.6 : 1 }]}
+                style={({ pressed }) => [styles.navBtn, { borderColor: p.border, opacity: pressed ? 0.6 : 1 }]}
               >
                 <ChevronLeftIcon color={p.inkSoft} size={20} />
                 <Text style={[styles.backText, { color: p.inkSoft }]}>Back</Text>
@@ -281,10 +316,22 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
                     </View>
                   </View>
                 </Animated.View>
-                {!web ? <Text style={[styles.continueText, { color: p.accent }]}>{s.continueHint}</Text> : null}
+                
               </Pressable>
             ) : null}
-            <View style={styles.back} />
+            {!last ? (
+              <Pressable
+                onPress={next}
+                accessibilityRole="button"
+                accessibilityLabel="Next"
+                style={({ pressed }) => [styles.navBtn, { backgroundColor: p.accent, borderColor: p.accent, opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Text style={[styles.navBtnText, { color: '#FFFFFF' }]}>Next</Text>
+                <ChevronRightIcon color="#FFFFFF" size={18} />
+              </Pressable>
+            ) : (
+              <View style={styles.back} />
+            )}
           </View>
 
           {/* The disclaimer, once per step. */}
@@ -351,6 +398,8 @@ const styles = StyleSheet.create({
   nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' },
   back: { width: 88, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 2 },
   backText: { fontFamily: fonts.sansSemi, fontSize: 15 },
+  navBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 44, minWidth: 92, paddingHorizontal: 16, borderRadius: 22, borderWidth: 1 },
+  navBtnText: { fontFamily: fonts.sansSemi, fontSize: 15 },
   continue: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center' },
   continueText: { fontFamily: fonts.sansSemi, fontSize: 16 },
   hintIcon: { width: 30, height: 30 },

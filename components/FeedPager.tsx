@@ -24,6 +24,7 @@ import {
   type FlatListProps,
   type LayoutChangeEvent,
   type ViewStyle,
+  useWindowDimensions,
 } from 'react-native';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { usePalette } from '../lib/useTheme';
@@ -49,6 +50,7 @@ import type { Feedback } from '../lib/accountLogic';
 import { LoadingState } from './States';
 import { ThumbDownIcon, ThumbUpIcon } from './Icons';
 import { UndoToast } from './UndoToast';
+import { shouldUseCompactCard } from '../lib/cardFit';
 
 interface Props {
   items: BlurbCard[];
@@ -71,7 +73,6 @@ interface Props {
 }
 
 // Below this page height the card switches to smaller type so it fits.
-const COMPACT_BELOW = 640;
 const MOUSE_SWIPE = false; // desktop mouse drag-to-react: off by default
 const coachStore = defaultStore();
 
@@ -213,6 +214,7 @@ export function FeedPager({
   onToggleTopicFollow,
 }: Props) {
   const p = usePalette();
+  const { height: windowHeight } = useWindowDimensions();
   const list = useRef<FlatList<BlurbCard>>(null);
   const [height, setHeight] = useState(0);
   const [width, setWidth] = useState(0);
@@ -238,6 +240,11 @@ export function FeedPager({
     setCoachSeen('1');
   }, []);
   const coach = showCoach({ enabled: swipeOn, seen: coachSeen, index });
+  useEffect(() => {
+    if (!coach) return;
+    const timer = setTimeout(dismissCoach, 5000);
+    return () => clearTimeout(timer);
+  }, [coach, dismissCoach]);
   const [undo, setUndo] = useState<{ card: BlurbCard; previous: Feedback | undefined; sent: Feedback; message: string } | null>(null);
   const reactionsRef = useRef(reactions);
   reactionsRef.current = reactions;
@@ -353,32 +360,34 @@ export function FeedPager({
     return () => window.removeEventListener('keydown', onKey);
   }, [goTo, active]);
 
-  const compact = !wide && height > 0 && height < COMPACT_BELOW;
+  const compact = !wide && shouldUseCompactCard(windowHeight, height);
   const renderItem = useCallback(
     ({ item, index: i }: { item: BlurbCard; index: number }) => {
       const last = i === items.length - 1 && done;
       return (
         <View style={[styles.page, wide && styles.pageWide, { height }]}>
-          <CardErrorBoundary resetKey={item.id}>
-            <SwipeCard enabled={swipeOn} reduced={reduced} width={width} onSwipe={(r) => swiped(item, r)}>
-              <Card
-                card={item}
-                config={config}
-                categories={categories}
-                onShowSources={onShowSources}
-                onOpenDetail={onOpenDetail}
-                onMore={onMore}
-                followedTopic={followedTopics?.includes(item.category)}
-                onToggleTopicFollow={onToggleTopicFollow}
-                onNext={last ? undefined : next}
-                wide={wide}
-                compact={compact}
-                peek={!last}
-                reaction={reactions?.[item.id]}
-                onReact={react}
-              />
-            </SwipeCard>
-          </CardErrorBoundary>
+          <View style={compact && coach ? { height: Math.max(0, height - 52) } : styles.cardArea}>
+            <CardErrorBoundary resetKey={item.id}>
+              <SwipeCard enabled={swipeOn} reduced={reduced} width={width} onSwipe={(r) => swiped(item, r)}>
+                <Card
+                  card={item}
+                  config={config}
+                  categories={categories}
+                  onShowSources={onShowSources}
+                  onOpenDetail={onOpenDetail}
+                  onMore={onMore}
+                  followedTopic={followedTopics?.includes(item.category)}
+                  onToggleTopicFollow={onToggleTopicFollow}
+                  onNext={last ? undefined : next}
+                  wide={wide}
+                  compact={compact}
+                  peek={!last}
+                  reaction={reactions?.[item.id]}
+                  onReact={react}
+                />
+              </SwipeCard>
+            </CardErrorBoundary>
+          </View>
         </View>
       );
     },
@@ -444,13 +453,14 @@ const styles = StyleSheet.create({
   end: { height: 120, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
   endText: { fontFamily: fonts.sansMedium, fontSize: 14, textAlign: 'center' },
   fill: { flex: 1 },
+  cardArea: { flex: 1 },
   // Phones: the card, the next card's edge and the disclaimer line all sit inside the page.
   page: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
   pageWide: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 12 },
   overlay: { ...StyleSheet.absoluteFill, borderRadius: radius.card, alignItems: 'center', justifyContent: 'center' },
   stamp: { width: 76, height: 76, borderRadius: 38, alignItems: 'center', justifyContent: 'center' },
-  // The tip sits over the first card's lower half, clear of the source row and footer.
-  coachDock: { position: 'absolute', left: 0, right: 0, top: '52%', alignItems: 'center', paddingHorizontal: 32 },
+  // Keep the transient hint at the bottom edge and dismiss it quickly on phones.
+  coachDock: { position: 'absolute', left: 0, right: 0, bottom: 4, alignItems: 'center', paddingHorizontal: 32 },
   coach: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 16, borderRadius: 22 },
   coachText: { fontFamily: fonts.sansSemi, fontSize: 14 },
 });

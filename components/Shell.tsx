@@ -169,7 +169,7 @@ export function Shell({ active, children, left, aside, scroll, bare, noFab, feed
       {api.sample ? <SampleBanner /> : null}
       {content}
       <TabBar active={active} signedIn={signedIn} />
-      {active !== 'about' && !noFab ? (
+      {active !== 'about' && active !== 'feed' && !noFab ? (
         <Pressable
           onPress={() => go('/about')}
           accessibilityRole="link"

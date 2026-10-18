@@ -69,6 +69,15 @@ export function keyToAction(key: string, step: number, count: number): TutorialA
   }
 }
 
+/** Returns the focusable control index to wrap to for Tab / Shift+Tab. */
+export function trapTabIndex(current: number, count: number, backwards = false): number {
+  if (count <= 0) return -1;
+  if (current < 0) return backwards ? count - 1 : 0;
+  if (backwards && current === 0) return count - 1;
+  if (!backwards && current >= count - 1) return 0;
+  return Math.min(Math.max(Math.trunc(current), 0), count - 1);
+}
+
 // Routes the first-run overlay never covers.
 const NO_AUTO_SHOW = ['/tutorial', '/reset-password'];
 
