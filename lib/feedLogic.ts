@@ -2,6 +2,7 @@
 
 import type { BlurbCard, CategorySlug, FeedMode, FeedPage } from '../contract/types.ts';
 import { isBlurbCard } from './types.ts';
+import { diversifyFeed } from './diversify.ts';
 
 // The feed tabs. 'for_you' is the signed-in personal feed (api.feed_for_you).
 export type FeedTab = FeedMode | 'for_you';
@@ -59,7 +60,7 @@ export function feedReducer(state: FeedState, action: FeedAction): FeedState {
     case 'page':
       return {
         ...state,
-        items: appendPage(state.items, action.page),
+        items: state.key.startsWith('top|') ? diversifyFeed(appendPage(state.items, action.page)) : appendPage(state.items, action.page),
         cursor: action.page.next_cursor,
         done: action.page.next_cursor === null,
         loading: false,

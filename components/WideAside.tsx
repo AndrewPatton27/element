@@ -13,6 +13,7 @@ import { trendA11yLabel } from '../lib/briefLogic';
 import { withToneLabel } from '../lib/numberTone';
 import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
+import { pickTopStories } from '../lib/diversify.ts';
 import { badgeLabel } from './Card';
 import { ChevronLeftIcon, ChevronRightIcon } from './Icons';
 import { BASELINE, CHART_H, CHART_W, chartShape, stepIndex, storiesToShow, trendColors } from './trendChart';
@@ -36,8 +37,11 @@ export function useAsideData(api: Api, enabled = true): AsideData {
   useEffect(() => {
     if (!enabled) return; // phones and narrow windows never make the two calls
     let alive = true;
-    Promise.all([safeList(() => api.topStories()), safeList(() => api.numberTrends())]).then(([stories, trends]) => {
-      if (alive) setState({ loading: false, stories: stories.slice(0, 5), trends });
+    Promise.all([safeList(() => api.topStories()), safeList(() => api.numberTrends()), safeList(() => api.feed({ mode: 'top', limit: 30 }).then((page) => page.items))]).then(([top, trends, more]) => {
+      // A wider candidate list lets pickTopStories choose five stories that are not related to each other.
+      const seen = new Set<string>();
+      const stories = [...top, ...more].filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true))).slice(0, 25);
+      if (alive) setState({ loading: false, stories, trends });
     });
     return () => {
       alive = false;
@@ -61,7 +65,7 @@ export function WideAside({
   const count = storiesToShow(height);
   return (
     <View>
-      <TopStories stories={data.stories.slice(0, count)} categories={categories} onOpen={onOpenStory} />
+      <TopStories stories={pickTopStories(data.stories, count)} categories={categories} onOpen={onOpenStory} />
       <TrendsCard trends={data.trends} />
     </View>
   );
