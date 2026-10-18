@@ -52,11 +52,20 @@ function BottomNav({ active, p, items, wide }: { active: Tab; p: Palette; items:
       accessibilityRole="tablist"
     >
       <View style={[styles.bottomInner, wide && styles.bottomInnerWide]}>
-        {items.map(({ key, label, href, Icon }) => {
+        {items.map(({ key, label, href, Icon }, i) => {
           const on = key === active;
           const color = on ? p.accent : p.muted;
+          // Wide: end items align their icon to the block edge (first → left,
+          // last → right) so the outer icon edges sit flush with the card edges.
+          const edge = !wide ? null : i === 0 ? styles.itemStart : i === items.length - 1 ? styles.itemEnd : null;
           return (
-            <Pressable key={key} onPress={() => go(href)} accessibilityRole="tab" aria-selected={on} style={styles.bottomItem}>
+            <Pressable
+              key={key}
+              onPress={() => go(href)}
+              accessibilityRole="tab"
+              aria-selected={on}
+              style={[styles.bottomItem, wide && styles.bottomItemWide, edge]}
+            >
               <Icon color={color} />
               <Text style={{ color, fontSize: 12, fontFamily: on ? fonts.sansSemi : fonts.sansMedium }}>{label}</Text>
             </Pressable>
@@ -124,10 +133,18 @@ const styles = StyleSheet.create({
   scrollWide: { paddingVertical: 28, gap: 16 },
   scrollNarrow: { padding: 20, paddingTop: 24, gap: 16 },
   bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 6, paddingBottom: 10, paddingHorizontal: 8 },
-  bottomNavWide: { paddingTop: 8, paddingBottom: 12 },
+  // Wide: same horizontal gutter as the content row (wideRow) and centre the
+  // capped inner block horizontally so it lines up with the centred card column.
+  bottomNavWide: { paddingTop: 8, paddingBottom: 12, paddingHorizontal: 32, justifyContent: 'center' },
   bottomInner: { flex: 1, flexDirection: 'row', justifyContent: 'space-evenly' },
-  // Match the news-card column: capped at 640 and centred, so the icons never
-  // extend past the width of the cards above them.
-  bottomInnerWide: { alignSelf: 'center', width: '100%', maxWidth: CARD_MAX_WIDTH },
+  // Match the news-card column exactly: capped at 640 and centred. space-between
+  // puts the first icon's left edge on the card's left edge and the last icon's
+  // right edge on the card's right edge.
+  bottomInnerWide: { alignSelf: 'center', width: '100%', maxWidth: CARD_MAX_WIDTH, justifyContent: 'space-between' },
   bottomItem: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  // Wide: items size to content and the end ones align to the block edges so the
+  // outer icon edges sit flush with the card edges, not inset.
+  bottomItemWide: { flex: 0, minWidth: 48, paddingHorizontal: 8 },
+  itemStart: { alignItems: 'flex-start', paddingLeft: 0 },
+  itemEnd: { alignItems: 'flex-end', paddingRight: 0 },
 });

@@ -141,6 +141,7 @@ export default function AboutScreen() {
             'With an account we store your email, the topics and sources you pick, your reactions and taps, and how long you look at each card, only to tailor your feed.',
             'Your password is handled by our sign-in service (Supabase Auth), which keeps only a one-way hash of it. We never see or store the password itself.',
             'On the Account screen you can delete your data or your whole account at any time.',
+            'Cloudflare Web Analytics counts page views for the whole site without cookies and without identifying you.',
           ]}
         />
       </Section>
