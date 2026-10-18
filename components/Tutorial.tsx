@@ -357,7 +357,9 @@ export function TutorialGate() {
       onExit={(how) => {
         markTutorialSeen(defaultStore());
         setOpen(false);
+        // Finishing or skipping the tour lands on the Trending tab (the t value makes the feed re-read the tab).
         if (how === 'signup') router.push('/signin?mode=signup' as never);
+        else router.replace(`/?tab=top&t=${Date.now()}` as never);
       }}
     />
   );

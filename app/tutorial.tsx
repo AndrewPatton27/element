@@ -11,7 +11,7 @@ export default function TutorialScreen() {
     <Tutorial
       onExit={(how) => {
         markTutorialSeen(defaultStore());
-        router.replace((how === 'signup' ? '/signin?mode=signup' : '/') as never);
+        router.replace((how === 'signup' ? '/signin?mode=signup' : `/?tab=top&t=${Date.now()}`) as never);
       }}
     />
   );
