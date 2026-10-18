@@ -158,6 +158,18 @@ export function ThumbDownIcon(p: IconProps) {
   );
 }
 
+// Share, path data from Mobile-Final / Web-Final.
+export function ShareIcon(p: IconProps) {
+  return (
+    <Icon size={22} {...p}>
+      <Path d="M12 15V3" />
+      <Path d="M7 8l5-5 5 5" />
+      <Path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+    </Icon>
+  );
+}
+
+
 // Eye / eye-off for the show-password toggle (same stroke style as the design icons).
 const EYE = 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z';
 

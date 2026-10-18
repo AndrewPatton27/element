@@ -1,12 +1,13 @@
 // One feed card (design Mobile-Final / Web-Final): badge and meta, headline,
-// (numbers), body, facts, tickers, then the source row and a footer with the AI
-// label and the actions. The disclaimer appears once per card: under the card on
+// (numbers), body, facts (Agency / Type / Published, on phones too), tickers, then
+// the source row and a footer: small print on the left, like / dislike / share icon
+// buttons on the right. The disclaimer appears once per card: under the card on
 // phones, in the footer line on wide web (components/cardFooter.ts). No images,
 // no prices. Link-out cards (reserved, the parser skips them in v1) have their
-// own layout from the Feed-LinkOut draft.
+// own layout from the Feed-LinkOut draft. Swiping to react lives in FeedPager.
 
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Platform, Pressable, Share, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { cardTime, categoryName, clampHeadline, eventLabel } from '../lib/format';
 import { cardLabels, disclaimerText, primarySource, shareAlikeCredit } from '../lib/labels';
@@ -16,11 +17,11 @@ import { usePalette } from '../lib/useTheme';
 import type { Palette } from '../lib/theme';
 import { fonts, radius } from '../lib/theme';
 import { DataFacts } from './DataCard';
-import { ChevronUpIcon, ExternalIcon, NumbersIcon, SparkleIcon, ThumbDownIcon, ThumbUpIcon } from './Icons';
+import { ExternalIcon, NumbersIcon, ShareIcon, SparkleIcon, ThumbDownIcon, ThumbUpIcon } from './Icons';
 import type { Feedback } from '../lib/accountLogic';
 import { Disclaimer, ShareAlikeLine } from './Labels';
 import { SourceRow } from './SourceChip';
-import { delayedText, footerLabels } from './cardFooter';
+import { footerLabels, linkOutCredit, linkOutDelay, shareUrl } from './cardFooter';
 
 interface Props {
   card: BlurbCard;
@@ -39,9 +40,46 @@ interface Props {
 
 type BadgeIcon = typeof SparkleIcon;
 
+// Feed-LinkOut badge colours. Not in the palette; fine while DARK_MODE_ENABLED is false.
+const LINK_OUT_BADGE = { bg: '#E9ECF3', fg: '#2D3A5C' };
+
+// Share the card's /b/<id> page: the Web Share sheet where the browser has one, else
+// copy the link. Returns the toast text, or null when the system sheet handled it.
+async function shareCard(card: BlurbCard): Promise<string | null> {
+  const origin = Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : null;
+  const url = shareUrl(card.share_path, origin);
+  if (!url) return 'No link to share for this card.';
+  if (Platform.OS !== 'web') {
+    try {
+      await Share.share({ message: url, url, title: card.headline });
+      return null;
+    } catch {
+      return 'Could not open sharing.';
+    }
+  }
+  const nav = (globalThis as { navigator?: Navigator }).navigator;
+  if (nav && typeof nav.share === 'function') {
+    try {
+      await nav.share({ title: card.headline, url });
+      return null;
+    } catch (e) {
+      if ((e as { name?: string } | null)?.name === 'AbortError') return null; // the reader closed the sheet
+    }
+  }
+  if (nav?.clipboard && typeof nav.clipboard.writeText === 'function') {
+    try {
+      await nav.clipboard.writeText(url);
+      return 'Link copied';
+    } catch {
+      // blocked: fall through
+    }
+  }
+  return 'Could not copy the link.';
+}
+
 function badgeFor(card: BlurbCard, p: Palette): { text: string; bg: string; fg: string; Icon: BadgeIcon | null } {
   if (card.kind === 'data') return { text: 'New data', bg: p.dataSoft, fg: p.dataInk, Icon: NumbersIcon };
-  if (card.kind === 'link_out') return { text: 'From the publisher', bg: p.surfaceMuted, fg: p.inkSoft, Icon: ExternalIcon };
+  if (card.kind === 'link_out') return { text: 'From the publisher', bg: LINK_OUT_BADGE.bg, fg: LINK_OUT_BADGE.fg, Icon: ExternalIcon };
   if (card.ai.generated) return { text: 'Summary', bg: p.accentSoft, fg: p.accentInk, Icon: SparkleIcon };
   return { text: 'From the source', bg: p.surfaceMuted, fg: p.inkSoft, Icon: null };
 }
@@ -68,7 +106,7 @@ function factsFor(card: BlurbCard): { label: string; value: string }[] {
 // "World · 2 h ago", or "Recalls & Safety · Recall · 2 h ago" when the event adds something.
 function metaLine(card: BlurbCard, categories: Category[]): string {
   const category = categoryName(card.category, categories);
-  if (card.kind === 'link_out') return [category, delayedText(card.freshness?.delayed_hours)].filter(Boolean).join(' · ');
+  if (card.kind === 'link_out') return [category, linkOutDelay(card.freshness?.delayed_hours)].filter(Boolean).join(' · ');
   const event = eventLabel(card.event_type);
   const parts = [category];
   if (event && !category.toLowerCase().includes(event.toLowerCase())) parts.push(event);
@@ -99,16 +137,47 @@ export function Card(props: Props) {
   const [box, setBox] = useState({ w: 0, h: 0 });
   const tight = !!wide && box.h > 0 && box.h < 660;
   const wideSize = tight ? 40 : box.w > 0 && box.w < 600 ? 38 : card.headline.length > 80 ? 42 : 48;
-  const phoneSize = compact ? 24 : card.headline.length > 80 ? 26 : 28;
+  // Feed-Data / Feed-LinkOut drafts: data and link-out cards get 24 px padding, 16 px
+  // gaps and a 32 px headline on phones (summary cards keep Mobile-Final's 20 / 14 / 28).
+  const roomy = !wide && !compact && card.kind !== 'summary';
+  const phoneSize = compact ? 24 : card.headline.length > 80 ? (roomy ? 28 : 26) : roomy ? 32 : 28;
   const headlineSize = wide ? wideSize : phoneSize;
-  const facts = compact ? [] : factsFor(card);
+  const headlineTrack = wide ? 0.025 : roomy ? 0.015 : 0.02;
+  const headlineLead = wide ? 1.07 : linkOut ? 1.12 : 1.1;
+  // Agency / Type / Published, on every layout (only the values we have).
+  const facts = factsFor(card);
+
+  // Share: system sheet or copy-link, with a short toast.
+  const shareable = shareUrl(card.share_path, null) !== null;
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [toast]);
+  const onShare = () => {
+    shareCard(card)
+      .then(setToast)
+      .catch(() => setToast('Could not share.'));
+  };
+
+  // Screen readers get the swipe reactions (and paging) as actions on the card body.
+  const a11yActions = [
+    ...(reactFn ? [{ name: 'like', label: 'Like' }, { name: 'dislike', label: 'Dislike' }] : []),
+    ...(onNext ? [{ name: 'next', label: 'Next card' }] : []),
+  ];
+  const onA11yAction = (e: AccessibilityActionEvent) => {
+    const name = e.nativeEvent.actionName;
+    if ((name === 'like' || name === 'dislike') && reactFn) reactFn(card, name);
+    else if (name === 'next') onNext?.();
+  };
 
   const headline = (
     <Text
       numberOfLines={linkOut ? 6 : compact ? 3 : 4}
       style={[
         styles.headline,
-        { color: p.ink, fontSize: headlineSize, lineHeight: headlineSize * (wide ? 1.07 : 1.1), letterSpacing: -headlineSize * (wide ? 0.025 : 0.02), maxWidth: wide ? 820 : undefined },
+        { color: p.ink, fontSize: headlineSize, lineHeight: headlineSize * headlineLead, letterSpacing: -headlineSize * headlineTrack, maxWidth: wide ? 820 : undefined },
       ]}
       accessibilityRole="header"
     >
@@ -117,21 +186,34 @@ export function Card(props: Props) {
     </Text>
   );
 
-  const footerHasActions = !!reactFn || !!onNext;
+  // Mobile-Final / Web-Final footer: small print on the left, a right-aligned row of
+  // 44 px icon buttons (like, dislike, share). Wide web keeps its keyboard hint.
+  const showNextHint = !!wide && !!onNext;
   const footer =
-    small.footer || footerHasActions ? (
-      <View style={[styles.footer, wide && styles.footerWide, { borderTopColor: p.divider }]}>
+    small.footer || reactFn || shareable || showNextHint ? (
+      <View style={[styles.footer, wide && styles.footerWide, compact && { gap: 2 }, { borderTopColor: p.divider }]}>
         <Text style={[styles.footerText, wide && { fontSize: 13 }, { color: p.muted }]}>{small.footer ?? ''}</Text>
-        {reactFn ? (
-          <View style={styles.reactRow}>
-            <ReactButton kind="like" on={reaction === 'like'} onPress={() => reactFn(card, 'like')} />
-            <ReactButton kind="dislike" on={reaction === 'dislike'} onPress={() => reactFn(card, 'dislike')} />
-          </View>
-        ) : null}
-        {onNext ? (
+        <View style={[styles.actions, (wide || compact) && { gap: compact ? 0 : 4 }]}>
+          {reactFn ? (
+            <>
+              <ReactButton kind="like" on={reaction === 'like'} onPress={() => reactFn(card, 'like')} />
+              <ReactButton kind="dislike" on={reaction === 'dislike'} onPress={() => reactFn(card, 'dislike')} />
+            </>
+          ) : null}
+          {shareable ? (
+            <Pressable
+              onPress={onShare}
+              accessibilityRole="button"
+              accessibilityLabel="Share"
+              style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.7 : 1 }]}
+            >
+              <ShareIcon color={p.ink} size={22} />
+            </Pressable>
+          ) : null}
+        </View>
+        {showNextHint ? (
           <Pressable onPress={onNext} accessibilityRole="button" accessibilityLabel="Next card" style={styles.next}>
-            {wide ? null : <ChevronUpIcon color={p.muted} size={16} />}
-            <Text style={[styles.nextText, wide && { fontSize: 14 }, { color: p.muted }]}>{wide ? 'Next: press ↓ or scroll' : 'Swipe up'}</Text>
+            <Text style={[styles.nextText, { fontSize: 14 }, { color: p.muted }]}>Next: press ↓ or scroll</Text>
           </Pressable>
         ) : null}
       </View>
@@ -142,7 +224,7 @@ export function Card(props: Props) {
     <View style={styles.wrap}>
       <View
         onLayout={wide ? (e) => setBox({ w: Math.round(e.nativeEvent.layout.width), h: Math.round(e.nativeEvent.layout.height) }) : undefined}
-        style={[styles.card, wide && styles.cardWide, tight && styles.cardTight, compact && styles.cardCompact, { backgroundColor: p.surface, borderColor: p.border }]}
+        style={[styles.card, wide && styles.cardWide, tight && styles.cardTight, compact && styles.cardCompact, roomy && styles.cardRoomy, { backgroundColor: p.surface, borderColor: p.border }]}
       >
         <View style={styles.meta}>
           <View style={[styles.badge, { backgroundColor: badge.bg }]}>
@@ -176,8 +258,8 @@ export function Card(props: Props) {
                 <ExternalIcon color={p.onAccent} />
               </Pressable>
             ) : null}
-            <Text style={[styles.footerText, { color: p.muted }]}>
-              {card.attribution ?? 'via NewsData.io'} · Headline and link only; Element adds no summary here.
+            <Text style={[styles.footerText, styles.linkOutCredit, { color: p.muted }]}>
+              {linkOutCredit(card.attribution)} · Headline and link only; Element adds no summary here.
             </Text>
           </>
         ) : (
@@ -188,10 +270,13 @@ export function Card(props: Props) {
                 react-native-web drops accessibilityHint. */}
             <Pressable
               onPress={opensDetail ? () => onOpenDetail?.(card) : undefined}
-              disabled={!opensDetail}
+              disabled={!opensDetail && a11yActions.length === 0}
+              accessible={opensDetail || a11yActions.length > 0}
               accessibilityRole={opensDetail ? 'button' : undefined}
-              accessibilityLabel={opensDetail ? `${card.headline}. ${OPEN_DETAIL_HINT}` : undefined}
-              style={[styles.middle, wide && { gap: tight ? 12 : 20 }, compact && { gap: 10 }]}
+              accessibilityLabel={opensDetail ? `${card.headline}. ${OPEN_DETAIL_HINT}` : a11yActions.length > 0 ? card.headline : undefined}
+              accessibilityActions={a11yActions.length > 0 ? a11yActions : undefined}
+              onAccessibilityAction={a11yActions.length > 0 ? onA11yAction : undefined}
+              style={[styles.middle, wide && { gap: tight ? 12 : 20 }, compact && { gap: 10 }, roomy && { gap: 16 }]}
             >
               {headline}
 
@@ -201,15 +286,22 @@ export function Card(props: Props) {
                   restates the numbers; it stays readable in the detail sheet. */}
               {card.body && !(card.kind === 'data' && card.macro.length > 1 && !wide) ? (
                 <Text
-                  numberOfLines={compact ? 6 : wide ? undefined : 8}
-                  style={[styles.body, wide && styles.bodyWide, tight && { fontSize: 18, lineHeight: 27 }, compact && styles.bodyCompact, { color: p.inkSoft }]}
+                  numberOfLines={compact ? 5 : wide ? undefined : 8}
+                  style={[
+                    styles.body,
+                    wide && styles.bodyWide,
+                    tight && { fontSize: 18, lineHeight: 27 },
+                    compact && styles.bodyCompact,
+                    roomy && card.kind === 'data' && styles.bodyData,
+                    { color: card.kind === 'data' ? p.inkBody : p.inkSoft },
+                  ]}
                 >
                   {card.body}
                 </Text>
               ) : null}
 
               {facts.length > 0 ? (
-                <View style={[styles.facts, wide && styles.factsWide, { borderColor: p.divider }]}>
+                <View style={[styles.facts, wide && styles.factsWide, compact && styles.factsCompact, { borderColor: p.divider }]}>
                   {facts.map((f) => (
                     <View key={f.label} style={styles.fact}>
                       <Text style={[styles.factLabel, wide && { fontSize: 12 }, { color: p.muted }]}>{f.label}</Text>
@@ -253,6 +345,13 @@ export function Card(props: Props) {
 
         {footer}
       </View>
+      {toast ? (
+        <View style={styles.toastDock} pointerEvents="none">
+          <Text style={[styles.toast, { backgroundColor: p.ink, color: p.bg }]} accessibilityLiveRegion="polite" accessibilityRole="alert">
+            {toast}
+          </Text>
+        </View>
+      ) : null}
       {/* the edge of the next card peeking out below, as in the design (phone layout only) */}
       {wide ? null : <View style={[styles.stack, { backgroundColor: p.surface, borderColor: p.border, opacity: peek ? 1 : 0 }]} />}
       {small.below ? (
@@ -282,7 +381,7 @@ function ReactButton({ kind, on, onPress }: { kind: Feedback; on: boolean; onPre
         { borderColor: on ? p.accent : 'transparent', backgroundColor: on ? p.accentSoft : 'transparent', opacity: pressed ? 0.7 : 1 },
       ]}
     >
-      <Icon color={color} size={20} />
+      <Icon color={color} size={on ? 18 : 22} />
       {on ? <Text style={[styles.reactCheck, { color }]}>✓</Text> : null}
     </Pressable>
   );
@@ -294,6 +393,7 @@ const styles = StyleSheet.create({
   wrap: { flex: 1 },
   card: { flex: 1, borderWidth: 1, borderRadius: radius.card, padding: 20, gap: 14, overflow: 'hidden' },
   cardCompact: { padding: 16, gap: 10 }, // short screens: less air so the body text still fits
+  cardRoomy: { padding: 24, gap: 16 }, // phone data and link-out cards (Feed-Data / Feed-LinkOut)
   cardTight: { paddingVertical: 26, paddingHorizontal: 36, gap: 12 },
   cardWide: { paddingVertical: 40, paddingHorizontal: 44, gap: 20 },
   stack: { height: 10, marginHorizontal: 28, borderWidth: 1, borderTopWidth: 0, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
@@ -309,6 +409,8 @@ const styles = StyleSheet.create({
   body: { fontFamily: fonts.sans, fontSize: 16, lineHeight: 24 },
   bodyWide: { fontSize: 20, lineHeight: 31, maxWidth: 720 },
   bodyCompact: { fontSize: 15, lineHeight: 21 },
+  bodyData: { fontSize: 18, lineHeight: 27 }, // Feed-Data body
+  factsCompact: { paddingVertical: 8 },
   facts: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 22, rowGap: 8, paddingVertical: 10, borderTopWidth: 1, borderBottomWidth: 1 },
   factsWide: { columnGap: 28, rowGap: 10, paddingVertical: 14 },
   fact: { gap: 2, flexShrink: 1 },
@@ -321,14 +423,18 @@ const styles = StyleSheet.create({
   more: { alignSelf: 'flex-start', minHeight: 44, marginTop: -8, marginBottom: -6, justifyContent: 'center' },
   moreText: { fontFamily: fonts.sansSemi, fontSize: 14 },
   sourceBlock: { gap: 8, flexShrink: 0 },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 4, borderTopWidth: 1, paddingTop: 6, marginHorizontal: -8, paddingHorizontal: 8, flexShrink: 0 },
-  footerWide: { borderTopWidth: 0, paddingTop: 0, gap: 12 },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderTopWidth: 1, paddingTop: 6, marginHorizontal: -8, paddingLeft: 8, flexShrink: 0 },
+  footerWide: { borderTopWidth: 0, paddingTop: 0, gap: 12, marginHorizontal: 0, paddingLeft: 0 },
   footerText: { flex: 1, fontFamily: fonts.sans, fontSize: 12, lineHeight: 16 },
-  reactRow: { flexDirection: 'row', gap: 2 },
+  linkOutCredit: { flex: 0, lineHeight: 17 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  iconBtn: { width: 44, height: 44, marginVertical: -2, alignItems: 'center', justifyContent: 'center' },
   react: { flexDirection: 'row', width: 44, height: 44, marginVertical: -2, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center', gap: 1 },
   reactCheck: { fontFamily: fonts.sansSemi, fontSize: 11 },
   next: { minHeight: 44, marginVertical: -2, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 },
   nextText: { fontFamily: fonts.sansMedium, fontSize: 13 },
+  toastDock: { position: 'absolute', left: 0, right: 0, bottom: 72, alignItems: 'center', paddingHorizontal: 24 },
+  toast: { fontFamily: fonts.sansMedium, fontSize: 14, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12, overflow: 'hidden' },
   publisher: { fontFamily: fonts.sansSemi, fontSize: 15 },
   readBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: 52, borderRadius: radius.md },
   readText: { fontFamily: fonts.sansSemi, fontSize: 16 },
