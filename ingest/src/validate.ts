@@ -137,7 +137,7 @@ export function longestCopiedRun(draft: string, source: string, ignorePhrases: r
  * like "consumers should stop using the product" is allowed; investment advice (buy, sell,
  * price target, ...) is never in that allowlist, so it stays blocked on every category.
  */
-function findAdvice(
+export function findAdvice(
   text: string,
   category?: string,
   blocklist: readonly string[] = config.adviceBlocklist,

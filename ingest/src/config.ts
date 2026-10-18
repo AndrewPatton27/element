@@ -340,6 +340,34 @@ export const config = {
     sourceName: 'U.S. Geological Survey',
     attribution: 'Credit: U.S. Geological Survey',
   },
+
+  // ---- brief summary and brief email (spec: docs/work/spec-brief-email.md) -------------
+  mail: {
+    siteUrl: 'https://element-news.pages.dev',
+    timezone: 'America/New_York',              // the "day" and "week" of a brief summary; a subscriber's own tz decides when their email is due
+    defaultSendHour: 7,
+    // Brief summary (one AI call per brief per day/week): 3-5 sentences, at most this many words.
+    summaryMinSentences: 3,
+    summaryMaxSentences: 5,
+    summaryMaxWords: 110,
+    summaryCopyLimitWords: 10,                 // longest run copied from the brief's own cards (they are already short rewrites)
+    summaryMaxTokens: 600,                     // includes Groq reasoning tokens
+    // Email provider. 'outbox' writes files; 'resend' needs RESEND_API_KEY + EMAIL_FROM + the --send flag.
+    outboxDir: 'outbox',
+    resendEndpoint: 'https://api.resend.com/emails',
+    resendHost: 'api.resend.com',
+    maxPerRun: 100,                            // emails per run (Resend free tier: 100/day, 3,000/month)
+    maxConsecutiveErrors: 3,                   // stop sending after this many provider errors in a row
+    // Email layout: how many stories where (the email shows breadth: many topics, few stories each).
+    email: {
+      topStories: 3,
+      marketCards: 4,
+      topicSections: 6,
+      cardsPerTopTopic: 2,                     // topics ranked 1-3
+      cardsPerOtherTopic: 1,
+      numbers: 8,
+    },
+  },
 } as const;
 
 /** Federal Register query URLs: [query B (agencies), query A (significant, if enabled)]. */

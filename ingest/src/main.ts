@@ -9,6 +9,8 @@
 //   --only     comma-separated subset of sources (macro, fed, bea, fedreg, sec, wiki, cpsc, usgs, nasa)
 //   --limit    max news items summarized per run (default 20)
 //   --json     with --dry-run: print the card payloads as JSON
+//   --brief-summary [--kind daily|weekly|both] [--force] [--dry-run] [--no-ai]   AI summary of the brief, once per day/week (mailCli.ts)
+//   --send-briefs [--send] [--dry-run]   confirmation + scheduled brief emails; outbox files unless --send and the provider env vars (mailCli.ts)
 // Inputs: command-line flags and, for live runs, .env / process.env (keys are never printed).
 // Outputs: log lines on stdout, cards published to Supabase (live) or printed (dry run); exit code.
 
@@ -20,6 +22,7 @@ import { config, describeEnv, fedRegisterUrls, readEnv } from './config.ts';
 import { runOnce, SOURCE_NAMES, type Deps, type SourceName } from './pipeline.ts';
 import { runBackfill } from './backfill.ts';
 import { runRewrite } from './rewrite.ts';
+import { isMailCommand, mailMain } from './mailCli.ts';
 import type { RevisableCard } from './types.ts';
 import { createDryRunPublisher, createSupabasePublisher } from './publish.ts';
 import { fileCounter, memoryCounter } from './summarizer/chain.ts';
@@ -151,6 +154,7 @@ export async function refreshTrendingSafely(publisher: Deps['publisher'], log: (
  * or --rewrite. Returns the process exit code.
  */
 export async function main(argv: string[]): Promise<number> {
+  if (isMailCommand(argv)) return mailMain(argv);          // --brief-summary / --send-briefs (see mailCli.ts)
   const args = parseArgs(argv);
   const log = (s: string) => console.log(s);
 
