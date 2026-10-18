@@ -19,7 +19,7 @@ import type { Brief, BlurbCard, MacroFact } from '../../contract/types.ts';
 export type BriefKind = 'daily' | 'weekly';
 
 /** The brief JSON as the summary job and the email need it (summary and markets are added by the 20261018040000 migration). */
-export interface BriefInput extends Brief {
+export interface BriefInput extends Omit<Brief, 'markets'> {
   summary?: { text: string; generated_at: string; model: string } | null;
   markets?: { cards: BlurbCard[]; numbers: MacroFact[]; total?: number } | null;
 }
