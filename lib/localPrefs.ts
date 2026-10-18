@@ -13,7 +13,9 @@
 import type { BlurbCard } from '../contract/types.ts';
 import type { Feedback, UserPrefs } from './accountLogic.ts';
 import { FOLLOWS_KEY, parseFollows, serializeFollows, type Follows } from './followingLogic.ts';
+import { RECENT_KEY } from './searchLogic.ts';
 import { cardSourceKey } from './sourceKeys.ts';
+import { TUTORIAL_SEEN_KEY } from './tutorialLogic.ts';
 import type { KeyValueStore } from './storage.ts';
 
 export const LOCAL_PREFS_KEY = 'element.local-prefs';
@@ -105,6 +107,14 @@ export function withHiddenSources(p: LocalPrefs, hiddenSources: string[]): Local
 /** The guest's choices in the account's shape, so every screen reads one thing. */
 export function asUserPrefs(p: LocalPrefs): UserPrefs {
   return { followed: p.follows.topics, hidden: p.hiddenTopics, hiddenSources: p.hiddenSources, onboarded: p.follows.topics.length > 0 };
+}
+
+/** Every key "Clear data on this device" removes: choices, follows, recent searches, the quick-tour flag. */
+export const DEVICE_DATA_KEYS = [LOCAL_PREFS_KEY, FOLLOWS_KEY, RECENT_KEY, TUTORIAL_SEEN_KEY] as const;
+
+/** Forgets everything this device saved. Local only: nothing is sent to or removed from the server. */
+export function clearAll(store: KeyValueStore): void {
+  for (const k of DEVICE_DATA_KEYS) store.remove(k);
 }
 
 export function hasLocalChoices(p: LocalPrefs): boolean {

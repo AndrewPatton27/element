@@ -2,11 +2,12 @@
 // (Feed / Brief / Search / Following / Me; components/TabBar.tsx) and a round
 // "About Element" info button floating above it. Numbers is reached from the ticker.
 // Wide web: a 64 px top bar (wordmark, Trending / Latest / For you, Brief / Search /
-// Following links, then the account entry: the reader's email when signed in, or a
-// small Me button plus the "Sign in" pill when not), a scrolling Numbers strip (tap =
+// Following links, then the account entry: the Sign in pill when signed out, or in the
+// same slot a pill with the reader's initial and short email that opens /account when
+// signed in; no Me icon or Me/Numbers text links), a scrolling Numbers strip (tap =
 // Numbers to know), then left categories, the main column and a right aside, with the
 // round About button at the bottom left (design: docs/design/web/Web-Final.dc.html).
-// No Me or Numbers text links. The SAMPLE DATA banner sits on top in mock mode.
+// The SAMPLE DATA banner sits on top in mock mode.
 
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -15,11 +16,12 @@ import { router } from 'expo-router';
 import { APP_NAME } from '../lib/config';
 import { useAppData } from '../lib/appData';
 import { useAccount } from '../lib/accountContext';
+import { accountInitial, shortEmail } from '../lib/accountLabel';
 import type { FeedTab } from '../lib/feedLogic';
 import { usePalette, useWide } from '../lib/useTheme';
 import { fonts, font, TOP_BAR_HEIGHT } from '../lib/theme';
 import type { Palette } from '../lib/theme';
-import { InfoIcon, PersonIcon } from './Icons';
+import { InfoIcon } from './Icons';
 import { NumbersTicker } from './NumbersTicker';
 import { SampleBanner } from './SampleBanner';
 import { SortToggle } from './SortToggle';
@@ -37,9 +39,9 @@ export function Wordmark({ size = 24, text = APP_NAME }: { size?: number; text?:
 }
 
 // Right end of the wide top bar. Design Web-Final has only the "Sign in" pill (no Me or
-// Numbers links); Web-Me / Web-Brief show the reader's email instead once signed in.
-// Signed in: the email (or "Account") is the link to /account. Signed out: the pill goes
-// to /signin, and a small person button keeps /account (device topics, settings) reachable.
+// Numbers links). Signed out: the pill goes to /signin. Signed in: the same slot holds a
+// pill with the reader's initial and short email that opens /account. There is no separate
+// Me icon; the Me page is reached from this pill (signed in) or from About (signed out).
 function AccountEntry({ active, p, email }: { active: Tab; p: Palette; email: string | null }) {
   const onAccount = active === 'me' || active === 'account';
   if (email !== null) {
@@ -47,28 +49,30 @@ function AccountEntry({ active, p, email }: { active: Tab; p: Palette; email: st
       <Pressable
         onPress={() => go('/account')}
         accessibilityRole="link"
-        accessibilityLabel="Account"
-        style={styles.emailLink}
+        accessibilityLabel={`Account, ${email || 'signed in'}`}
+        style={({ pressed }) => [
+          styles.pill,
+          styles.accountPill,
+          { backgroundColor: onAccount ? p.accentSoft : p.surface, borderColor: onAccount ? p.accent : p.borderStrong, opacity: pressed ? 0.85 : 1 },
+        ]}
       >
-        <Text numberOfLines={1} style={{ color: onAccount ? p.ink : p.muted, fontSize: 14, fontFamily: fonts.sansSemi }}>
-          {email || 'Account'}
+        <View style={[styles.initial, { backgroundColor: p.accent }]} accessible={false}>
+          <Text style={{ color: p.onAccent, fontSize: 13, fontFamily: fonts.sansSemi }}>{accountInitial(email)}</Text>
+        </View>
+        <Text numberOfLines={1} style={{ color: p.ink, fontSize: 15, fontFamily: fonts.sansSemi, maxWidth: 140 }}>
+          {shortEmail(email)}
         </Text>
       </Pressable>
     );
   }
   return (
-    <>
-      <Pressable onPress={() => go('/account')} accessibilityRole="link" accessibilityLabel="Me and settings" style={styles.personBtn}>
-        <PersonIcon color={onAccount ? p.accent : p.muted} size={22} strokeWidth={onAccount ? 1.9 : 1.8} />
-      </Pressable>
-      <Pressable
-        onPress={() => go('/signin')}
-        accessibilityRole="button"
-        style={({ pressed }) => [styles.pill, { backgroundColor: p.accent, opacity: pressed ? 0.85 : 1 }]}
-      >
-        <Text style={{ color: p.onAccent, fontSize: 15, fontFamily: fonts.sansSemi }}>Sign in</Text>
-      </Pressable>
-    </>
+    <Pressable
+      onPress={() => go('/signin')}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.pill, { backgroundColor: p.accent, opacity: pressed ? 0.85 : 1 }]}
+    >
+      <Text style={{ color: p.onAccent, fontSize: 15, fontFamily: fonts.sansSemi }}>Sign in</Text>
+    </Pressable>
   );
 }
 
@@ -202,9 +206,9 @@ const styles = StyleSheet.create({
   topBarTight: { columnGap: 16, paddingHorizontal: 24 },
   wordmark: { fontFamily: fonts.serif, fontSize: 26, letterSpacing: -0.26 },
   spacer: { flex: 1 },
-  emailLink: { minHeight: 44, maxWidth: 240, justifyContent: 'center', paddingHorizontal: 4 },
-  personBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   pill: { minHeight: 44, paddingHorizontal: 18, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  accountPill: { flexDirection: 'row', gap: 8, borderWidth: 1, paddingLeft: 8, paddingRight: 16 },
+  initial: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   strip: { height: 44, borderBottomWidth: 1, justifyContent: 'center', overflow: 'hidden' },
   body: {
     flex: 1,

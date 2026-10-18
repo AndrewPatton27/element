@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EMPTY_LOCAL,
+  DEVICE_DATA_KEYS,
+  clearAll,
   LOCAL_PREFS_KEY,
   MAX_LOCAL_REACTIONS,
   asUserPrefs,
@@ -93,4 +95,17 @@ test('defaultStore writes notify listeners', () => {
   off();
   defaultStore().set('element.test-key', '2');
   assert.deepEqual(seen, ['element.test-key', 'element.test-key']);
+});
+
+test('clearAll removes choices, follows, recent searches and the tour flag; the login is left alone', () => {
+  const s = memoryStore();
+  writeLocal(s, withTopics(EMPTY_LOCAL, ['tech'], ['crypto']));
+  s.set('element.recent-searches', '["apple"]');
+  s.set('element.tutorial-seen.v1', 'x');
+  s.set('sb-session', 'keep-me');
+  clearAll(s);
+  for (const k of DEVICE_DATA_KEYS) assert.equal(s.get(k), null, k);
+  assert.deepEqual(readLocal(s), EMPTY_LOCAL);
+  assert.equal(s.get('sb-session'), 'keep-me');
+  assert.ok(DEVICE_DATA_KEYS.includes('element.recent-searches' as never) && DEVICE_DATA_KEYS.includes('element.tutorial-seen.v1' as never));
 });

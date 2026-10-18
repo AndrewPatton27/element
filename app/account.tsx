@@ -20,6 +20,7 @@ import { userMessage } from '../lib/errors';
 import { fonts, font, radius } from '../lib/theme';
 import { PasswordField, fieldStyles } from '../components/PasswordField';
 import { OutlineButton, PrimaryButton, ListRow, SectionLabel } from '../components/FormParts';
+import { AccountPrompt, DeviceData, QuickLinks } from '../components/AccountEntry';
 import { ScreenShell } from '../components/ScreenShell';
 import { TopicStatePicker } from '../components/TopicStatePicker';
 import { FollowingWatchlist } from '../components/FollowingWatchlist';
@@ -135,14 +136,7 @@ export default function AccountScreen() {
   const email = acct.user?.email ?? '';
 
   const profile = !signedIn ? (
-    <View style={[card, styles.guest]}>
-      <Text style={[styles.value, { color: p.ink }]}>You’re not signed in</Text>
-      <Text style={[styles.help, { color: p.inkSoft }]}>
-        Your likes, topics, companies and sources are saved on this device only. Sign in to sync them across devices; they move into your account
-        the first time you sign in.
-      </Text>
-      <PrimaryButton label="Sign in or create an account" onPress={() => router.navigate('/signin' as never)} />
-    </View>
+    <AccountPrompt />
   ) : (
     <View style={[card, styles.profile]}>
       <View style={[styles.avatar, { backgroundColor: p.accentSoft }]} accessible={false}>
@@ -220,13 +214,9 @@ export default function AccountScreen() {
       </View>
     ) : null;
 
+  // Guests: no account settings, just the links (Numbers, About, quick tour). Signing in is the card at the top.
   const settings = !signedIn ? (
-    <View style={[card, styles.settings]} accessibilityLabel="Settings">
-      <ListRow first wide={wide} chevron label="Numbers to know" onPress={() => router.navigate('/numbers' as never)} />
-      <ListRow wide={wide} chevron label="About Element" onPress={() => router.navigate('/about' as never)} />
-      <ListRow wide={wide} chevron label="Replay the quick tour" onPress={() => router.navigate('/tutorial' as never)} />
-      <ListRow wide={wide} chevron label="Sign in" onPress={() => router.navigate('/signin' as never)} />
-    </View>
+    <QuickLinks about />
   ) : (
     <View style={[card, styles.settings]} accessibilityLabel="Settings">
       <ListRow first wide={wide} label="Change email" onPress={toggle('email')}>
@@ -361,7 +351,10 @@ export default function AccountScreen() {
             {watchlistSection}
             {sourcesSection}
           </View>
-          <View style={styles.colSide}>{settings}</View>
+          <View style={styles.colSide}>
+            {settings}
+            <DeviceData />
+          </View>
         </View>
       ) : (
         <>
@@ -369,6 +362,7 @@ export default function AccountScreen() {
           {watchlistSection}
           {sourcesSection}
           {settings}
+          <DeviceData />
         </>
       )}
       <Text style={[styles.disclaimer, { color: p.muted }]}>{disclaimerText(config)}</Text>
@@ -388,7 +382,7 @@ const styles = StyleSheet.create({
   section: { gap: 10 },
   cols: { flexDirection: 'row', flexWrap: 'wrap', gap: 28, alignItems: 'flex-start' },
   colMain: { flexGrow: 1, flexShrink: 1, flexBasis: 380, minWidth: 0, gap: 28 },
-  colSide: { flexGrow: 1, flexShrink: 1, flexBasis: 340, minWidth: 0 },
+  colSide: { flexGrow: 1, flexShrink: 1, flexBasis: 340, minWidth: 0, gap: 28 },
   settings: { overflow: 'hidden' },
   form: { gap: 10 },
   help: { fontFamily: fonts.sans, fontSize: font.chip, lineHeight: 21 },

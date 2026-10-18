@@ -16,6 +16,7 @@ import { fonts, font } from '../lib/theme';
 import { openUrl } from '../components/SourceChip';
 import { SectionLabel } from '../components/FormParts';
 import { ScreenShell } from '../components/ScreenShell';
+import { AccountPrompt, DeviceData, QuickLinks } from '../components/AccountEntry';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -67,6 +68,8 @@ export default function AboutScreen() {
           A short daily briefing in plain language: business, the economy, government, the world, science and safety. Here is exactly where it comes
           from and how it is made.
         </Text>
+
+        <AccountPrompt />
 
         <Section title="How a card is made">
           <Text style={text}>
@@ -158,6 +161,12 @@ export default function AboutScreen() {
             ]}
           />
         </Section>
+
+        <Section title="More">
+          <QuickLinks account />
+        </Section>
+
+        <DeviceData />
 
         <View style={[styles.tint, wide && styles.tintWide, { backgroundColor: p.accentSoft }]}>
           <Text style={[wide ? styles.textWide : styles.text, { color: p.accentInk }]}>
