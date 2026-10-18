@@ -148,8 +148,8 @@ export function FeedPager({
               onReact={onReact}
             />
           </CardErrorBoundary>
-          {/* the edge of the next card peeking out below, as in the design */}
-          <View style={[styles.stack, { backgroundColor: p.surface, borderColor: p.border, opacity: last ? 0 : 1 }]} />
+          {/* the edge of the next card peeking out below, as in the design (phone layout only) */}
+          {wide ? null : <View style={[styles.stack, { backgroundColor: p.surface, borderColor: p.border, opacity: last ? 0 : 1 }]} />}
         </View>
       );
     },

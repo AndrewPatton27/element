@@ -2,7 +2,7 @@
 // contract/types.ts and are imported type-only; this file adds only guards.
 // Bad rows are skipped, never allowed to crash the feed.
 
-import type { AppConfig, BlurbCard, Category, FeedPage, MacroFact, RequiredNotice, Source } from '../contract/types.ts';
+import type { AppConfig, BlurbCard, Category, FeedPage, MacroFact, NumberTrend, RequiredNotice, Source } from '../contract/types.ts';
 import { isRenderableKind } from './labels.ts';
 
 type Obj = Record<string, unknown>;
@@ -90,4 +90,24 @@ export function parseAppConfig(x: unknown): AppConfig {
     quotes_enabled: row.quotes_enabled === true,
     linkout_cards: row.linkout_cards === true,
   };
+}
+
+export function isNumberTrend(x: unknown): x is NumberTrend {
+  return (
+    isObj(x) &&
+    isStr(x.key) &&
+    isStr(x.name) &&
+    isStr(x.value) &&
+    isStr(x.change) &&
+    (x.direction === 'up' || x.direction === 'down' || x.direction === 'flat') &&
+    isStr(x.source) &&
+    Array.isArray(x.points) &&
+    x.points.every((p) => typeof p === 'number' && Number.isFinite(p))
+  );
+}
+
+/** Bad rows are skipped; points are cut to the last 12. */
+export function parseNumberTrends(x: unknown): NumberTrend[] {
+  if (!Array.isArray(x)) throw new Error('number_trends response is not a list.');
+  return x.filter(isNumberTrend).map((t) => ({ ...t, points: t.points.slice(-12) }));
 }

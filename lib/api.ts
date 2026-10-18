@@ -1,7 +1,7 @@
 // One data interface, two implementations: sample fixtures (mock, the default) and
 // the Supabase `api` schema over plain fetch. Screens only talk to this interface.
 
-import type { AppConfig, Category, CategorySlug, FeedMode, FeedPage, MacroFact } from '../contract/types.ts';
+import type { AppConfig, BlurbCard, Category, CategorySlug, FeedMode, FeedPage, MacroFact, NumberTrend } from '../contract/types.ts';
 import { resolveApiConfig, readEnv, type ApiConfig } from './config.ts';
 import { allCards, createMockApi } from './api.mock.ts';
 import { createMockAccount, createSupabaseAccount, type AccountApi } from './account.ts';
@@ -21,6 +21,10 @@ export interface Api {
   categories(): Promise<Category[]>;
   numbersToKnow(): Promise<MacroFact[]>;
   appConfig(): Promise<AppConfig>;
+  /** The 5 highest-ranked cards of the last 7 days, one per story. [] when unavailable. */
+  topStories(): Promise<BlurbCard[]>;
+  /** 10-yr Treasury, CPI, unemployment, WTI crude with a 12-point history. [] when unavailable. */
+  numberTrends(): Promise<NumberTrend[]>;
 }
 
 export type ApiResult = { ok: true; api: Api; account: AccountApi } | { ok: false; error: string };

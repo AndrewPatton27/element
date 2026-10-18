@@ -1,10 +1,11 @@
-// Feed screen. Phones: wordmark, Top / Latest (/ For you) tabs, category chips,
-// the swipe pager, bottom nav. Wide web: wordmark + feed column, Numbers to know
-// on the right, and the same nav in a bottom bar. Guests see a gentle sign-in
-// prompt; the feed never needs an account.
+// Feed screen. Phones: wordmark, Trending / Latest (/ For you) tabs, category chips,
+// the swipe pager, bottom nav. Wide web (docs/design/web/Web-Final.dc.html): top bar
+// with the tabs, Numbers strip, categories on the left, the wide card in the middle,
+// top stories and trends on the right (Shell lays out the frame). Guests see a gentle
+// sign-in prompt; the feed never needs an account.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { DwellTimer } from '../lib/dwell';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import type { BlurbCard, CategorySlug } from '../contract/types.ts';
@@ -19,11 +20,11 @@ import { defaultStore } from '../lib/storage';
 import { useFeed } from '../lib/useFeed';
 import { usePalette, useWide } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
-import { CategoryChips } from '../components/CategoryChips';
+import { CategoryChips, CategoryList } from '../components/CategoryChips';
 import { FeedPager } from '../components/FeedPager';
 import { CloseIcon } from '../components/Icons';
-import { NumbersTicker } from '../components/NumbersTicker';
 import { Shell, Wordmark } from '../components/Shell';
+import { WideAside, useAsideData } from '../components/WideAside';
 import { SortToggle } from '../components/SortToggle';
 import { SourcesSheet } from '../components/SourcesSheet';
 import { DetailSheet } from '../components/DetailSheet';
@@ -31,6 +32,8 @@ import { CardMenu } from '../components/CardMenu';
 import { UndoToast } from '../components/UndoToast';
 import { EmptyState, ErrorState, LoadingState } from '../components/States';
 
+// Below this window width the right column is dropped.
+const ASIDE_MIN_WIDTH = 1180;
 const PROMPT_KEY = 'element.signin-prompt-dismissed';
 const store = defaultStore();
 
@@ -40,7 +43,8 @@ export default function FeedScreen() {
   const { api, config, categories } = useAppData();
   const acct = useAccount();
   const signedIn = acct.user !== null;
-  const params = useLocalSearchParams<{ tab?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; t?: string }>();
+  const { width } = useWindowDimensions();
   const [mode, setMode] = useState<FeedTab>(params.tab === 'for_you' ? 'for_you' : 'top');
   const [category, setCategory] = useState<CategorySlug | null>(null);
   const [sheetCard, setSheetCard] = useState<BlurbCard | null>(null);
@@ -66,9 +70,11 @@ export default function FeedScreen() {
   useEffect(() => {
     if (!signedIn && mode === 'for_you') setMode('top');
   }, [signedIn, mode]);
+  // Other screens' top bar sends ?tab=top|latest|for_you (t makes a repeat tap count).
   useEffect(() => {
     if (params.tab === 'for_you' && signedIn) setMode('for_you');
-  }, [params.tab, signedIn]);
+    else if (params.tab === 'top' || params.tab === 'latest') setMode(params.tab);
+  }, [params.tab, params.t, signedIn]);
 
   const forYou = mode === 'for_you';
   // Signed in: hidden topics leave the feed and the chips at once (the server filters too).
@@ -217,7 +223,7 @@ export default function FeedScreen() {
   const expired = acct.notice === SIGN_IN_AGAIN_MESSAGE; // not "Your account was deleted."
   const prompt =
     !signedIn && (!promptHidden || expired) ? (
-      <View style={[styles.prompt, !wide && styles.promptNarrow, { backgroundColor: p.accentSoft }]}>
+      <View style={[styles.prompt, !wide && styles.promptNarrow, wide && styles.promptWide, { backgroundColor: p.accentSoft }]}>
         <Pressable onPress={() => router.navigate('/signin' as never)} accessibilityRole="link" style={styles.promptMain}>
           <Text style={[styles.promptText, { color: p.accentInk }]}>
             {expired ? `${acct.notice} Sign in →` : 'Sign in for a feed tailored to you →'}
@@ -241,8 +247,8 @@ export default function FeedScreen() {
   // For you: the chips don't apply; show what it is built from instead.
   const followed = acct.prefs?.followed ?? [];
   const forYouLine = forYou ? (
-    <View style={[styles.forYouLine, !wide && styles.promptNarrow]}>
-      <Text style={[styles.forYouText, { color: p.muted }]} numberOfLines={2}>
+    <View style={[styles.forYouLine, !wide && styles.promptNarrow, wide && styles.forYouWide]}>
+      <Text style={[styles.forYouText, wide && { flex: 0 }, { color: p.muted }]} numberOfLines={wide ? 6 : 2}>
         {!forYouCoversTopics(state.items, followed)
           ? 'No new cards in your topics yet; showing top stories.'
           : followed.length
@@ -255,8 +261,13 @@ export default function FeedScreen() {
     </View>
   ) : null;
 
-  // Numbers to know now rides a looping ticker across the top of the wide feed,
-  // so the main column can sit centred with no right rail.
+  // Under ~1180 px the right column would squeeze the card, so it steps aside (and its
+  // two RPCs are not called).
+  const asideFits = wide && width >= ASIDE_MIN_WIDTH;
+  const aside = useAsideData(api, asideFits);
+  // Hidden topics and sources leave Top stories too.
+  const asideShown = { ...aside, stories: visible(aside.stories) };
+  const showAside = asideFits && (aside.loading || asideShown.stories.length > 0 || aside.trends.length > 0);
 
   const chips = forYou ? (
     forYouLine
@@ -271,18 +282,31 @@ export default function FeedScreen() {
   );
 
   return (
-    <Shell active="feed">
-      {wide ? (
-        <View style={styles.wideTop}>
-          <NumbersTicker api={api} config={config} />
-          <View style={styles.wideBrand}>
-            <Wordmark size={30} />
-            <SortToggle mode={mode} onChange={setMode} wide forYou={signedIn} />
-          </View>
-          {chips}
-          {prompt}
-        </View>
-      ) : (
+    <Shell
+      active="feed"
+      feedTab={{ mode, onChange: setMode }}
+      left={
+        wide ? (
+          <>
+            {forYou ? (
+              forYouLine
+            ) : (
+              <CategoryList
+                categories={chipCategories}
+                selected={category}
+                onSelect={setCategory}
+                onEdit={signedIn ? () => router.navigate('/account' as never) : undefined}
+              />
+            )}
+            {prompt}
+          </>
+        ) : undefined
+      }
+      aside={
+        showAside ? <WideAside data={asideShown} categories={categories} onOpenStory={openDetail} /> : undefined
+      }
+    >
+      {wide ? null : (
         <>
           <View style={styles.brand}>
             <Wordmark />
@@ -295,7 +319,7 @@ export default function FeedScreen() {
         </>
       )}
       {inlineError}
-      <View style={[styles.fill, wide && { marginTop: 14 }]}>{body}</View>
+      <View style={styles.fill}>{body}</View>
       <SourcesSheet card={sheetCard} config={config} onClose={() => setSheetCard(null)} />
       <DetailSheet card={detailCard} config={config} categories={categories} onClose={() => setDetailCard(null)} />
       <CardMenu
@@ -314,17 +338,15 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   brand: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4, minHeight: 44, justifyContent: 'center' },
   tabs: { paddingHorizontal: 20 },
-  wideTop: { paddingTop: 28, gap: 14 },
-  // Logo + the Trending/Latest tabs grouped and left-anchored, with the tabs
-  // centred under the logo (alignItems centres them on the shared vertical axis).
-  wideBrand: { alignSelf: 'flex-start', alignItems: 'center', gap: 14 },
   inlineError: { alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, marginTop: 6 },
   prompt: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingLeft: 14, paddingRight: 8, minHeight: 40 },
+  promptWide: { marginTop: 16, paddingLeft: 12, minHeight: 0 },
   promptNarrow: { marginHorizontal: 20, marginTop: 8 },
   promptMain: { flex: 1, paddingVertical: 8 },
   promptText: { fontFamily: fonts.sansSemi, fontSize: 14 },
   promptClose: { padding: 6 },
   forYouLine: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 36 },
+  forYouWide: { flexDirection: 'column', alignItems: 'flex-start', gap: 6, paddingHorizontal: 12 },
   forYouText: { flex: 1, fontFamily: fonts.sans, fontSize: 14, lineHeight: 19 },
   forYouEdit: { fontFamily: fonts.sansSemi, fontSize: 14 },
 });

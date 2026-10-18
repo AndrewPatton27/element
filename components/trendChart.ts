@@ -1,0 +1,38 @@
+// Pure chart geometry for the "Trends · 12 weeks" card (same math as the design,
+// docs/design/web/Web-Final.dc.html): 600 x 170 box, 8 px side margin, 14 px
+// vertical margin, baseline at y = 156. No React imports.
+
+export const CHART_W = 600;
+export const CHART_H = 170;
+const PX = 8;
+const PY = 14;
+export const BASELINE = 156;
+
+export interface ChartShape {
+  points: string; // polyline points
+  area: string; // closed path under the line
+  cx: number; // last point
+  cy: number;
+}
+
+// Needs at least 2 finite values; otherwise there is nothing to draw.
+export function chartShape(data: number[]): ChartShape | null {
+  const v = data.filter((n) => typeof n === 'number' && Number.isFinite(n));
+  if (v.length < 2) return null;
+  const min = Math.min(...v);
+  const max = Math.max(...v);
+  const pts = v.map((n, k) => [PX + (k * (CHART_W - 2 * PX)) / (v.length - 1), PY + (CHART_H - 2 * PY) * (1 - (n - min) / (max - min || 1))]);
+  const last = pts[pts.length - 1];
+  return {
+    points: pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' '),
+    area: `M${pts.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' L')} L${last[0].toFixed(1)} ${BASELINE} L${PX} ${BASELINE} Z`,
+    cx: last[0],
+    cy: last[1],
+  };
+}
+
+// Next / previous slide, wrapping around; safe for an empty list.
+export function stepIndex(i: number, delta: 1 | -1, length: number): number {
+  if (length <= 0) return 0;
+  return (((i + delta) % length) + length) % length;
+}

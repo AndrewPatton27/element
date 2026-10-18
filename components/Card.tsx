@@ -2,10 +2,11 @@
 // AI label, then a footer with the disclaimer and the "next" hint. Every card
 // carries the disclaimer. No images, no prices.
 
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { cardTime, categoryName, clampHeadline, eventLabel } from '../lib/format';
-import { cardLabels, disclaimerPlacement, shareAlikeCredit } from '../lib/labels';
+import { cardLabels, disclaimerPlacement, primarySource, shareAlikeCredit } from '../lib/labels';
 import { OPEN_DETAIL_HINT, cardDetail } from '../lib/detail';
 import { usePalette } from '../lib/useTheme';
 import type { Palette } from '../lib/theme';
@@ -36,6 +37,25 @@ function badgeFor(card: BlurbCard, p: Palette): { text: string; bg: string; fg: 
   return { text: 'From the source', bg: p.surfaceMuted, fg: p.inkSoft, Icon: null };
 }
 
+// The badge wording, shared with the top-stories list.
+export function badgeLabel(card: BlurbCard): string {
+  if (card.kind === 'data') return 'New data';
+  return card.ai.generated ? 'Summary' : 'From the source';
+}
+
+// Wide summary cards: Agency / Type / Published, only the ones we have.
+function factsFor(card: BlurbCard): { label: string; value: string }[] {
+  if (card.kind !== 'summary') return [];
+  const src = primarySource(card);
+  if (!src) return [];
+  const out: { label: string; value: string }[] = [];
+  out.push({ label: src.kind === 'news' ? 'Source' : 'Agency', value: src.name });
+  const type = src.doc_label ?? eventLabel(card.event_type);
+  if (type) out.push({ label: 'Type', value: type });
+  out.push({ label: 'Published', value: cardTime(card) });
+  return out;
+}
+
 // "World · 2 h ago", or "Recalls & Safety · Recall · 2 h ago" when the event adds something.
 function metaLine(card: BlurbCard, categories: Category[]): string {
   const category = categoryName(card.category, categories);
@@ -60,10 +80,20 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
   // The disclaimer is built once and placed in exactly one slot (see disclaimerPlacement).
   const place = disclaimerPlacement(reactFn !== undefined);
   const disclaimer = <Disclaimer text={labels.disclaimer} />;
-  // Design size is 32 (42 on wide); long headlines and short screens step down so the body fits.
-  const headlineSize = wide ? 42 : compact ? 26 : card.headline.length > 60 ? 28 : 32;
+  // Design size is 32 (48 on wide); long headlines and short screens step down so the body fits.
+  // A narrow wide column (small desktop window) steps the wide headline down too.
+  // A short desktop window (card under 660 px tall) tightens padding, gaps and type so
+  // the sources, labels and disclaimer still fit without scrolling.
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const tight = !!wide && box.h > 0 && box.h < 660;
+  const wideSize = tight ? 40 : box.w > 0 && box.w < 600 ? 38 : card.headline.length > 80 ? 42 : 48;
+  const headlineSize = wide ? wideSize : compact ? 26 : card.headline.length > 60 ? 28 : 32;
+  const facts = wide ? factsFor(card) : [];
   return (
-    <View style={[styles.card, wide && styles.cardWide, compact && styles.cardCompact, { backgroundColor: p.surface, borderColor: p.border }]}>
+    <View
+      onLayout={wide ? (e) => setBox({ w: Math.round(e.nativeEvent.layout.width), h: Math.round(e.nativeEvent.layout.height) }) : undefined}
+      style={[styles.card, wide && styles.cardWide, tight && styles.cardTight, compact && styles.cardCompact, { backgroundColor: p.surface, borderColor: p.border }]}
+    >
       <View style={styles.meta}>
         <View style={[styles.badge, { backgroundColor: badge.bg }]}>
           {badge.Icon ? <badge.Icon color={badge.fg} size={14} /> : null}
@@ -95,11 +125,11 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
         disabled={!opensDetail}
         accessibilityRole={opensDetail ? 'button' : undefined}
         accessibilityLabel={opensDetail ? `${card.headline}. ${OPEN_DETAIL_HINT}` : undefined}
-        style={[styles.middle, wide && { gap: 18 }, compact && { gap: 10 }]}
+        style={[styles.middle, wide && { gap: tight ? 12 : 20 }, compact && { gap: 10 }]}
       >
         <Text
           numberOfLines={compact ? 3 : 4}
-          style={[styles.headline, { color: p.ink, fontSize: headlineSize, lineHeight: headlineSize * 1.1, letterSpacing: wide ? -0.8 : -0.5 }]}
+          style={[styles.headline, { color: p.ink, fontSize: headlineSize, lineHeight: headlineSize * (wide ? 1.07 : 1.1), letterSpacing: wide ? -headlineSize * 0.025 : -0.5, maxWidth: wide ? 820 : undefined }]}
           accessibilityRole="header"
         >
           {clampHeadline(card.headline)}
@@ -112,10 +142,21 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
         {card.body && !(card.kind === 'data' && card.macro.length > 1 && !wide) ? (
           <Text
             numberOfLines={compact ? 6 : wide ? undefined : 8}
-            style={[styles.body, wide && styles.bodyWide, compact && styles.bodyCompact, { color: p.inkBody }]}
+            style={[styles.body, wide && styles.bodyWide, tight && { fontSize: 18, lineHeight: 27 }, compact && styles.bodyCompact, { color: wide ? p.inkSoft : p.inkBody }]}
           >
             {card.body}
           </Text>
+        ) : null}
+
+        {facts.length > 0 ? (
+          <View style={[styles.facts, { borderColor: p.divider }]}>
+            {facts.map((f) => (
+              <View key={f.label} style={styles.fact}>
+                <Text style={[styles.factLabel, { color: p.muted }]}>{f.label}</Text>
+                <Text style={[styles.factValue, { color: p.ink }]}>{f.value}</Text>
+              </View>
+            ))}
+          </View>
         ) : null}
 
         {validTickers.length > 0 ? (
@@ -219,7 +260,8 @@ const styles = StyleSheet.create({
   disclaimerAlone: { flexShrink: 0, marginTop: -6 },
   card: { flex: 1, borderWidth: 1, borderRadius: 24, padding: 24, gap: 16, overflow: 'hidden' },
   cardCompact: { padding: 20, gap: 10 }, // short screens: less air so the body text still fits
-  cardWide: { padding: 32, gap: 18 },
+  cardTight: { paddingVertical: 26, paddingHorizontal: 36, gap: 12 },
+  cardWide: { paddingVertical: 40, paddingHorizontal: 44, gap: 20 },
   meta: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
   metaRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   moreBtn: { minWidth: 44, minHeight: 44, marginVertical: -8, marginHorizontal: -6, alignItems: 'center', justifyContent: 'center' },
@@ -229,8 +271,12 @@ const styles = StyleSheet.create({
   metaText: { fontFamily: fonts.sans, fontSize: 13 },
   headline: { fontFamily: fonts.serif },
   body: { fontFamily: fonts.sans, fontSize: 18, lineHeight: 27 },
-  bodyWide: { fontSize: 19, lineHeight: 29.5 },
+  bodyWide: { fontSize: 20, lineHeight: 31, maxWidth: 720 },
   bodyCompact: { fontSize: 16, lineHeight: 23 },
+  facts: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 28, rowGap: 10, paddingVertical: 14, borderTopWidth: 1, borderBottomWidth: 1 },
+  fact: { gap: 2 },
+  factLabel: { fontFamily: fonts.sans, fontSize: 12, letterSpacing: 0.36, textTransform: 'uppercase' },
+  factValue: { fontFamily: fonts.sansSemi, fontSize: 16 },
   tickers: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   ticker: { fontFamily: fonts.sansMedium, fontSize: 13, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 3 },
   middle: { flexShrink: 1, minHeight: 0, overflow: 'hidden', gap: 16 },

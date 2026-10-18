@@ -6,6 +6,7 @@ import type { BlurbCard } from '../contract/types.ts';
 import type { Api } from './api.ts';
 import { MOCK_DELAY_MS } from './config.ts';
 import { mockFeedPage } from './feedLogic.ts';
+import { SAMPLE_NUMBER_TRENDS } from './numberTrendsSample.ts';
 import { parseAppConfig, parseCategories, parseFeedPage, parseMacroFacts } from './types.ts';
 
 import page1 from '../contract/fixtures/feed.page1.json';
@@ -48,5 +49,7 @@ export function createMockApi(): Api {
     categories: () => wait(parseCategories(categories)),
     numbersToKnow: () => wait(parseMacroFacts(numbers)),
     appConfig: () => wait(parseAppConfig(appConfig)),
+    topStories: () => wait(mockFeedPage(cards, { mode: 'top', category: null, cursor: null, limit: 30 }).items.slice(0, 5)),
+    numberTrends: () => wait(SAMPLE_NUMBER_TRENDS.map((t) => ({ ...t, points: [...t.points] }))),
   };
 }

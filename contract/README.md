@@ -6,7 +6,7 @@ The shared data contract between the back end (Supabase, `api` schema) and the a
 
 | File | What it is |
 |---|---|
-| `types.ts` | TypeScript types for every response the app reads: `BlurbCard`, `FeedPage`, `MacroFact`, `AppConfig`, `RequiredNotice`, `Category`, `Source`, `Ticker`, `FeedMode`, `FeedParams`. Erasable TypeScript only (no enums or namespaces), so it can be imported with `import type` from Node scripts and the Expo app. |
+| `types.ts` | TypeScript types for every response the app reads: `BlurbCard`, `FeedPage`, `MacroFact`, `NumberTrend` (a 12-week series for the web Trends card), `AppConfig`, `RequiredNotice`, `Category`, `Source`, `Ticker`, `FeedMode`, `FeedParams`. Erasable TypeScript only (no enums or namespaces), so it can be imported with `import type` from Node scripts and the Expo app. |
 | `account.ts` | Types and RPC bodies for signed-in users (`UserPrefs`, `ForYouPage`, `TrackParams`, ...). Described in `account.md`. |
 | `account.md` | The accounts contract: sign-in calls, account RPCs, For you behaviour and scoring, account security and dashboard settings. |
 | `fixtures/feed.page1.json` | `FeedPage`: first page of the `top` (Trending) feed (22 cards, all 9 original categories, summary and data cards) with a `next_cursor`. |

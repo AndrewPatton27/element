@@ -90,3 +90,41 @@ test('errors carry status and never the key', async () => {
   });
   await assert.rejects(down.categories(), (err: unknown) => err instanceof ApiError && err.status === 0);
 });
+
+const TREND = { key: 'DGS10', name: '10-year Treasury yield', value: '5.10%', change: '▼ 0.09 this week', direction: 'down', source: 'U.S. Treasury', points: [4.9, 5.1] };
+
+test('side column requests are RPC calls in the api schema', () => {
+  for (const op of ['top_stories', 'number_trends'] as const) {
+    const p = planRequest(URL_, KEY, op);
+    assert.equal(p.url, `${URL_}/rest/v1/rpc/${op}`);
+    assert.equal(p.init.method, 'POST');
+    assert.equal(p.init.headers['Content-Profile'], 'api');
+    assert.equal(p.init.body, '{}');
+  }
+});
+
+test('topStories and numberTrends parse good rows and skip bad ones', async () => {
+  const api = createSupabaseApi({ url: URL_, key: KEY, fetchFn: fakeFetch(200, [card(), { id: 'bad' }]) });
+  assert.equal((await api.topStories()).length, 1);
+  const many = createSupabaseApi({ url: URL_, key: KEY, fetchFn: fakeFetch(200, Array.from({ length: 8 }, () => card())) });
+  assert.equal((await many.topStories()).length, 5);
+  const tr = createSupabaseApi({ url: URL_, key: KEY, fetchFn: fakeFetch(200, [TREND, { key: 'x' }, { ...TREND, points: Array.from({ length: 15 }, (_, i) => i) }]) });
+  const got = await tr.numberTrends();
+  assert.equal(got.length, 2);
+  assert.equal(got[1]!.points.length, 12);
+});
+
+test('topStories and numberTrends return [] on a missing RPC, an error or a network failure', async () => {
+  for (const f of [
+    fakeFetch(404, { code: 'PGRST202', message: 'Could not find the function' }),
+    fakeFetch(500, { message: 'boom' }),
+    fakeFetch(200, { not: 'a list' }),
+    (async () => {
+      throw new TypeError('fetch failed');
+    }) as typeof fetch,
+  ]) {
+    const api = createSupabaseApi({ url: URL_, key: KEY, fetchFn: f });
+    assert.deepEqual(await api.topStories(), []);
+    assert.deepEqual(await api.numberTrends(), []);
+  }
+});

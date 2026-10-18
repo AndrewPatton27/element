@@ -76,6 +76,17 @@ export interface MacroFact {
   sort_order: number;
 }
 
+/** One number with a small history chart (web right column). */
+export interface NumberTrend {
+  key: string;                          // "DGS10"
+  name: string;                         // "10-year Treasury yield"
+  value: string;                        // display string: "5.10%"
+  change: string;                       // display string: "▼ 0.09 this week"
+  direction: 'up' | 'down' | 'flat';
+  source: string;                       // original agency: "U.S. Treasury"
+  points: number[];                     // up to 12 weekly values, oldest first
+}
+
 /** A stock symbol on a card. Prices are never shown in v1: `quote` is always null. */
 export interface Ticker {
   symbol: string;

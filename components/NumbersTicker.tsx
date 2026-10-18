@@ -1,13 +1,15 @@
-// A constantly looping "Numbers to know" marquee for the top of the wide feed.
+// A looping "Numbers to know" strip under the wide top bar (44 px, design Web-Final).
 // The macro facts scroll horizontally like a ferris wheel, moving left to right
 // and wrapping around forever. The list is laid out twice back to back so the
 // loop is seamless; we measure one copy and translate by its width.
 //
 // Driven by requestAnimationFrame + transform rather than Reanimated, so it
-// needs no extra babel plugin and behaves the same on web and native.
+// needs no extra babel plugin and behaves the same on web and native. It pauses
+// while the pointer is over it, and with reduced motion it does not move (the
+// strip scrolls sideways by hand instead).
 
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig } from '../contract/types.ts';
 import type { Api } from '../lib/api.ts';
 import { changeText, factA11yLabel } from '../lib/format';
@@ -32,10 +34,39 @@ export function NumbersTicker({ api, config }: { api: Api; config: AppConfig | n
   const raf = useRef<number | null>(null);
   const last = useRef<number | null>(null);
   const pos = useRef(0);
+  const paused = useRef(false);
+  const wrapRef = useRef<ComponentRef<typeof View>>(null);
+  const [reduced, setReduced] = useState(false);
   useEffect(() => {
-    if (setWidth <= 0) return;
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (!mq) return;
+    setReduced(mq.matches);
+    const on = () => setReduced(mq.matches);
+    mq.addEventListener?.('change', on);
+    return () => mq.removeEventListener?.('change', on);
+  }, []);
+  // Hover pauses the marquee (web only; the ref is the DOM node there).
+  useEffect(() => {
+    const el = wrapRef.current as unknown as HTMLElement | null;
+    if (Platform.OS !== 'web' || !el || typeof el.addEventListener !== 'function') return;
+    const enter = () => {
+      paused.current = true;
+    };
+    const leave = () => {
+      paused.current = false;
+    };
+    el.addEventListener('mouseenter', enter);
+    el.addEventListener('mouseleave', leave);
+    return () => {
+      el.removeEventListener('mouseenter', enter);
+      el.removeEventListener('mouseleave', leave);
+    };
+  }, [reduced, facts]);
+  useEffect(() => {
+    if (setWidth <= 0 || reduced) return;
     const step = (now: number) => {
-      if (last.current != null) {
+      if (last.current != null && !paused.current) {
         const dt = (now - last.current) / 1000;
         pos.current = (pos.current + dt * SPEED) % setWidth;
         setOffset(pos.current);
@@ -48,11 +79,11 @@ export function NumbersTicker({ api, config }: { api: Api; config: AppConfig | n
       if (raf.current != null) cancelAnimationFrame(raf.current);
       last.current = null;
     };
-  }, [setWidth]);
+  }, [setWidth, reduced]);
 
   if (!facts || facts.length === 0) return null;
 
-  const translateX = setWidth > 0 ? offset - setWidth : 0;
+  const translateX = setWidth > 0 && !reduced ? offset - setWidth : 0;
 
   const row = (keyPrefix: string, onMeasure?: (w: number) => void) => (
     <View
@@ -68,9 +99,9 @@ export function NumbersTicker({ api, config }: { api: Api; config: AppConfig | n
           onPress={() => openUrl(f.source_url)}
           accessibilityRole="link"
           accessibilityLabel={factA11yLabel(f)}
-          style={({ pressed }) => [styles.item, { borderColor: p.border, backgroundColor: p.surface, opacity: pressed ? 0.75 : 1 }]}
+          style={({ pressed }) => [styles.item, { opacity: pressed ? 0.75 : 1 }]}
         >
-          <Text style={[styles.label, { color: p.muted }]} numberOfLines={1}>
+          <Text style={[styles.label, { color: p.inkSoft }]} numberOfLines={1}>
             {f.label}
           </Text>
           <Text style={[styles.value, { color: p.ink }]} numberOfLines={1}>
@@ -86,8 +117,16 @@ export function NumbersTicker({ api, config }: { api: Api; config: AppConfig | n
     </View>
   );
 
+  if (reduced) {
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} accessibilityLabel="Numbers to know" contentContainerStyle={styles.reduced}>
+        {row('a')}
+      </ScrollView>
+    );
+  }
+
   return (
-    <View style={styles.wrap} accessibilityRole="list" accessibilityLabel="Numbers to know">
+    <View ref={wrapRef} style={styles.wrap} accessibilityRole="list" accessibilityLabel="Numbers to know, scrolling">
       <View style={[styles.track, { transform: [{ translateX }] }]}>
         {row('a', setSetWidth)}
         {row('b')}
@@ -97,19 +136,12 @@ export function NumbersTicker({ api, config }: { api: Api; config: AppConfig | n
 }
 
 const styles = StyleSheet.create({
-  wrap: { overflow: 'hidden', paddingVertical: 4 },
-  track: { flexDirection: 'row' },
-  row: { flexDirection: 'row', gap: 10, paddingRight: 10 },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  label: { fontFamily: fonts.sansSemi, fontSize: 12, letterSpacing: 0.2, textTransform: 'uppercase' },
-  value: { fontFamily: fonts.serif, fontSize: 18, lineHeight: 20 },
+  wrap: { overflow: 'hidden', height: 44, justifyContent: 'center' },
+  track: { flexDirection: 'row', alignSelf: 'flex-start' },
+  row: { flexDirection: 'row', gap: 44, paddingRight: 44, alignItems: 'center' },
+  reduced: { paddingHorizontal: 32, alignItems: 'center' },
+  item: { flexDirection: 'row', alignItems: 'baseline', gap: 8, minHeight: 44, paddingVertical: 10 },
+  label: { fontFamily: fonts.sans, fontSize: 12, letterSpacing: 0.48, textTransform: 'uppercase' },
+  value: { fontFamily: fonts.serif, fontSize: 18, lineHeight: 22 },
   change: { fontFamily: fonts.sansSemi, fontSize: 12 },
 });

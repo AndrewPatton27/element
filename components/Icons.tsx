@@ -179,3 +179,20 @@ export function EyeOffIcon(p: IconProps) {
     </Icon>
   );
 }
+
+// Previous / next arrows for the trends card (design Web-Final).
+export function ChevronLeftIcon(p: IconProps) {
+  return (
+    <Icon size={18} strokeWidth={2} {...p}>
+      <Path d="M15 6l-6 6 6 6" />
+    </Icon>
+  );
+}
+
+export function ChevronRightIcon(p: IconProps) {
+  return (
+    <Icon size={18} strokeWidth={2} {...p}>
+      <Path d="M9 6l6 6-6 6" />
+    </Icon>
+  );
+}

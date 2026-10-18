@@ -11,10 +11,10 @@ const OPTIONS: { mode: FeedTab; label: string; hint: string }[] = [
   { mode: 'for_you', label: 'For you', hint: 'Tailored to your topics and likes' },
 ];
 
-export function SortToggle({ mode, onChange, wide, forYou }: { mode: FeedTab; onChange: (m: FeedTab) => void; wide?: boolean; forYou?: boolean }) {
+export function SortToggle({ mode, onChange, wide, forYou }: { mode: FeedTab | null; onChange: (m: FeedTab) => void; wide?: boolean; forYou?: boolean }) {
   const p = usePalette();
   return (
-    <View style={[styles.row, wide && { borderBottomWidth: 1, borderColor: p.navBorder }]} accessibilityRole="tablist">
+    <View style={styles.row} accessibilityRole="tablist">
       {OPTIONS.filter((o) => forYou || o.mode !== 'for_you').map((o) => {
         const on = o.mode === mode;
         return (
@@ -39,7 +39,7 @@ export function SortToggle({ mode, onChange, wide, forYou }: { mode: FeedTab; on
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 4 },
   tab: { height: 44, paddingHorizontal: 14, justifyContent: 'center', borderBottomWidth: 3 },
-  tabWide: { height: 48, paddingHorizontal: 16 },
+  tabWide: { height: 64, paddingHorizontal: 14 }, // fills the 64 px top bar; the 3 px underline sits on its bottom edge
   text: { fontSize: 16 },
-  textWide: { fontSize: 17 },
+  textWide: { fontSize: 16 },
 });

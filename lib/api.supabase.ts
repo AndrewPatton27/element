@@ -5,7 +5,7 @@
 import type { Api, FeedRequest } from './api.ts';
 import { NETWORK_MESSAGE, friendlyHttpError, parseErrorBody, warnRaw } from './errors.ts';
 import { clampLimit } from './feedLogic.ts';
-import { parseAppConfig, parseCategories, parseFeedPage, parseMacroFacts } from './types.ts';
+import { isBlurbCard, parseAppConfig, parseCategories, parseFeedPage, parseMacroFacts, parseNumberTrends } from './types.ts';
 
 export interface SupabaseOptions {
   url: string; // https://<project>.supabase.co, no trailing slash
@@ -36,7 +36,7 @@ export interface PlannedRequest {
 export function planRequest(
   base: string,
   key: string,
-  op: 'feed' | 'categories' | 'numbers' | 'config',
+  op: 'feed' | 'categories' | 'numbers' | 'config' | 'top_stories' | 'number_trends',
   req?: FeedRequest,
   token?: string | null,
 ): PlannedRequest {
@@ -53,6 +53,12 @@ export function planRequest(
     return {
       url: `${base}/rest/v1/rpc/feed`,
       init: { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'Content-Profile': 'api' }, body: JSON.stringify(body) },
+    };
+  }
+  if (op === 'top_stories' || op === 'number_trends') {
+    return {
+      url: `${base}/rest/v1/rpc/${op}`,
+      init: { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'Content-Profile': 'api' }, body: '{}' },
     };
   }
   const path = {
@@ -100,5 +106,22 @@ export function createSupabaseApi(opts: SupabaseOptions): Api {
     categories: async () => parseCategories(await call(planRequest(opts.url, opts.key, 'categories'))),
     numbersToKnow: async () => parseMacroFacts(await call(planRequest(opts.url, opts.key, 'numbers'))),
     appConfig: async () => parseAppConfig(await call(planRequest(opts.url, opts.key, 'config'))),
+    // The side column is optional: before the migration is applied (404) or on any error the
+    // site shows nothing there instead of failing.
+    async topStories() {
+      try {
+        const x = await call(planRequest(opts.url, opts.key, 'top_stories'));
+        return Array.isArray(x) ? x.filter(isBlurbCard).slice(0, 5) : [];
+      } catch {
+        return [];
+      }
+    },
+    async numberTrends() {
+      try {
+        return parseNumberTrends(await call(planRequest(opts.url, opts.key, 'number_trends')));
+      } catch {
+        return [];
+      }
+    },
   };
 }
