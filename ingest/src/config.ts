@@ -365,11 +365,11 @@ export const config = {
     timezone: 'America/New_York',              // the "day" and "week" of a brief summary; a subscriber's own tz decides when their email is due
     defaultSendHour: 7,
     // Brief summary (one AI call per brief per day/week): 3-5 sentences, at most this many words.
-    summaryMinSentences: 3,
-    summaryMaxSentences: 5,
-    summaryMaxWords: 110,
+    summaryMinSentences: 8,
+    summaryMaxSentences: 26,
+    summaryMaxWords: 290, summaryMinWords: 200, summaryTargetWords: 250, summaryParagraphs: [3, 4] as readonly number[],
     summaryCopyLimitWords: 10,                 // longest run copied from the brief's own cards (they are already short rewrites)
-    summaryMaxTokens: 600,                     // includes Groq reasoning tokens
+    summaryMaxTokens: 3000,                     // includes Groq reasoning tokens
     // Email provider. 'outbox' writes files; 'resend' needs RESEND_API_KEY + EMAIL_FROM + the --send flag.
     outboxDir: 'outbox',
     resendEndpoint: 'https://api.resend.com/emails',

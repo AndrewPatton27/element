@@ -186,7 +186,7 @@ export function planBrief(brief: BriefInput): Plan {
     topics.push({ label: oneLine(s.label), cards, more });
   }
   const numbers = (brief.numbers ?? []).filter((n) => !marketSeries.has(n.series_id)).slice(0, e.numbers);
-  const sum = brief.summary?.text ? { text: oneLine(brief.summary.text), ai: brief.summary.model !== 'template' } : null;
+  const sum = brief.summary?.text ? { text: brief.summary.text.trim().split(/\n\s*\n/).map(oneLine).join('\n\n'), ai: brief.summary.model !== 'template' } : null;
   return { summary: sum, top, market: { cards: marketCards, numbers: marketNumbers }, topics, numbers };
 }
 
@@ -233,7 +233,7 @@ export function composeBriefEmail(o: BriefEmailOptions): Email {
     + `<div style="font-size:13px;line-height:18px;color:${C.accentSoft};">${esc(kindWord)} brief · ${esc(dateLabel(now))}</div></td></tr>`);
   if (plan.summary) {
     parts.push(sectionTitle(`${kindWord} summary`));
-    parts.push(`<tr><td style="padding:0 24px 10px 24px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${C.surfaceMuted}" style="background-color:${C.surfaceMuted};border-left:4px solid ${C.accent};padding:12px 14px;font-family:${FONT};font-size:15px;line-height:23px;color:${C.ink};">${esc(plan.summary.text)}`
+    parts.push(`<tr><td style="padding:0 24px 10px 24px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${C.surfaceMuted}" style="background-color:${C.surfaceMuted};border-left:4px solid ${C.accent};padding:12px 14px;font-family:${FONT};font-size:15px;line-height:23px;color:${C.ink};">${plan.summary.text.split(/\n\n/).map((para) => `<p style="margin:0 0 10px 0;">${esc(para)}</p>`).join('')}`
       + `${plan.summary.ai ? `<div style="font-size:11px;line-height:16px;color:${C.muted};padding-top:6px;">${esc(AI_LABEL)}</div>` : ''}</td></tr></table></td></tr>`);
   }
   if (plan.top.length) { parts.push(sectionTitle('Top stories')); parts.push(...plan.top.map(cardRow)); }

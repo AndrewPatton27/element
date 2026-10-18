@@ -29,7 +29,11 @@ export function BriefSummary({ summary, mode, config, wide }: { summary: BriefSu
           {title}
         </Text>
       </View>
-      <Text style={[styles.text, wide && styles.textWide, { color: p.inkSoft }]}>{summary.text}</Text>
+      {summary.text.split(/\n\s*\n/).filter((para) => para.trim()).map((para, i) => (
+        <Text key={i} style={[styles.text, wide && styles.textWide, { color: p.inkSoft }]}>
+          {para.trim()}
+        </Text>
+      ))}
       <Text style={[styles.label, { color: p.muted }]}>{summaryFooter(config)}</Text>
     </View>
   );

@@ -122,18 +122,18 @@ export function buildBriefPrompt(kind: BriefKind, source: string, retryErrors?: 
   const span = kind === 'daily' ? 'today' : 'this week';
   const lines = [
     `You write the short summary at the top of Element's ${kind} news brief for college students and busy young adults.`,
-    `Write ${c.summaryMinSentences} to ${c.summaryMaxSentences} sentences (at most ${c.summaryMaxWords} words in total) that tell a reader what mattered ${span}.`,
+    `Write about ${c.summaryTargetWords} words (between ${c.summaryMinWords} and ${c.summaryMaxWords}) in ${c.summaryParagraphs[0]} to ${c.summaryParagraphs[1]} short paragraphs, separated by one blank line, that tell a reader what mattered ${span}.`,
     'Use ONLY facts stated in the BRIEF below. Do not add anything from memory.',
     'STYLE: plain words at about an 8th-grade reading level, short sentences, no jargon. Calm, neutral tone. No hype.',
     '- Cover the BREADTH of the brief: mention several different topics, not only the first one.',
-    '- If there are market stories or numbers, give them one sentence.',
+    '- Paragraph 1: the single most important story and why it matters. Paragraph 2: the other important topics, one or two sentences each. Then a paragraph on markets (stories and numbers) when the BRIEF has them. Last paragraph: what to keep an eye on, ONLY if the BRIEF supports it.',
     '- The last sentence may say why it matters to a regular person, ONLY if that follows directly from the brief.',
     'HARD RULES (a summary that breaks one is rejected):',
     '- Every number you write must appear in the BRIEF exactly as written. Do not calculate new numbers. Do not write dates or times unless they are in the BRIEF.',
     '- Never give investment advice, opinions or predictions. Do not use words like buy, sell, should, recommend, price target.',
     `- Do not copy more than ${c.summaryCopyLimitWords - 2} words in a row from the BRIEF; rephrase.`,
     '- Every sentence adds something new. No filler such as "In summary" or "This means that".',
-    '- Plain text only: no headings, bullets, markdown, links or quotation marks around the whole answer.',
+    '- Plain text only: no headings, bullets, markdown, links or quotation marks around the whole answer. Separate paragraphs with exactly one blank line.',
     'Return only the summary text.',
   ];
   if (retryErrors?.length) lines.push('', `Your previous answer was rejected for: ${retryErrors.join('; ')}. Fix these problems.`);
@@ -146,7 +146,7 @@ export function cleanSummaryText(raw: string): string {
   let t = String(raw ?? '').trim().replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/, '').trim();
   t = t.replace(/^(?:summary|brief summary)\s*:\s*/i, '');
   if (/^["“].*["”]$/s.test(t)) t = t.slice(1, -1).trim();
-  return t.replace(/\s+/g, ' ');
+  return t.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n\n');
 }
 
 /** Validation errors for a summary against the brief text it was written from ([] = ok). */
@@ -159,6 +159,9 @@ export function validateBriefSummary(text: string, source: string): string[] {
   }
   const wc = countWords(text);
   if (wc > c.summaryMaxWords) errors.push(`longer than ${c.summaryMaxWords} words (was ${wc})`);
+  if (wc < c.summaryMinWords) errors.push(`shorter than ${c.summaryMinWords} words (was ${wc}); aim for about ${c.summaryTargetWords}`);
+  const paras = text.split(/\n\s*\n/).filter((p) => p.trim()).length;
+  if (paras < c.summaryParagraphs[0] || paras > c.summaryParagraphs[1]) errors.push(`needs ${c.summaryParagraphs[0]} to ${c.summaryParagraphs[1]} paragraphs separated by a blank line (had ${paras})`);
   if (/https?:\/\/|[*#`\[\]]|^\s*[-•]/m.test(text)) errors.push('plain text only: no links, markdown or bullets');
   const advice = findAdvice(text);
   if (advice.length) errors.push(`advice language: ${advice.join(', ')}`);
@@ -185,7 +188,7 @@ export function templateBriefSummary(kind: BriefKind, brief: BriefInput): string
   if (heads.length > 1) out.push(`Also in the news: ${heads.slice(1, 3).join('; ')}.`);
   if (topics.length > 1) out.push(`This brief covers ${topics.slice(0, 4).join(', ')}.`);
   if (!out.length) out.push(`Open the brief for the stories that mattered ${span}.`);
-  return out.join(' ');
+  return out.join('\n\n');
 }
 
 // ---- AI text models (same keys, models, endpoints and caps as the card pipeline) --------
