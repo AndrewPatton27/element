@@ -16,7 +16,7 @@ import { fedItemToItem, fedPageText, mergeFedItems, parseRss } from './sources/f
 import { fedRegDocToItem, type FrDoc } from './sources/fedreg.ts';
 import { buildDataCard, observationFromFact } from './sources/macro.ts';
 import { classifySecEntry, filingText, findPrimaryDocUrl, parseSubmissionsJson } from './sources/sec.ts';
-import { usgsDraft } from './sources/usgs.ts';
+import { parseUsgsGeoJson, usgsDraft, usgsToItem } from './sources/usgs.ts';
 import { createChainState, summarizeWithChain } from './summarizer/chain.ts';
 import { templateDraft } from './summarizer/template.ts';
 import type { RawItem, RevisableCard, RevisePayload } from './types.ts';
@@ -79,6 +79,15 @@ export async function rebuildItem(card: RevisableCard, deps: Pick<Deps, 'fetchTe
       const doc = JSON.parse(await deps.fetchText(u.toString(), 'api', 0)) as FrDoc;
       const r = fedRegDocToItem(doc, deps.now);
       return 'item' in r ? { item: r.item, pageText: noPage } : { reason: `rule not usable (${r.skip})` };
+    }
+    case 'usgs': {
+      // Re-read the significant-earthquakes feed and find this event by its id (or event URL).
+      // Older quakes may have aged out of the week feed; those are kept unchanged.
+      const feed = parseUsgsGeoJson(await deps.fetchText(config.usgs.url, 'api', config.feedCacheTtlMinutes));
+      const f = feed.find((x) => x.id === src.external_id || x.properties?.url === url);
+      if (!f) return { reason: 'earthquake no longer in the USGS significant-week feed' };
+      const r = usgsToItem(f, deps.now);
+      return 'item' in r ? { item: r.item, pageText: noPage } : { reason: `earthquake not usable (${r.skip})` };
     }
     default:
       return { reason: `source ${src.source} is not supported by --rewrite (it was added after the plain-language prompt)` };

@@ -20,6 +20,7 @@ export type Reaction = 'like' | 'dislike';
 export interface UserPrefs {
   followed_categories: CategorySlug[];  // sorted, distinct
   hidden_categories: CategorySlug[];    // sorted, distinct; never overlaps followed
+  hidden_sources: string[];             // sorted, distinct; source keys from api.sources() (SourceKey)
   onboarded: boolean;                   // false until the first api.set_prefs -> show the topic picker
   updated_at: string | null;            // ISO; null if prefs were never saved
   /** Learned from likes/dislikes in the last 30 days: hours of boost per category,
@@ -34,7 +35,31 @@ export type GetPrefsParams = Record<string, never>;
 export interface SetPrefsParams {
   p_followed: CategorySlug[] | null;
   p_hidden: CategorySlug[] | null;
+  /** Source keys (from api.sources()) to hide; null = keep the saved list, [] = clear it.
+   *  Each key must exist in core.source_keys or set_prefs returns `unknown_source: <key>`. */
+  p_hidden_sources?: string[] | null;
 }
+
+/** A source the user can hide, from api.sources(). `key` is stored in UserPrefs.hidden_sources. */
+export interface SourceOption {
+  key: string;                          // e.g. 'sec', 'fred', 'cpsc'
+  name: string;                         // display name, e.g. 'SEC filings'
+}
+
+/** Body of POST /rest/v1/rpc/sources (no arguments). */
+export type SourcesParams = Record<string, never>;
+
+/** One topic for the signed-in user, from api.my_categories(). */
+export interface MyCategory {
+  slug: CategorySlug;
+  name: string;
+  sort_order: number;
+  followed: boolean;
+  hidden: boolean;
+}
+
+/** Body of POST /rest/v1/rpc/my_categories (no arguments). */
+export type MyCategoriesParams = Record<string, never>;
 
 /** Body of POST /rest/v1/rpc/track. */
 export interface TrackParams {
@@ -86,6 +111,7 @@ export type AccountRpcErrorMessage =
   | 'not_authenticated'                 // [401] no user in the token
   | `unknown_category: ${string}`       // [422] set_prefs
   | `category_followed_and_hidden: ${string}` // [422] set_prefs
+  | `unknown_source: ${string}`         // [422] set_prefs: a hidden source key not in core.source_keys
   | 'invalid_kind'                      // [422] track
   | 'invalid_ms'                        // [422] track: dwell without p_ms, or negative
   | 'unknown_card'                      // [422] track

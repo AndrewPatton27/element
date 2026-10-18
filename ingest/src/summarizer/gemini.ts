@@ -38,21 +38,34 @@ export function buildPrompt(input: SummarizeInput): string {
     `HARD LIMITS (a card that breaks one is rejected): headline at most ${config.headlineMaxChars} characters including spaces; body 2 or 3 sentences and at most ${config.bodyMaxWords} words in total.`,
     'Rules:',
     `- "headline": short and plain, at most ${config.headlineMaxChars} characters (aim for about ${config.headlineTargetChars}).`,
-    `- "body": 2 or 3 short sentences, at most ${config.bodyMaxWords} words (aim for about ${Math.round(config.bodyMaxWords * 0.75)}), or null if the text has no facts beyond the headline.`,
+    '- The headline must say WHAT HAPPENED in plain words, leading with the event (for example "Earthquake", "Recall", "New rule", "Earnings", "CEO steps down").',
+    '- Leave precise technical details OUT of the headline AND the body: no exact distances, compass bearings, coordinates, exact clock times, docket, item or section numbers, model numbers, or long official titles. Name the broad place or thing people recognize (the country, state, or company), not the nearest small town or precise spot.',
+    '- Keep only the one or two numbers that matter most (the magnitude, the dollar amount, the percent change). Precise details (exact location, times, model or docket numbers) belong ONLY in "detail".key_points, never in the headline or the body.',
+    `- "body": 2 or 3 short sentences, at most ${config.bodyMaxWords} words (aim for about ${Math.round(config.bodyMaxWords * 0.75)}), or null if the text has no facts beyond the headline. Give the big picture: what happened, where in broad terms, and why it matters.`,
     '- Every number you write must appear in the source text exactly. Do not calculate new numbers.',
-    '- Never give advice or opinions. Do not use words like should, recommend, buy, sell, hold, price target, guaranteed.',
-    '- Do not copy more than 8 words in a row from the source; rephrase.',
+    '- Never give investment advice or opinions. Do not use words like buy, sell, hold, invest in, recommend, price target, guaranteed, undervalued, or overvalued.',
+    '- For a product recall or safety card, give the plain safety instruction as a direct order and do NOT use the word "should": write "Stop using it and contact the company for a refund" rather than "consumers should stop using it". Phrases like stop using, contact the company, and return it for a refund are fine.',
+    '- Do not copy more than 8 words in a row from the source; rephrase in your own plain words.',
     `- "category": one of ${AI_CATEGORY_SLUGS.join(', ')}.`,
     '- "event_type": one of earnings, exec_change, deal, insider, macro_release, fed, or null.',
     '- "tickers": stock symbols that appear in the source text or the metadata below, else [].',
     `- "everyday_relevance": a whole number from 1 to 5. ${RELEVANCE_RUBRIC}`,
-    `- "detail": a longer, still easy version for readers who tap the card. "paragraphs": ${config.detail.minParagraphs} to ${config.detail.maxParagraphs} short paragraphs, at most ${config.detail.maxWords} words in total: what happened, the background a student needs to understand it, and what it means for regular people ONLY if that follows from the source. "key_points": ${config.detail.minKeyPoints} to ${config.detail.maxKeyPoints} short points, each at most ${config.detail.keyPointMaxWords} words. Same rules as the card: plain words, facts from the source only, every number must appear in the source, no advice, no predictions, no copying more than 8 words in a row.`,
+    `- "detail": a longer, still easy version for readers who tap the card. "paragraphs": ${config.detail.minParagraphs} to ${config.detail.maxParagraphs} short paragraphs, at most ${config.detail.maxWords} words in total: what happened, the background a student needs to understand it, and what it means for regular people ONLY if that follows from the source. "key_points": ${config.detail.minKeyPoints} to ${config.detail.maxKeyPoints} short points, each at most ${config.detail.keyPointMaxWords} words. Same rules as the card. Put every fact in your OWN plain words: never copy a phrase of more than 8 words in a row from the source (break up or reword any longer run). Use ONLY numbers that appear in the source text exactly; if a number is not in the source, leave it out rather than guessing or rounding. No advice, no predictions.`,
     'Return JSON only.',
     '',
     `SOURCE: ${it.source_name}, ${it.doc_label}, ${it.published_at}`,
     it.tickers.length ? `TICKERS: ${it.tickers.map((t) => `${t.symbol} (${t.name})`).join(', ')}` : '',
     `SUGGESTED CATEGORY: ${it.category}; SUGGESTED EVENT TYPE: ${it.event_type ?? 'null'}`,
   ];
+  if (it.category === 'safety') {
+    lines.push(
+      '',
+      'THIS IS A PRODUCT-SAFETY RECALL. Tell people plainly and directly what to do, as commands, '
+      + 'without the word "should": for example "Stop using it right away and contact the company for a refund." '
+      + 'Say what the product is, the danger, and the fix (refund, repair, or replacement) in plain words. '
+      + 'Keep investment words (buy, sell, invest in, price target) out of it.',
+    );
+  }
   if (input.retryErrors?.length) {
     lines.push('', `Your previous answer was rejected for: ${input.retryErrors.join('; ')}. Fix these problems.`);
     if (input.retryErrors.some((e) => /longer than/.test(e))) {

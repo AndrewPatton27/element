@@ -50,10 +50,10 @@ export const config = {
   // After a 429, a provider is skipped for this long within the same run (next provider or template).
   rateLimitCooldownMs: 60_000,
   aiDailyCapCode: 600,                         // Gemini hard cap in code; effective cap = min(this, freeRpd)
-  promptVersion: 'sum-v3',                     // v3 (2026-10-17, D-37): v2 (plain 8th-grade style + everyday_relevance) + in-depth detail
+  promptVersion: 'sum-v4',                     // v4 (2026-10-17): plain headline+body rules (no over-specific details; precise details only in detail.key_points)
   // Version stored on template and data cards (no AI). tpl-v2 = plain wording (2026-10-17).
   // `--rewrite` redoes every published card whose prompt_version is neither this nor promptVersion.
-  templateVersion: 'tpl-v3',                   // v3: plain template text + a factual detail from structured fields
+  templateVersion: 'tpl-v4',                   // v4: plain USGS headline+body and plain Federal Register headline
   providerOrder: ['gemini', 'groq', 'template'] as const, // a list on purpose: adding a provider is one entry
 
   // ---- card limits ------------------------------------------------------------
@@ -79,14 +79,22 @@ export const config = {
     cc_by_sa: 10,                               // Wikipedia: treated like filings (PM review 2)
   } as Record<string, number>,
 
-  // Phrases that read as investment advice. Matched case-insensitively on word boundaries.
+  // Phrases that read as advice. Matched case-insensitively on word boundaries.
+  // Two groups: investment advice (always blocked, every category) and a few words that only
+  // read as advice outside a product-safety instruction (see safetyAdviceAllowlist).
   adviceBlocklist: [
     'should', 'recommend', 'recommends', 'recommended', 'recommendation',
     'price target', 'guaranteed', 'guarantee', 'undervalued', 'overvalued',
+    'buy', 'sell', 'invest in',
     'strong buy', 'buy rating', 'sell rating', 'hold rating', 'time to buy', 'time to sell',
     'buy the dip', 'must-buy', 'must buy', 'outperform', 'underperform', 'can\'t lose',
     'sure thing', 'to the moon',
   ],
+  // Blocklist phrases that are plain product-safety instructions, not investment advice. Allowed
+  // ONLY on category 'safety' (CPSC recalls): e.g. "consumers should stop using the product".
+  // Everywhere else they stay blocked. Investment words (buy, sell, price target, ...) are never
+  // here, so investment advice stays blocked on safety cards too.
+  safetyAdviceAllowlist: ['should'],
 
   // ---- dedupe / ranking guard --------------------------------------------------
   tickerCapPer24h: 3,                          // mirrors core.rank_params.ticker_cap_24h

@@ -144,12 +144,32 @@ test('card mapping: html_url source, public_domain, attribution names the sub-ag
   for (const d of [...agencies, ...significant]) assert.doesNotMatch(agencyName(d) ?? '', /undefined/);
 });
 
-test('template headline uses the title but stays within 90 chars', () => {
+test('template headline is plain (never the raw official title) and stays within 90 chars', () => {
   for (const d of [...agencies, ...significant]) {
-    const t = templateDraft({ item: itemOf(d), text: '' });
+    const it = itemOf(d);
+    const t = templateDraft({ item: it, text: '' });
     assert.ok(t.headline.length <= config.headlineMaxChars, t.headline);
     assert.match(t.body!, /published this final rule in the Federal Register/);
+    // the plain headline is not the raw document title and carries no section/docket citations
+    assert.notEqual(t.headline, it.title);
+    assert.doesNotMatch(t.headline, /Section 511\(b\)|Executive Order|Airworthiness Directives/);
   }
+});
+
+test('fedreg: an "Airworthiness Directives" title becomes a plain FAA safety-order headline naming the planemaker', () => {
+  const faaDoc: FrDoc = {
+    document_number: '2026-99999',
+    title: 'Airworthiness Directives; The Boeing Company Airplanes',
+    abstract: 'The FAA adopts a new airworthiness directive for certain Boeing Model 737 airplanes.',
+    html_url: 'https://www.federalregister.gov/documents/2026/10/17/2026-99999/airworthiness-directives-the-boeing-company-airplanes',
+    publication_date: '2026-10-17',
+    type: 'Rule',
+    agencies: [{ name: 'Federal Aviation Administration', parent_id: 492 }],
+  };
+  const h = templateDraft({ item: itemOf(faaDoc), text: '' }).headline;
+  assert.equal(h, 'The FAA issues a safety order for Boeing planes');
+  assert.doesNotMatch(h, /Airworthiness Directives|The Boeing Company Airplanes/);
+  assert.ok(h.length <= config.headlineMaxChars);
 });
 
 test('non-https or foreign html_url is refused', () => {

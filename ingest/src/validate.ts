@@ -46,6 +46,7 @@ export interface SourceText {
   text: string;                  // the licensed source text the draft was written from
   licenseClass: string;          // 'company_filing' | 'public_domain'
   tickers?: string[];            // tickers known from filing metadata
+  category?: string;             // the card's real category in code (e.g. 'safety' for CPSC recalls)
 }
 
 export interface Result {
@@ -104,9 +105,23 @@ export function longestCopiedRun(draft: string, source: string, ignorePhrases: r
   return best;
 }
 
-export function findAdvice(text: string, blocklist: readonly string[] = config.adviceBlocklist): string[] {
+/**
+ * Advice phrases found in `text`. For category 'safety' (CPSC recalls) the phrases in
+ * config.safetyAdviceAllowlist (e.g. "should") are permitted, so a plain safety instruction
+ * like "consumers should stop using the product" is allowed; investment advice (buy, sell,
+ * price target, ...) is never in that allowlist, so it stays blocked on every category.
+ */
+export function findAdvice(
+  text: string,
+  category?: string,
+  blocklist: readonly string[] = config.adviceBlocklist,
+): string[] {
+  const allowed = category === 'safety'
+    ? new Set((config.safetyAdviceAllowlist as readonly string[]).map((p) => p.toLowerCase()))
+    : new Set<string>();
   const hits: string[] = [];
   for (const phrase of blocklist) {
+    if (allowed.has(phrase.toLowerCase())) continue;
     const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     if (new RegExp(`(^|[^a-z])${escaped}($|[^a-z])`, 'i').test(text)) hits.push(phrase);
   }
@@ -226,8 +241,10 @@ export function validateDraft(draft: Draft, source: SourceText): Result {
 
   const text = `${draft.headline}\n${draft.body ?? ''}`;
 
-  // 1. no advice language
-  const advice = findAdvice(text);
+  // 1. no advice language. The safety relaxation keys on the card's real category (source.category,
+  // set in code, e.g. 'safety' for CPSC); the AI draft category is only ever one of the 9 business
+  // slugs, so draft.category is used only as a fallback when the source carries no category.
+  const advice = findAdvice(text, source.category ?? draft.category);
   if (advice.length) errors.push(`advice language: ${advice.join(', ')}`);
 
   // 2. every number must appear in the source
@@ -284,13 +301,14 @@ export function checkDetailShape(d: unknown): string[] {
 /**
  * Full check of an AI detail against its licensed source: shape, no advice language, every number
  * in the source, copy limit for the license (10 words filings/Wikipedia, 25 public domain).
+ * `category` lets a 'safety' detail carry a plain product-safety instruction (see findAdvice).
  */
-export function validateDetail(d: unknown, source: SourceText): Result {
+export function validateDetail(d: unknown, source: SourceText, category?: string): Result {
   const errors = checkDetailShape(d);
   if (errors.length) return { ok: false, errors };
   const { paragraphs, key_points } = d as { paragraphs: string[]; key_points: string[] };
   const text = [...paragraphs, ...key_points].join('\n');
-  const advice = findAdvice(text);
+  const advice = findAdvice(text, category);
   if (advice.length) errors.push(`detail advice language: ${advice.join(', ')}`);
   const srcNums = new Set(extractNumbers(source.text));
   const missing = extractNumbers(text).filter((n) => !srcNums.has(n));

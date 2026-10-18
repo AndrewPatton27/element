@@ -10,7 +10,7 @@ import { runOnce, templateAllowed, type Deps } from '../src/pipeline.ts';
 import { createDryRunPublisher } from '../src/publish.ts';
 import { cpscToItem, cpscUrl, parseCpscJson, selectRecalls } from '../src/sources/cpsc.ts';
 import { nasaToItem, parseNasaRss, selectNasaReleases } from '../src/sources/nasa.ts';
-import { parseUsgsGeoJson, usgsDraft, usgsToItem } from '../src/sources/usgs.ts';
+import { parseUsgsGeoJson, plainQuakeLocation, usgsDraft, usgsHeadline, usgsToItem } from '../src/sources/usgs.ts';
 import { parseWikiFeed, storyDate, storyText, wikiFeedUrl, wikiItemToItem, wikimediaUserAgent } from '../src/sources/wiki.ts';
 import { memoryCounter } from '../src/summarizer/chain.ts';
 import { RESPONSE_SCHEMA } from '../src/summarizer/gemini.ts';
@@ -200,10 +200,16 @@ test('usgs: template card from title/mag/place/time, event URL as the source, US
   assert.equal(it.url, 'https://earthquake.usgs.gov/earthquakes/eventpage/us6000u2y1');
   assert.equal(it.attribution, 'Credit: U.S. Geological Survey');
   const dft = usgsDraft(it);
-  assert.equal(dft.headline, 'M 5.7 - 48 km WNW of Khuzdar, Pakistan');
-  assert.equal(dft.body, 'A magnitude 5.7 earthquake struck 48 km WNW of Khuzdar, Pakistan at 05:06 UTC on Oct 17. USGS alert level: yellow (its scale for expected damage, from green to red).');
+  assert.equal(dft.headline, 'Magnitude 5.7 earthquake hits Pakistan');
+  assert.equal(dft.body, 'A magnitude 5.7 earthquake struck in Pakistan. The USGS rated the expected damage as yellow (some damage is possible).');
+  // No over-specific detail leaks into the headline or body.
+  for (const s of [dft.headline, dft.body!]) {
+    assert.doesNotMatch(s, /48 km|WNW|Khuzdar|05:06|UTC/, s);
+  }
   const ridge = usgsDraft((usgsToItem(f[2], DRY_NOW) as { item: RawItem }).item);
-  assert.match(ridge.body!, /struck in the central Mid-Atlantic Ridge .* official tsunami warnings come from tsunami\.gov\./);
+  assert.equal(ridge.headline, 'Magnitude 6.8 earthquake on the Mid-Atlantic Ridge');
+  assert.match(ridge.body!, /struck on the Mid-Atlantic Ridge\. .* official tsunami warnings come from tsunami\.gov\./);
+  assert.doesNotMatch(ridge.body!, /central|km|UTC/);
   assert.deepEqual(usgsToItem(f[0], new Date('2026-11-30T00:00:00Z')), { skip: 'too_old' });
 
   let aiCalls = 0;
@@ -222,6 +228,31 @@ test('usgs: template card from title/mag/place/time, event URL as the source, US
   }
   const again = await runOnce(d, { only: ['usgs'] });
   assert.equal(again.published, 0, 'dedupe on the event URL');
+});
+
+// ---- USGS plain headlines (Drew's rules: no distance, bearing, nearest town or time) -------
+
+test('usgs plain headline: Khuzdar example drops "48 km" and "WNW"; broad place only', () => {
+  const h = usgsHeadline(5.7, '48 km WNW of Khuzdar, Pakistan');
+  assert.equal(h, 'Magnitude 5.7 earthquake hits Pakistan');
+  assert.doesNotMatch(h, /48 km|WNW|Khuzdar/);
+  assert.ok(h.length <= config.headlineMaxChars);
+});
+
+test('usgs plain headline: US state abbreviation maps to the full state name (Ridgecrest, CA -> California)', () => {
+  assert.equal(usgsHeadline(4.5, '10 km N of Ridgecrest, CA'), 'Magnitude 4.5 earthquake in California');
+  assert.deepEqual(plainQuakeLocation('10 km N of Ridgecrest, CA'), { region: 'California', headlineVerb: 'in', bodyPrep: 'in' });
+  // body also stays plain: no distance, bearing, town or clock time
+  const it = { summary_text: JSON.stringify({ mag: 4.5, place: '10 km N of Ridgecrest, CA', time: 1792213617657, alert: null, tsunami: 0 }), category: 'science', event_type: 'science', title: 'M 4.5' } as unknown as RawItem;
+  const dft = usgsDraft(it);
+  assert.equal(dft.headline, 'Magnitude 4.5 earthquake in California');
+  assert.equal(dft.body, 'A magnitude 4.5 earthquake struck in California.');
+  assert.doesNotMatch(dft.body!, /10 km|Ridgecrest|UTC|:/);
+});
+
+test('usgs plain headline: a place with no comma (Mid-Atlantic Ridge) reads naturally', () => {
+  assert.equal(usgsHeadline(6.8, 'central Mid-Atlantic Ridge'), 'Magnitude 6.8 earthquake on the Mid-Atlantic Ridge');
+  assert.deepEqual(plainQuakeLocation('central Mid-Atlantic Ridge'), { region: 'Mid-Atlantic Ridge', headlineVerb: 'on the', bodyPrep: 'on the' });
 });
 
 // ---- NASA ----------------------------------------------------------------------------------

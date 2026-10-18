@@ -82,7 +82,7 @@ export interface ChainResult {
  */
 function finishDetail(draft: SummaryDraft, source: SourceText, provider: string, log: string[]): SummaryDraft {
   if (draft.detail === undefined || draft.detail === null) return { ...draft, detail: null };
-  const v = validateDetail(draft.detail, source);
+  const v = validateDetail(draft.detail, source, source.category ?? draft.category);
   if (v.ok) return draft;
   log.push(`${provider}: detail dropped (card kept): ${v.errors.join('; ')}`);
   return { ...draft, detail: null };
@@ -101,7 +101,7 @@ export async function summarizeWithChain(
   const now = opts.now ?? Date.now;
   const state = opts.state ?? createChainState();      // no state passed: no memory between items
   assertSummarizable(input.item.license_class);   // throws before any provider sees the text
-  const source = { text: input.text, licenseClass: input.item.license_class, tickers: input.item.tickers.map((t) => t.symbol) };
+  const source = { text: input.text, licenseClass: input.item.license_class, tickers: input.item.tickers.map((t) => t.symbol), category: input.item.category };
   const log: string[] = [];
 
   for (const p of providers) {

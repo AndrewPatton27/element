@@ -57,6 +57,53 @@ function cutAtWord(s: string, max: number): string {
   return cut.slice(0, cut.lastIndexOf(' ')).replace(/[,;:]$/, '') + '…';
 }
 
+/**
+ * A short agency name for a plain Federal Register headline. The full official name is replaced by
+ * a short, recognizable one; anything unknown falls back to "A federal agency".
+ */
+function shortAgency(agency: string | null | undefined): string {
+  const a = (agency ?? '').toLowerCase();
+  if (/federal aviation|\bfaa\b/.test(a)) return 'The FAA';
+  if (/transportation/.test(a)) return 'The Transportation Dept.';
+  if (/consumer financial/.test(a)) return 'The CFPB';
+  if (/federal trade/.test(a)) return 'The FTC';
+  if (/internal revenue|\birs\b/.test(a)) return 'The IRS';
+  if (/securities and exchange|\bsec\b/.test(a)) return 'The SEC';
+  if (/federal communications|\bfcc\b/.test(a)) return 'The FCC';
+  if (/federal reserve/.test(a)) return 'The Federal Reserve';
+  if (/treasury|fiscal service/.test(a)) return 'The Treasury Dept.';
+  if (/energy/.test(a)) return 'The Energy Dept.';
+  if (/education/.test(a)) return 'The Education Dept.';
+  return agency ? 'A federal agency' : 'A federal agency';
+}
+
+/**
+ * Plain Federal Register headline: never the raw official document title (which starts with phrases
+ * like "Airworthiness Directives;" or long section citations). Says, in plain words, who made a rule
+ * and what it is about. No docket, item or section numbers, no long official title.
+ */
+export function fedRegHeadline(title: string, agency: string | null | undefined): string {
+  const t = (title ?? '').trim();
+  const who = shortAgency(agency);
+  // Airworthiness Directives: a safety fix order for aircraft. Name the planemaker if the title does.
+  if (/^airworthiness directives/i.test(t)) {
+    const maker = /boeing/i.test(t) ? 'Boeing' : /airbus/i.test(t) ? 'Airbus' : /bombardier/i.test(t) ? 'Bombardier'
+      : /embraer/i.test(t) ? 'Embraer' : /cessna|textron/i.test(t) ? 'Cessna' : null;
+    const planes = maker ? `${maker} planes` : 'certain planes';
+    return cutAtWord(`${who === 'A federal agency' ? 'The FAA' : who} issues a safety order for ${planes}`, config.headlineMaxChars);
+  }
+  // Delay / extension of an effective date.
+  if (/delay of effective date|delays? the effective date|extension of (the )?compliance/i.test(t)) {
+    return cutAtWord(`${who} delays a rule's start date`, config.headlineMaxChars);
+  }
+  // Civil penalties / fines.
+  if (/civil penalt/i.test(t)) {
+    return cutAtWord(`${who} sets new penalties under a rule`, config.headlineMaxChars);
+  }
+  // Default: a plain "issues a new rule" line (the body and detail carry the agency and date).
+  return cutAtWord(`${who} issues a new federal rule`, config.headlineMaxChars);
+}
+
 export function templateDraft(input: SummarizeInput): SummaryDraft {
   const it = input.item;
   if (it.source === 'sec_8k') {
@@ -70,9 +117,9 @@ export function templateDraft(input: SummarizeInput): SummaryDraft {
     return { headline, body, category: it.category, event_type: it.event_type, tickers: it.tickers.map((x) => x.symbol) };
   }
   if (it.source === 'fedreg') {
-    // Public-domain rule title, cut at a word to the card limit (never past 90 chars).
+    // Plain headline (never the raw official rule title); the body and detail carry the specifics.
     return {
-      headline: cutAtWord(it.title, config.headlineMaxChars),
+      headline: fedRegHeadline(it.title, it.agency),
       // Not published by the pipeline (no relevance score without the AI); kept for completeness.
       body: `${it.agency ?? 'A federal agency'} published this final rule in the Federal Register. Open the source for the full text.`,
       category: it.category,

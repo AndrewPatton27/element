@@ -6,7 +6,7 @@ Signed-in users get saved topics and a personal **For you** feed. Guests are unc
 
 | File | What it is |
 |---|---|
-| `account.ts` | `UserPrefs`, `TrackKind`, `TrackAction`, `Reaction`, `ForYouCard`, `ForYouPage`, RPC bodies (`SetPrefsParams`, `TrackParams`, `FeedForYouParams`, ...) and error messages. |
+| `account.ts` | `UserPrefs` (incl. `hidden_sources`), `SourceOption`, `MyCategory`, `TrackKind`, `TrackAction`, `Reaction`, `ForYouCard`, `ForYouPage`, RPC bodies (`SetPrefsParams` with `p_hidden_sources`, `TrackParams`, `FeedForYouParams`, `SourcesParams`, `MyCategoriesParams`, ...) and error messages (incl. `unknown_source`). |
 | `fixtures/prefs.json` | `UserPrefs`: follows energy and tech, hides insider trades, has liked a deals card and disliked a markets card. |
 | `fixtures/feed_for_you.page1.json` | `ForYouPage`: 10 `[SAMPLE]` cards (copied from `feed.page1.json`) with `my_reaction`, and a `next_cursor`. |
 
@@ -35,12 +35,19 @@ Content-Profile: api
 
 | RPC | Body | Returns |
 |---|---|---|
-| `get_prefs` | `{}` | `UserPrefs` |
-| `set_prefs` | `{"p_followed": ["tech","energy"], "p_hidden": ["insider"]}` (null = keep, [] = clear) | `UserPrefs` (sets `onboarded: true`) |
+| `get_prefs` | `{}` | `UserPrefs` (incl. `hidden_sources`) |
+| `set_prefs` | `{"p_followed": ["tech","energy"], "p_hidden": ["insider"], "p_hidden_sources": ["cpsc"]}` (each list: null = keep, [] = clear) | `UserPrefs` (sets `onboarded: true`) |
+| `my_categories` | `{}` | `MyCategory[]`: `{slug, name, sort_order, followed, hidden}`, by `sort_order`. Topics that have cards, plus any the user follows or hides. |
 | `track` | `{"p_blurb": "<card id>", "p_kind": "view" \| "open_source" \| "open_detail" \| "like" \| "dislike" \| "dwell" \| "clear", "p_ms": 4200}` (`p_ms` only for `dwell`; the old 2-key body still works) | `{"status": "recorded" \| "ignored" \| "cleared"}` |
 | `feed_for_you` | `{"p_cursor": null, "p_limit": 20}` | `ForYouPage` |
 | `delete_my_data` | `{}` | `{"deleted_prefs": 0\|1, "deleted_events": n}` |
 | `delete_account` | `{}` | `{"deleted": true}`; deletes the login and all its data. Then sign out locally (see below). |
+
+`api.sources` is open to everyone (anon too), so the source list loads before sign-in:
+
+| RPC (anyone) | Body | Returns |
+|---|---|---|
+| `sources` | `{}` | `SourceOption[]`: `{key, name}`, by display order. The toggles for "hide a source"; the `key` goes into `set_prefs`'s `p_hidden_sources`. |
 
 With supabase-js: `supabase.schema('api').rpc('feed_for_you', { p_cursor: null, p_limit: 20 })` sends the same request with the session token.
 
@@ -52,7 +59,8 @@ With supabase-js: `supabase.schema('api').rpc('feed_for_you', { p_cursor: null, 
 - **Reactions:** one per card. `like` replaces a `dislike` and the other way round; a repeat returns `ignored`; `clear` removes it. A disliked card disappears from For you on the next page.
 - **Views and taps:** send `view` when a card is on screen for about a second, `open_detail` when the in-depth view is opened, `open_source` when a source link is tapped. Repeats within an hour return `ignored`. `ignored` is not an error.
 - **Dwell:** when a card leaves the screen (or the app goes to the background), send `dwell` with `p_ms` = how long it was visible; pause the timer while the app is in the background. Under 300 ms is ignored; over 10 minutes is stored as 10 minutes; within 30 minutes only the longest look per card is kept (a shorter one returns `ignored`).
-- **Errors:** anon calls get HTTP 401 (permission denied). Messages (`AccountRpcErrorMessage`): `not_authenticated` (401), `unknown_category: <slug>`, `category_followed_and_hidden: <slug>`, `invalid_kind`, `invalid_ms`, `unknown_card`, `invalid_cursor` (all 422).
+- **Errors:** anon calls get HTTP 401 (permission denied). Messages (`AccountRpcErrorMessage`): `not_authenticated` (401), `unknown_category: <slug>`, `category_followed_and_hidden: <slug>`, `unknown_source: <key>` (a `p_hidden_sources` key not in `core.source_keys`), `invalid_kind`, `invalid_ms`, `unknown_card`, `invalid_cursor` (all 422).
+- **Hidden sources:** `set_prefs`'s `p_hidden_sources` holds source keys from `api.sources()` (e.g. `cpsc`, `fred`). Cards whose primary source is hidden are left out of both `api.feed` (when signed in) and `api.feed_for_you`. Data cards (FRED numbers) all map to the `fred` key. A card whose source has no key cannot be hidden by source.
 - **Delete:** `delete_my_data` removes prefs and reactions and keeps the login. `delete_account` deletes the login itself, and the prefs and reactions go with it. The current access token keeps working until it expires (up to 1 hour) but can no longer be refreshed, so the app signs out locally straight away. A second call returns `account_not_found` (404).
 - **Stored data:** user id, chosen topics, and card events: which card, the kind of event, the time, and for `dwell` a duration in milliseconds. Only durations and taps, never what was read or typed. No names, IPs, location or device data.
 
