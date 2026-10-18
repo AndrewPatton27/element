@@ -31,10 +31,17 @@ export type { Tab } from './TabBar';
 
 export function Wordmark({ size = 24, text = APP_NAME }: { size?: number; text?: string }) {
   const p = usePalette();
-  return (
-    <Text style={{ fontFamily: fonts.serif, fontSize: size, letterSpacing: -size * 0.01, color: p.accent }} accessibilityRole="header">
+  const label = (
+    <Text style={{ fontFamily: fonts.serif, fontSize: size, letterSpacing: -size * 0.01, color: p.accent }} accessibilityRole={text === APP_NAME ? undefined : 'header'}>
       {text}
     </Text>
+  );
+  // The Element name in the top left of every page takes you back to the feed.
+  if (text !== APP_NAME) return label;
+  return (
+    <Pressable onPress={() => go('/')} accessibilityRole="link" accessibilityLabel={`${APP_NAME}, back to the feed`} hitSlop={8}>
+      {label}
+    </Pressable>
   );
 }
 
