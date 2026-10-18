@@ -95,3 +95,29 @@ export function unseenReactions(cards: object[], noted: Set<string>): Record<str
 export function sameUser(a: { id: string; email: string } | null, b: { id: string; email: string } | null): boolean {
   return a === b || (!!a && !!b && a.id === b.id && a.email === b.email);
 }
+
+// ---- Hide topics ----
+
+export type TopicState = 'follow' | 'normal' | 'hide';
+
+export function topicState(prefs: Pick<UserPrefs, 'followed' | 'hidden'> | null, slug: string): TopicState {
+  if (prefs?.hidden.includes(slug)) return 'hide';
+  if (prefs?.followed.includes(slug)) return 'follow';
+  return 'normal';
+}
+
+// Sets one topic's state. A topic is never both followed and hidden (the server
+// rejects that with 422), so each state removes the slug from the other list.
+export function withTopicState(prefs: Pick<UserPrefs, 'followed' | 'hidden'>, slug: string, state: TopicState): { followed: string[]; hidden: string[] } {
+  const followed = prefs.followed.filter((s) => s !== slug);
+  const hidden = prefs.hidden.filter((s) => s !== slug);
+  if (state === 'follow') followed.push(slug);
+  if (state === 'hide') hidden.push(slug);
+  return { followed, hidden };
+}
+
+// Signed-in readers don't see hidden topics in the chips or the feed.
+export function withoutHidden<T extends { slug?: string; category?: string }>(list: T[], hidden: string[]): T[] {
+  if (hidden.length === 0) return list;
+  return list.filter((x) => !hidden.includes((x.slug ?? x.category) as string));
+}

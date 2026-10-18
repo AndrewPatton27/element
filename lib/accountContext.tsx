@@ -5,7 +5,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { BlurbCard } from '../contract/types.ts';
 import type { AccountApi, EmailChangeResult, SignUpResult } from './account.ts';
-import { ViewTracker, feedbackEvent, sameUser, unseenReactions, type Feedback, type UserPrefs } from './accountLogic.ts';
+import { EMPTY_PREFS, ViewTracker, feedbackEvent, sameUser, unseenReactions, withTopicState, type Feedback, type UserPrefs } from './accountLogic.ts';
 import type { AuthUser, RecoveryLink } from './session.ts';
 import { setOpenSourceListener } from './openUrl.ts';
 import { defaultStore } from './storage.ts';
@@ -19,7 +19,10 @@ export interface AccountState {
   signIn(email: string, password: string): Promise<void>;
   signUp(email: string, password: string): Promise<SignUpResult>;
   signOut(): Promise<void>;
-  savePrefs(followed: string[]): Promise<void>;
+  savePrefs(followed: string[], hidden?: string[]): Promise<void>;
+  /** Hide one topic right away (optimistic); resolves with the topics to restore for Undo. */
+  hideTopic(slug: string): Promise<{ followed: string[]; hidden: string[] }>;
+  restoreTopics(previous: { followed: string[]; hidden: string[] }): Promise<void>;
   skipOnboarding(): void;
   react(card: BlurbCard, pressed: Feedback): void;
   noteCards(cards: BlurbCard[]): void; // pick up my_reaction from For you cards
@@ -119,9 +122,25 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
       signIn: (email, password) => account.signIn(email, password),
       signUp: (email, password) => account.signUp(email, password),
       signOut: () => account.signOut(),
-      async savePrefs(followed) {
-        const p = await account.setPrefs(followed);
+      async savePrefs(followed, hidden) {
+        const p = await account.setPrefs(followed, hidden);
         setPrefs(p);
+      },
+      async hideTopic(slug) {
+        const before = prefs ?? EMPTY_PREFS;
+        const previous = { followed: before.followed, hidden: before.hidden };
+        const next = withTopicState(before, slug, 'hide');
+        setPrefs({ ...before, ...next }); // the topic disappears at once
+        try {
+          setPrefs(await account.setPrefs(next.followed, next.hidden));
+        } catch (e) {
+          setPrefs(before);
+          throw e;
+        }
+        return previous;
+      },
+      async restoreTopics(previous) {
+        setPrefs(await account.setPrefs(previous.followed, previous.hidden));
       },
       skipOnboarding() {
         if (user) store.set(skipKey(user.id), '1');

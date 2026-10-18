@@ -17,6 +17,9 @@ import {
   ViewTracker,
   forYouCoversTopics,
   sameUser,
+  topicState,
+  withTopicState,
+  withoutHidden,
   unseenReactions,
   feedbackEvent,
   mockForYouOrder,
@@ -422,4 +425,29 @@ test('B3: a token another tab already rotated is adopted, not treated as a sign-
   assert.equal(tabB.currentUser()?.id, 'u1');
   assert.equal(tabB.takeSignOutReason(), null);
   assert.ok(store.get('element.session.v1'), "tab A's good session is not wiped");
+});
+
+test('hide topics: three exclusive states', () => {
+  const prefs = { followed: ['tech', 'world'], hidden: ['deals'] };
+  assert.equal(topicState(prefs, 'tech'), 'follow');
+  assert.equal(topicState(prefs, 'deals'), 'hide');
+  assert.equal(topicState(prefs, 'energy'), 'normal');
+  assert.equal(topicState(null, 'tech'), 'normal');
+  assert.deepEqual(withTopicState(prefs, 'tech', 'hide'), { followed: ['world'], hidden: ['deals', 'tech'] }, 'hiding a followed topic unfollows it');
+  assert.deepEqual(withTopicState(prefs, 'deals', 'follow'), { followed: ['tech', 'world', 'deals'], hidden: [] });
+  assert.deepEqual(withTopicState(prefs, 'world', 'normal'), { followed: ['tech'], hidden: ['deals'] });
+  for (const slug of ['tech', 'deals', 'energy']) {
+    for (const st of ['follow', 'normal', 'hide'] as const) {
+      const next = withTopicState(prefs, slug, st);
+      assert.ok(!next.followed.some((s) => next.hidden.includes(s)), 'never both followed and hidden');
+    }
+  }
+});
+
+test('hidden topics leave the chips and the feed', () => {
+  const cats = [{ slug: 'tech', name: 'Tech' }, { slug: 'deals', name: 'Deals' }];
+  assert.deepEqual(withoutHidden(cats, ['deals']).map((c) => c.slug), ['tech']);
+  const cards = [{ id: 'a', category: 'deals' }, { id: 'b', category: 'tech' }];
+  assert.deepEqual(withoutHidden(cards, ['deals']).map((c) => c.id), ['b']);
+  assert.equal(withoutHidden(cards, []), cards, 'nothing hidden: same list');
 });
