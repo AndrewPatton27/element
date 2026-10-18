@@ -23,6 +23,7 @@ import { fileCounter, memoryCounter } from './summarizer/chain.ts';
 import { buildProviders } from './summarizer/providers.ts';
 import { templateSummarizer } from './summarizer/template.ts';
 import { cpscUrl } from './sources/cpsc.ts';
+import { nasaFeedUrl } from './sources/nasa.ts';
 import { wikimediaUserAgent, wikiFeedUrl } from './sources/wiki.ts';
 
 export interface Args {
@@ -73,9 +74,12 @@ export function fixtureFetcher(): Deps['fetchText'] {
     if ((config.feeds.fedRss as readonly string[]).includes(url)) return fixture('fed-press-monetary.rss.xml');
     if (url === config.feeds.beaRss) return fixture('bea-releases.rss.xml');
     if (url === wikiFeedUrl(DRY_NOW)) return fixture('wiki-featured-2026-10-17.json');
+    if (url === wikiFeedUrl(DRY_NOW, 1)) return fixture('wiki-featured-2026-10-16.json');
+    if (url === wikiFeedUrl(DRY_NOW, 2)) return '{"tfa":{},"mostread":{}}';          // a past day without a `news` list = no items
     if (url === cpscUrl(DRY_NOW)) return fixture('cpsc-recalls-2026-10-03.json');
     if (url === config.usgs.url) return fixture('usgs-significant-week.geojson');
     if (url === config.nasa.feedUrl) return fixture('nasa-news-release.rss.xml');
+    if (url === nasaFeedUrl(2)) return fixture('nasa-news-release-page2.rss.xml');
     const fr = fedRegisterUrls();
     if (url === fr[0]) return fixture('fedreg-agencies.json');
     if (url === fr[1]) return fixture('fedreg-significant.json');

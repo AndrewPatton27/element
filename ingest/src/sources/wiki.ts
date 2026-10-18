@@ -20,9 +20,9 @@ export interface WikiNewsItem {
   }[];
 }
 
-/** Today's (UTC) featured-feed URL. The `news` list only exists for the current date. */
-export function wikiFeedUrl(now: Date): string {
-  const d = now.toISOString().slice(0, 10).split('-');
+/** Featured-feed URL for the UTC day `daysBack` days before `now` (0 = today). The `news` list may be missing for past days. */
+export function wikiFeedUrl(now: Date, daysBack = 0): string {
+  const d = new Date(now.getTime() - daysBack * 86_400_000).toISOString().slice(0, 10).split('-');
   return config.wiki.featuredUrl.replace('{yyyy}', d[0]).replace('{mm}', d[1]).replace('{dd}', d[2]);
 }
 

@@ -21,5 +21,7 @@ Labels: **REAL** = verbatim fetched content. **RECONSTRUCTED** = every value com
 | `cpsc-recalls-2026-10-03.json` | REAL (saferproducts.gov recalls API, RecallDateStart=2026-10-03, fetched 2026-10-17 22:31 UTC, byte-for-byte, so no label inside the file) |
 | `usgs-significant-week.geojson` | REAL (USGS significant_week.geojson, fetched 2026-10-17 22:31 UTC, byte-for-byte, so no label inside the file) |
 | `nasa-news-release.rss.xml` | RECONSTRUCTED (NASA news-release RSS, fetched 2026-10-17 22:31 UTC; channel header and 3 of 10 items verbatim) |
+| `nasa-news-release-page2.rss.xml` | SYNTHETIC (page 2 of the NASA feed, `?paged=2`: a 9-day-old and a 20-day-old news release, a repeat of the page 1 release, an image article and a blog post; fictional text) |
+| `wiki-featured-2026-10-16.json` | SYNTHETIC (Wikipedia featured feed for the day before: one story that repeats the 10-17 feed, one fictional story only this day has; tests the cross-day dedupe) |
 | `sec-company-tickers-watch.json` | RECONSTRUCTED (rows verbatim from SEC company_tickers_exchange.json, fetched 2026-10-17, filtered to the watch-list CIKs plus GoPro, LifeStance, Laser Photonics and Bridgeline Digital) |
 | `sec-submissions-CIK0000320193.json` | RECONSTRUCTED (Apple's data.sec.gov submissions JSON, fetched 2026-10-17; identity fields and `filings.recent` verbatim, arrays filtered to the first 3 rows plus every 8-K / 8-K/A row) |

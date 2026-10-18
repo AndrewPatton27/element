@@ -6,11 +6,11 @@
 // Outputs: RunStats counts; cards and items are written through deps.publisher.
 
 import { config, fedRegisterUrls } from './config.ts';
-import { createGuard } from './dedupe.ts';
+import { createGuard, normalizeUrl } from './dedupe.ts';
 import { buildPublishPayload, type Publisher } from './publish.ts';
 import { beaItemToItem } from './sources/bea.ts';
 import { cpscToItem, cpscUrl, parseCpscJson, selectRecalls } from './sources/cpsc.ts';
-import { nasaToItem, parseNasaRss, selectNasaReleases } from './sources/nasa.ts';
+import { nasaFeedUrl, nasaToItem, parseNasaRss, selectNasaReleases } from './sources/nasa.ts';
 import { parseUsgsGeoJson, usgsDraft, usgsToItem } from './sources/usgs.ts';
 import { parseWikiFeed, wikiFeedUrl, wikiItemToItem } from './sources/wiki.ts';
 import { fedRegDocToItem, isAirworthinessDirective, mergeFedRegDocs, parseFedRegJson, type FrDoc } from './sources/fedreg.ts';
@@ -127,44 +127,64 @@ async function runFedReg(deps: Deps, { stats, budget, guard, chain }: RunCtx): P
   }
   const docs = mergeFedRegDocs(lists, deps.now);
   const items: RawItem[] = [];
-  let airworthiness = 0;
   for (const d of docs) {
     const r = fedRegDocToItem(d, deps.now);
-    if ('item' in r) {
-      // FAA airworthiness directives are near-identical aircraft fix orders: only the newest N per run are candidates.
-      if (isAirworthinessDirective(r.item.title) && ++airworthiness > config.fedRegister.maxAirworthinessPerRun) {
-        stats.skipped++;
-        deps.log(`skip faa_directive_cap (max ${config.fedRegister.maxAirworthinessPerRun} airworthiness directive per run): Federal Register ${d.document_number}: ${d.title.slice(0, 80)}`);
-        continue;
-      }
-      items.push(r.item);
-      continue;
-    }
+    if ('item' in r) { items.push(r.item); continue; }
     stats.skipped++;
     deps.log(`skip ${r.skip}: Federal Register ${d.document_number}: ${d.title.slice(0, 80)}`);
   }
   deps.log(`fedreg: ${docs.length} documents in the last ${config.fedRegister.maxAgeDays} days, ${items.length} with an abstract`);
-  await processItems(items, deps, stats, budget, guard, chain, async () => '');
+  // FAA airworthiness directives are near-identical aircraft fix orders: at most N NEW ones per run
+  // (newest first). Directives an earlier run already handled do not use up the cap.
+  await processItems(items, deps, stats, budget, guard, chain, async () => '', undefined, {
+    group: {
+      of: (it) => (isAirworthinessDirective(it.title) ? 'faa' : null),
+      max: config.fedRegister.maxAirworthinessPerRun, skip: 'faa_directive_cap', label: 'airworthiness directive',
+    },
+  });
 }
 
-/** Wikipedia "In the news": today's UTC feed only, JSON API (API host list), story + extract only. */
+/**
+ * Wikipedia "In the news": the feeds of the last config.wiki.lookbackDays UTC days (today first),
+ * JSON API (API host list), story + extract only. A story that appears on several days is kept once
+ * (same external_id or same article URL). A day whose feed fails or has no `news` list is logged and skipped.
+ */
 async function runWiki(deps: Deps, { stats, budget, guard, chain }: RunCtx): Promise<void> {
-  try {
-    const news = parseWikiFeed(await deps.fetchText(wikiFeedUrl(deps.now), 'api', 0));
-    const items: RawItem[] = [];
-    for (const n of news) {
-      const r = wikiItemToItem(n, deps.now);
-      if ('item' in r) items.push(r.item);
-      else { stats.skipped++; deps.log(`skip ${r.skip}: Wikipedia story`); }
+  const items: RawItem[] = [];
+  const seenIds = new Set<string>();
+  const seenUrls = new Set<string>();
+  const perDay: string[] = [];
+  for (let back = 0; back < config.wiki.lookbackDays; back++) {
+    const day = new Date(deps.now.getTime() - back * 86_400_000);
+    const label = day.toISOString().slice(0, 10);
+    try {
+      const news = parseWikiFeed(await deps.fetchText(wikiFeedUrl(deps.now, back), 'api', 0));
+      let added = 0;
+      for (const n of news) {
+        const r = wikiItemToItem(n, day);          // a story without a date comment gets that feed day's date
+        if (!('item' in r)) { stats.skipped++; deps.log(`skip ${r.skip}: Wikipedia story`); continue; }
+        const url = normalizeUrl(r.item.url);
+        if (seenIds.has(r.item.external_id) || seenUrls.has(url)) continue;     // same story on an earlier (newer) day
+        seenIds.add(r.item.external_id);
+        seenUrls.add(url);
+        items.push(r.item);
+        added++;
+      }
+      perDay.push(`${label}: ${news.length} stories, ${added} new to this run`);
+    } catch (e) {
+      perDay.push(`${label}: feed failed`);
+      deps.log(`wiki: feed for ${label} failed: ${(e as Error).message}`);
     }
-    deps.log(`wiki: ${news.length} "In the news" stories, ${items.length} candidates`);
-    await processItems(items, deps, stats, budget, guard, chain, async () => '');
-  } catch (e) {
-    deps.log(`wiki: feed failed: ${(e as Error).message}`);
   }
+  const p = await processItems(items, deps, stats, budget, guard, chain, async () => '');
+  deps.log(`wiki: ${config.wiki.lookbackDays} days read (${perDay.join('; ')}); ${items.length} candidates, ${p.fresh} new, ${p.alreadyHandled} already handled`);
 }
 
-/** CPSC recalls: JSON API (API host list), the AI sees only the recall text in the JSON. */
+/**
+ * CPSC recalls: JSON API (API host list), the AI sees only the recall text in the JSON. All recalls in the
+ * lookback window are candidates (newest first); the cap of config.cpsc.maxPerRun counts only NEW recalls,
+ * so recalls an earlier run handled are skipped without using it and older unprocessed ones get their turn.
+ */
 async function runCpsc(deps: Deps, { stats, budget, guard, chain }: RunCtx): Promise<void> {
   try {
     const all = parseCpscJson(await deps.fetchText(cpscUrl(deps.now), 'api', 0));
@@ -175,20 +195,33 @@ async function runCpsc(deps: Deps, { stats, budget, guard, chain }: RunCtx): Pro
       if ('item' in x) items.push(x.item);
       else { stats.skipped++; deps.log(`skip ${x.skip}: CPSC recall ${r.RecallNumber ?? ''}`); }
     }
-    deps.log(`cpsc: ${all.length} recalls in the last ${config.cpsc.lookbackDays} days, ${items.length} taken (max ${config.cpsc.maxPerRun} per run)`);
-    await processItems(items, deps, stats, budget, guard, chain, async () => '');
+    const p = await processItems(items, deps, stats, budget, guard, chain, async () => '', undefined, { total: config.cpsc.maxPerRun });
+    deps.log(`cpsc: ${all.length} recalls in the last ${config.cpsc.lookbackDays} days, ${items.length} candidates, `
+      + `${p.alreadyHandled} already handled, ${p.fresh} new processed (max ${config.cpsc.maxPerRun} new per run)`);
   } catch (e) {
     deps.log(`cpsc: feed failed: ${(e as Error).message}`);
   }
 }
 
-/** NASA news releases: RSS (API host list), release text from the feed only, no page fetch. */
+/**
+ * NASA news releases: RSS (API host list), release text from the feed only, no page fetch. Reads
+ * config.nasa.feedPages pages of the feed (the feed holds only its 10 newest posts per page); an older page
+ * that fails is logged and skipped. Only real news releases (link prefix) within config.nasa.maxAgeDays count.
+ */
 async function runNasa(deps: Deps, { stats, budget, guard, chain }: RunCtx): Promise<void> {
   try {
-    const all = parseNasaRss(await deps.fetchText(config.nasa.feedUrl, 'api', 0));
+    const all = parseNasaRss(await deps.fetchText(nasaFeedUrl(1), 'api', 0));
+    for (let page = 2; page <= config.nasa.feedPages; page++) {
+      try {
+        all.push(...parseNasaRss(await deps.fetchText(nasaFeedUrl(page), 'api', 0)));
+      } catch (e) {
+        deps.log(`nasa: feed page ${page} failed (continuing): ${(e as Error).message}`);
+      }
+    }
     const items = selectNasaReleases(all, deps.now).map((i) => nasaToItem(i, deps.now));
-    deps.log(`nasa: ${all.length} feed items, ${items.length} news releases in the last ${config.nasa.maxAgeDays} days`);
-    await processItems(items, deps, stats, budget, guard, chain, async () => '');
+    const p = await processItems(items, deps, stats, budget, guard, chain, async () => '');
+    deps.log(`nasa: ${all.length} feed items over ${config.nasa.feedPages} page(s), ${items.length} news releases in the last ${config.nasa.maxAgeDays} days, `
+      + `${p.alreadyHandled} already handled, ${p.fresh} new`);
   } catch (e) {
     deps.log(`nasa: feed failed: ${(e as Error).message}`);
   }
@@ -291,16 +324,29 @@ async function runSec(
 }
 
 /**
+ * Limits on how many NEW items one processItems call works on. "New" = not handled by an earlier run
+ * (the same check as the `is_new`/status test after `upsertItem`), so items already published or
+ * closed never use up a cap and each run moves on to the next unprocessed item.
+ */
+export interface NewLimits {
+  /** At most this many new items in this call; later items are not even recorded. */
+  total?: number;
+  /** At most `max` new items per group (`of` returns the group key, null = no group). The rest are skipped with `skip <skip>`. */
+  group?: { of(it: RawItem): string | null; max: number; skip: string; label: string };
+}
+
+/**
  * Turns candidate items into published cards, one at a time. Outline per item:
- *   1. stop when the run's budget is used up
- *   2. dedupe / ticker-cap guard (before any network or AI call)
- *   3. record the item; skip it if an earlier run already handled it
+ *   1. stop when the run's budget or the new-item total (limits.total) is used up
+ *   2. dedupe / ticker-cap guard (before any network or AI call); group cap (limits.group) on new items
+ *   3. record the item; skip it if an earlier run already handled it (does not count towards any cap)
  *   4. fetch page text (failure = feed text only)
  *   5. source-specific preCheck (e.g. routine 5.02) -> skipped
  *   6. summarizer chain -> low relevance (skipped) / earnings card without figures (skipped, no_figures) /
  *      template not allowed (skipped)
  *   7. build payload, validate, publish, count and log
  * Any error in 6-7 marks the item failed and the loop continues.
+ * Returns how many items were new (worked on) and how many an earlier run had already handled.
  */
 async function processItems(
   items: RawItem[],
@@ -312,15 +358,31 @@ async function processItems(
   pageText: (it: RawItem) => Promise<string>,
   // Checked after the page text is fetched and before any AI call: a reason string skips the item.
   preCheck: (it: RawItem, text: string) => string | null = () => null,
-): Promise<void> {
+  limits: NewLimits = {},
+): Promise<{ fresh: number; alreadyHandled: number }> {
+  let fresh = 0;
+  let alreadyHandled = 0;
+  const perGroup = new Map<string, number>();
   for (const it of items) {
-    if (budget.left <= 0) { deps.log('limit reached'); return; }
+    if (budget.left <= 0) { deps.log('limit reached'); break; }
+    if (limits.total !== undefined && fresh >= limits.total) {
+      deps.log(`new-item limit reached (${limits.total} new per run)`);
+      break;
+    }
     const cand = { url: it.url, tickers: it.tickers.map((t) => t.symbol), sortAt: new Date(it.published_at) };
     const d = guard.check(cand);
     if (!d.ok) { deps.log(`skip ${d.reason}: ${it.title}`); stats.skipped++; continue; }
+    const group = limits.group?.of(it) ?? null;
+    if (group !== null && limits.group && (perGroup.get(group) ?? 0) >= limits.group.max) {
+      stats.skipped++;
+      deps.log(`skip ${limits.group.skip} (max ${limits.group.max} ${limits.group.label} per run): ${it.title.slice(0, 80)}`);
+      continue;
+    }
 
     const row = await deps.publisher.upsertItem(it);
-    if (!row.is_new && row.status !== 'new') { stats.skipped++; continue; }   // handled in an earlier run
+    if (!row.is_new && row.status !== 'new') { stats.skipped++; alreadyHandled++; continue; }   // handled in an earlier run
+    fresh++;
+    if (group !== null) perGroup.set(group, (perGroup.get(group) ?? 0) + 1);
 
     let text = it.summary_text;
     try {
@@ -386,6 +448,7 @@ async function processItems(
       await deps.publisher.setItemStatus(row.id, 'failed', (e as Error).message).catch(() => {});
     }
   }
+  return { fresh, alreadyHandled };
 }
 
 /**

@@ -259,6 +259,10 @@ export const config = {
   // current date); a missing `news` key = 0 items. AI text = story sentence + links[0].extract.
   wiki: {
     featuredUrl: 'https://en.wikipedia.org/api/rest_v1/feed/featured/{yyyy}/{mm}/{dd}',
+    // How many UTC days of "In the news" feeds one run reads, today included (3 = today and the 2
+    // days before). Stories are deduplicated across days by external_id and URL; a day whose feed
+    // fails or has no `news` list is logged and skipped. The same allowlisted API and parser are used.
+    lookbackDays: 3,
     aiTextMaxChars: 1500,
     category: 'world',
     eventType: 'world_event',
@@ -273,7 +277,10 @@ export const config = {
     url: 'https://www.saferproducts.gov/RestWebServices/Recall?format=json&RecallDateStart={start}',
     lookbackDays: 14,
     rewriteLookbackDays: 120,                   // --rewrite looks this far back to find an old recall again
-    maxPerRun: 5,                               // recalls can flood the feed (PM review 2)
+    // Recalls can flood the feed (PM review 2): at most this many NEW recalls are processed per run.
+    // Recalls an earlier run already handled do not count, so each run moves on to the next
+    // unprocessed recall inside the lookback window (newest first).
+    maxPerRun: 5,
     category: 'safety',
     eventType: 'recall',
     sourceName: 'U.S. Consumer Product Safety Commission',
@@ -284,7 +291,13 @@ export const config = {
   nasa: {
     feedUrl: 'https://www.nasa.gov/news-release/feed/',
     linkPrefix: 'https://www.nasa.gov/news-release/',
-    maxAgeDays: 7,
+    // The feed returns only its 10 newest posts (WordPress default) and mixes in APOD, image articles and
+    // blog posts, so on 2026-10-17 just 1 of 10 items was a news release. The link-prefix filter is
+    // correct and stays; releases are infrequent, so the age window is 14 days (was 7) and the run also
+    // reads `feedPages - 1` older pages of the same feed (WordPress `?paged=N`, same allowlisted host).
+    // An older page that fails is logged and skipped.
+    maxAgeDays: 14,
+    feedPages: 2,
     category: 'science',
     eventType: 'science',
     attribution: 'Source: NASA',

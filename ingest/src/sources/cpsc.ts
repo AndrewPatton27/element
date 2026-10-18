@@ -34,8 +34,12 @@ export function parseCpscJson(text: string): CpscRecall[] {
 
 const recallTime = (r: CpscRecall) => Date.parse(`${(r.RecallDate ?? '').slice(0, 10)}T00:00:00Z`);
 
-/** Recalls inside the lookback, newest first, at most maxPerRun. */
-export function selectRecalls(list: CpscRecall[], now: Date, maxPerRun: number = config.cpsc.maxPerRun): CpscRecall[] {
+/**
+ * Recalls inside the lookback, newest first. With `maxPerRun` (default: none) only the first N are kept.
+ * The live run does NOT cap here: the cap of config.cpsc.maxPerRun counts only NEW recalls, so
+ * processItems applies it after its already-handled check (see runCpsc).
+ */
+export function selectRecalls(list: CpscRecall[], now: Date, maxPerRun: number = Infinity): CpscRecall[] {
   const oldest = now.getTime() - config.cpsc.lookbackDays * 86_400_000;
   return list
     .filter((r) => Number.isFinite(recallTime(r)) && recallTime(r) >= oldest)

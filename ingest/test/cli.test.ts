@@ -38,7 +38,7 @@ test('dry run end to end: 5 template cards (1 Fed, 2 BEA, 2 USGS), Federal Regis
   assert.equal(stats.published, 5);
   assert.equal(stats.template, 5);
   assert.equal(dry.cards.filter((c) => c.sources[0].name === 'Federal Register').length, 0, 'no template Federal Register cards');
-  assert.equal(lines.filter((l) => l.startsWith('skip template_not_allowed')).length, 15);   // 5 Federal Register, 4 Wikipedia, 5 CPSC, 1 NASA
+  assert.equal(lines.filter((l) => l.startsWith('skip template_not_allowed')).length, 17);   // 5 Federal Register, 5 Wikipedia (4 today + 1 from yesterday), 5 CPSC (new-only cap), 2 NASA (page 1 + page 2)
   assert.equal(lines.filter((l) => l.startsWith('skip low_interest')).length, 3, 'green-alert quakes: 2 on the Mid-Atlantic Ridge, 1 small one in Panama');
   assert.ok(lines.includes('skip routine_5.02: Costco Wholesale Corp 8-K'), 'Costco bonus-criteria 5.02 is routine');
   assert.ok(lines.some((l) => /not candidates: not_watched 1/.test(l)), 'GoPro is not on the watch list');

@@ -36,12 +36,22 @@ export function parseNasaRss(xml: string): NasaItem[] {
   })).filter((i) => i.title && i.link);
 }
 
-/** News releases only (link prefix), within maxAgeDays, newest first. */
-export function selectNasaReleases(items: NasaItem[], now: Date): NasaItem[] {
-  const oldest = now.getTime() - config.nasa.maxAgeDays * 86_400_000;
+/** Feed URL for page 1 (the plain feed) or an older page (`?paged=N`, standard WordPress paging). */
+export function nasaFeedUrl(page = 1): string {
+  return page <= 1 ? config.nasa.feedUrl : `${config.nasa.feedUrl}?paged=${page}`;
+}
+
+/**
+ * News releases only (link prefix: no APOD, image articles, blog posts or podcasts), within
+ * config.nasa.maxAgeDays, newest first, one entry per link (pages can overlap).
+ */
+export function selectNasaReleases(items: NasaItem[], now: Date, maxAgeDays: number = config.nasa.maxAgeDays): NasaItem[] {
+  const oldest = now.getTime() - maxAgeDays * 86_400_000;
+  const seen = new Set<string>();
   return items
     .filter((i) => i.link.startsWith(config.nasa.linkPrefix))
     .filter((i) => Date.parse(i.pubDate) >= oldest)
+    .filter((i) => (seen.has(i.link) ? false : (seen.add(i.link), true)))
     .sort((a, b) => Date.parse(b.pubDate) - Date.parse(a.pubDate));
 }
 

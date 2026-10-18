@@ -131,12 +131,16 @@ test('wiki: copy limit 10 words applies to Wikipedia text', () => {
   assert.match(validateDraft(copied, src).errors.join(), /copies \d+ consecutive words .*limit 10/);
 });
 
-test('wiki pipeline: one API request, AI cards in world with the attribution on card and source; low relevance skipped', async () => {
+test('wiki pipeline: API requests for today and the 2 days before, AI cards in world with the attribution on card and source; low relevance skipped', async () => {
   const seen: SummarizeInput[] = [];
   const { d, dry, requests } = deps([fakeAi(seen), templateSummarizer]);
   const s = await runOnce(d, { only: ['wiki'] });
-  assert.deepEqual(requests, [{ url: 'https://en.wikipedia.org/api/rest_v1/feed/featured/2026/10/17', kind: 'api' }]);
-  assert.equal(s.published, 4);
+  assert.deepEqual(requests, [
+    { url: 'https://en.wikipedia.org/api/rest_v1/feed/featured/2026/10/17', kind: 'api' },
+    { url: 'https://en.wikipedia.org/api/rest_v1/feed/featured/2026/10/16', kind: 'api' },
+    { url: 'https://en.wikipedia.org/api/rest_v1/feed/featured/2026/10/15', kind: 'api' },
+  ]);
+  assert.equal(s.published, 5, '4 stories today + 1 story only in yesterday\'s feed (the other one repeats today\'s)');
   for (const c of dry.cards) {
     assert.equal(c.category, 'world');
     assert.equal(c.event_type, 'world_event');
@@ -150,16 +154,17 @@ test('wiki pipeline: one API request, AI cards in world with the attribution on 
   const low = deps([fakeAi([], 2), templateSummarizer]);
   const s2 = await runOnce(low.d, { only: ['wiki'] });
   assert.equal(s2.published, 0);
-  assert.equal(low.lines.filter((l) => l.startsWith('skip low_relevance (2)')).length, 4);
+  assert.equal(low.lines.filter((l) => l.startsWith('skip low_relevance (2)')).length, 5);
 });
 
 // ---- CPSC ----------------------------------------------------------------------------------
 
-test('cpsc: 14-day lookback URL, newest first, max 5 per run, recall URL as the source, AI text from the JSON only', () => {
+test('cpsc: 14-day lookback URL, newest first, recall URL as the source, AI text from the JSON only (cap of 5 applies to new recalls in the pipeline)', () => {
   assert.equal(cpscUrl(DRY_NOW), 'https://www.saferproducts.gov/RestWebServices/Recall?format=json&RecallDateStart=2026-10-03');
   const all = parseCpscJson(CPSC);
   assert.equal(all.length, 14);
-  const picked = selectRecalls(all, DRY_NOW);
+  assert.equal(selectRecalls(all, DRY_NOW).length, 14);
+  const picked = selectRecalls(all, DRY_NOW, config.cpsc.maxPerRun);
   assert.equal(picked.length, 5);
   for (let i = 1; i < picked.length; i++) assert.ok(picked[i - 1].RecallDate! >= picked[i].RecallDate!);
   const it = (cpscToItem(picked[0], DRY_NOW) as { item: RawItem }).item;
@@ -316,8 +321,11 @@ test('nasa: only news releases (APOD and image articles dropped); release text w
   const seen: SummarizeInput[] = [];
   const { d, dry, requests } = deps([fakeAi(seen), templateSummarizer]);
   const s = await runOnce(d, { only: ['nasa'] });
-  assert.deepEqual(requests, [{ url: 'https://www.nasa.gov/news-release/feed/', kind: 'api' }]);
-  assert.equal(s.published, 1);
+  assert.deepEqual(requests, [
+    { url: 'https://www.nasa.gov/news-release/feed/', kind: 'api' },
+    { url: 'https://www.nasa.gov/news-release/feed/?paged=2', kind: 'api' },
+  ]);
+  assert.equal(s.published, 2, 'page 1 release + the 9-day-old release on page 2');
   assert.equal(dry.cards[0].category, 'science');
   assert.equal(seen[0].text, seen[0].item.summary_text);
   assert.doesNotThrow(() => assertAllowed(config.nasa.feedUrl, 'api'));
