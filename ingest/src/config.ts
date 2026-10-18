@@ -81,7 +81,7 @@ export const config = {
     ] as readonly RegExp[],
     scorePromptVersion: 'report-card-v1',
     recentCardDays: 7,
-    auditBatchSize: 5,
+    auditBatchSize: 3,
     auditHideMaxFraction: 0.4,
   },
 

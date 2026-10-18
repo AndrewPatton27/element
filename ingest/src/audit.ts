@@ -10,17 +10,29 @@ const batchSize = config.reportCard.auditBatchSize;
 type AuditRow = { card: RevisableCard; score: CardScore };
 
 function parseScore(x: any): CardScore {
+  // The model sometimes puts the relation (NEW, RELATED...) in the decision field: the decision is recomputed from the scores below.
+  if (x && typeof x === 'object' && !['PASS', 'REVISE', 'ABANDON'].includes(x.decision)) x.decision = 'PASS';
   const scoreKeys = ['headline','summary','trust','importance','category','necessary','key_points','concise'];
-  if (!x || typeof x.topic_fit !== 'boolean' || !x.scores || !scoreKeys.every(k => Number.isInteger(x.scores[k]) && x.scores[k] >= 0 && x.scores[k] <= 2) || !['PASS','REVISE','ABANDON'].includes(x.decision) || !['DUPLICATE','UPDATE','ANGLE','RELATED','NEW'].includes(x.relation) || !Array.isArray(x.recommendations)) throw new Error('invalid report-card response');
+  if (!x || typeof x.topic_fit !== 'boolean' || !x.scores || !scoreKeys.every(k => Number.isInteger(x.scores[k]) && x.scores[k] >= 0 && x.scores[k] <= 2) || !['PASS','REVISE','ABANDON'].includes(x.decision) || !['DUPLICATE','UPDATE','ANGLE','RELATED','NEW'].includes(x.relation) || !Array.isArray(x.recommendations)) throw new Error('invalid report-card response: ' + JSON.stringify(x).slice(0, 260));
   if (!x.topic_fit || x.relation === 'DUPLICATE') x.decision = 'ABANDON';
   else if (Object.values(x.scores).some((n: any) => n === 0) || Object.values(x.scores).filter((n: any) => n === 1).length >= 2) x.decision = 'REVISE';
   return x as CardScore;
 }
 
 async function groq(apiKey: string, prompt: string): Promise<any> {
-  const res = await fetch(config.groq.endpoint, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: config.groq.model, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, temperature: 0.1, max_completion_tokens: config.groq.maxCompletionTokens }) });
-  if (!res.ok) throw new Error(`Groq HTTP ${res.status}`);
-  const j: any = await res.json(); return JSON.parse(j.choices?.[0]?.message?.content ?? '');
+  for (let attempt = 0; ; attempt++) {
+    try { return await groqOnce(apiKey, prompt); }
+    catch (e: any) {
+      const m = /HTTP 429.*try again in ([0-9.]+)s/i.exec(String(e?.message ?? ''));
+      if (!m || attempt >= 8) throw e;
+      await new Promise((r) => setTimeout(r, Math.ceil(Number(m[1]) * 1000) + 1500));
+    }
+  }
+}
+async function groqOnce(apiKey: string, prompt: string): Promise<any> {
+  const res = await fetch(config.groq.endpoint, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: config.groq.model, messages: [{ role: 'user', content: prompt + ' Respond with one JSON object only.' }], response_format: { type: 'json_object' }, temperature: 0.1, max_completion_tokens: config.groq.maxCompletionTokens }) });
+  if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const j: any = await res.json(); const raw = j.choices?.[0]?.message?.content ?? ''; if (process.env.AUDIT_DEBUG) console.error('RAW', String(raw).slice(0, 1500)); return JSON.parse(raw);
 }
 const clean = (s: string | null | undefined) => (s ?? '').replace(/[|\n\r]+/g, ' ').trim();
 function glance(rows: AuditRow[]): string {
@@ -43,13 +55,13 @@ export async function runAudit(opts: { cards: RevisableCard[]; apply: boolean; n
   const cards = opts.cards;
   const scoreBatch = opts.score ?? (async (batch, recent) => {
     const brief=(c:RevisableCard)=>({id:c.id,headline:c.headline,summary:c.body,category:c.category,kind:c.kind,as_of:c.as_of,ai_generated:c.ai_generated,sources:c.sources?.map(s=>({name:s.name,url:s.url,published_at:s.published_at})),tickers:c.tickers,detail:(c as any).detail});
-    const result = await groq(opts.groqKey, `Apply all six sections of the Element card report card. Score headline, summary, trust, importance, category, necessary information, key_points/detail and concise (0-2). Check who/what/when/why, facts, labels, links and freshness. Category must be expected; propose category_fix when wrong. Key points need 3-5 complete, useful bullets. Compare every supplied recent card and other cards in this batch; ignore a card with the same id; choose DUPLICATE/UPDATE/ANGLE/RELATED/NEW. Return {scores:[{id,topic_fit,matched_topic,scores:{headline,summary,trust,importance,category,necessary,key_points,concise},decision,relation,related_id,category_fix,proposed_headline,reason,recommendations}]}. Score cards: ${JSON.stringify(batch.map(brief))}. Recent seven-day cards (may include same id): ${JSON.stringify(recent)}. DUPLICATE is ABANDON. Never invent facts.`);
+    const result = await groq(opts.groqKey, `Apply all six sections of the Element card report card. Score headline, summary, trust, importance, category, necessary information, key_points/detail and concise (0-2). Check who/what/when/why, facts, labels, links and freshness. Category must be expected; propose category_fix when wrong. Key points need 3-5 complete, useful bullets. Compare every supplied recent card and other cards in this batch; ignore a card with the same id; choose DUPLICATE/UPDATE/ANGLE/RELATED/NEW. Return {scores:[{id,topic_fit,matched_topic,scores:{headline,summary,trust,importance,category,necessary,key_points,concise},decision,relation,related_id,category_fix,proposed_headline,reason,recommendations}]}. Score cards: ${JSON.stringify(batch.map(brief))}. Recent seven-day cards (may include same id): ${JSON.stringify(recent.filter((r) => !batch.some((x) => x.id === r.id)))}. DUPLICATE is ABANDON. Never invent facts.`);
     return batch.map(c => parseScore(result.scores.find((s:any)=>s.id===c.id)));
   });
   const scores: CardScore[] = [];
   const cutoff = Date.now() - config.reportCard.recentCardDays*86400000;
   const recent = cards.filter(c=>Date.parse(c.as_of)>=cutoff);
-  for (let i=0;i<cards.length;i+=batchSize) scores.push(...await scoreBatch(cards.slice(i,i+batchSize), recent.map(c=>({id:c.id,headline:c.headline,body:c.body,category:c.category,as_of:c.as_of}))));
+  for (let i=0;i<cards.length;i+=batchSize) scores.push(...await scoreBatch(cards.slice(i,i+batchSize), recent.map(c=>({id:c.id,headline:c.headline,category:c.category,body:'',as_of:''}))));
   let rows = cards.map((card,i)=>({card,score:scores[i]!}));
   const summary = glance(rows);
   mkdirSync(dirname(out), {recursive:true});
