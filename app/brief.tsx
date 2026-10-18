@@ -153,13 +153,14 @@ export default function BriefScreen() {
           right={wide ? undefined : dayLabelShort(briefDate(data))}
           cards={view.headlines}
           categories={categories}
+          config={config}
           onOpen={setDetailCard}
           wide={wide}
           ranked
           showTeaser={mode === 'daily'}
         />
         {view.sections.map((s) => (
-          <BriefStories key={s.category} label={s.title} cards={s.cards} categories={categories} onOpen={setDetailCard} wide={wide} />
+          <BriefStories key={s.category} label={s.title} cards={s.cards} categories={categories} config={config} onOpen={setDetailCard} wide={wide} />
         ))}
       </>
     );
@@ -189,9 +190,8 @@ export default function BriefScreen() {
       </Text>
     ) : null;
   const meta = data ? <BriefMeta line={generatedLine(data)} refreshing={refreshing} onRefresh={refresh} /> : null;
-  const footer = (
-    <Text style={[styles.footer, { color: p.muted }]}>{briefFooter(view ? briefCards(view) : [], config)}</Text>
-  );
+  const footerText = briefFooter(view ? briefCards(view) : [], config);
+  const footer = footerText ? <Text style={[styles.footer, { color: p.muted }]}>{footerText}</Text> : null;
 
   if (wide) {
     return (

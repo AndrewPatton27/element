@@ -5,7 +5,8 @@
 
 import type { AppConfig, BlurbCard, Brief, Category, MacroFact, NumberTrend } from '../contract/types.ts';
 import { categoryName, clampText, relativeTime } from './format.ts';
-import { aiNoticeText, disclaimerText } from './labels.ts';
+import { cardLabels, cardNotices, disclaimerText, primarySource, shareAlikeCredit, type ShareAlikeCredit } from './labels.ts';
+import { isHttpUrl } from './types.ts';
 
 export type BriefMode = 'daily' | 'weekly';
 
@@ -177,12 +178,43 @@ export function teaser(body: string | null | undefined, max = 110): string {
 }
 
 /**
- * The line under the page. The disclaimer is always there; the AI notice joins it only when
- * a card on screen was written by a model (cards from templates carry no AI label).
+ * The page footer. Every story row carries its own labels (see briefRowLabels), so the
+ * footer only shows the disclaimer when no row does (a brief of numbers alone), and never
+ * a second time right under a row. null = no footer.
  */
-export function briefFooter(cards: BlurbCard[], config: AppConfig | null | undefined): string {
-  const ai = cards.some((c) => c.ai && c.ai.generated === true);
-  return [ai ? aiNoticeText(config) : null, disclaimerText(config)].filter(Boolean).join(' · ');
+export function briefFooter(cards: BlurbCard[], config: AppConfig | null | undefined): string | null {
+  return cards.length === 0 ? disclaimerText(config) : null;
+}
+
+export interface BriefRowSource {
+  label: string; // "SEC · 8-K"
+  url: string; // https only
+  count: number; // sources on the card
+}
+
+export interface BriefRowLabels {
+  source: BriefRowSource | null;
+  line: string; // "AI label · disclaimer" (AI label only for AI-written cards), then required notices
+  credit: ShareAlikeCredit | null; // Wikipedia CC BY-SA credit, when the card needs it
+}
+
+/**
+ * What one Brief row must show next to its headline (rule 5): a link to the primary
+ * source (https only) and one muted labels line. The disclaimer appears once per row.
+ */
+export function briefRowLabels(card: BlurbCard, config: AppConfig | null | undefined): BriefRowLabels {
+  const labels = cardLabels(card, config);
+  const primary = primarySource(card);
+  const source =
+    primary && isHttpUrl(primary.url)
+      ? {
+          label: primary.doc_label ? `${primary.name} · ${primary.doc_label}` : primary.name,
+          url: primary.url,
+          count: Math.max(card.source_count, card.sources.length),
+        }
+      : null;
+  const line = [labels.aiLabel, labels.disclaimer, ...cardNotices(card, config).map((n) => n.text)].filter(Boolean).join(' · ');
+  return { source, line, credit: shareAlikeCredit(card, config) };
 }
 
 /** Screen-reader sentence for a number trend: "10-year Treasury yield 5.10%, ▼ 0.09 this week. Source: U.S. Treasury". */

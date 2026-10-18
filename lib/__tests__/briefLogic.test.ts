@@ -5,6 +5,7 @@ import {
   briefDateLabel,
   briefFooter,
   briefIsEmpty,
+  briefRowLabels,
   briefView,
   dayLabelLong,
   dayLabelShort,
@@ -115,12 +116,42 @@ test('teaser: first sentence, capped, empty for no body', () => {
   assert.equal(teaser('Costs rose 3.1% last month. More.'), 'Costs rose 3.1% last month.');
 });
 
-test('briefFooter: always the disclaimer; the AI notice only when an AI card is shown', () => {
-  const ai = card({ id: 'ai' });
-  const tpl = card({ id: 't', ai: { generated: false, label: null } });
-  assert.equal(briefFooter([ai], config()), 'AI-generated summary · may contain errors · Informational only · Not investment advice');
-  assert.equal(briefFooter([tpl, dataCard()], config()), 'Informational only · Not investment advice');
+test('briefFooter: only when no row carries labels (numbers-only brief), and it is the disclaimer', () => {
+  assert.equal(briefFooter([card()], config()), null);
+  assert.equal(briefFooter([], config()), 'Informational only · Not investment advice');
   assert.equal(briefFooter([], null), 'Informational only · Not investment advice');
+});
+
+test('briefRowLabels: AI card gets a source link, the AI label and the disclaimer once', () => {
+  const r = briefRowLabels(card(), config());
+  assert.deepEqual(r.source, { label: 'SEC · Form 8-K', url: 'https://www.sec.gov/Archives/edgar/data/1/0001.htm', count: 1 });
+  assert.equal(r.line, 'AI-generated summary · may contain errors · Informational only · Not investment advice');
+  assert.equal(r.line.split('Informational only').length - 1, 1);
+  assert.equal(r.credit, null);
+});
+
+test('briefRowLabels: template and data cards carry no AI label; data cards from FRED add the notice', () => {
+  const tpl = briefRowLabels(card({ ai: { generated: false, label: null } }), config());
+  assert.equal(tpl.line, 'Informational only · Not investment advice');
+  const d = briefRowLabels(dataCard({ sources: [{ ...card().sources[0], name: 'FRED', doc_label: null }] }), config());
+  assert.equal(d.line, 'Informational only · Not investment advice · FRED notice text');
+  assert.equal(d.source?.label, 'FRED');
+});
+
+test('briefRowLabels: falls back to built-in wording without config; counts extra sources', () => {
+  const r = briefRowLabels(card({ source_count: 3 }), null);
+  assert.equal(r.line, 'AI-generated summary · may contain errors · Informational only · Not investment advice');
+  assert.equal(r.source?.count, 3);
+});
+
+test('briefRowLabels: a non-https source gives no link, a Wikipedia card gets its credit', () => {
+  const src = card().sources[0];
+  assert.equal(briefRowLabels(card({ sources: [{ ...src, url: 'http://example.com/x' }] }), config()).source, null);
+  const wiki = briefRowLabels(
+    card({ sources: [{ ...src, name: 'Wikipedia', doc_label: null, url: 'https://en.wikipedia.org/wiki/X', license_class: 'cc_by_sa' as never }] }),
+    config(),
+  );
+  assert.ok(wiki.credit && wiki.credit.articleUrl === 'https://en.wikipedia.org/wiki/X');
 });
 
 test('briefCards lists headlines then section cards', () => {
