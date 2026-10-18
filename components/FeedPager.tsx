@@ -20,6 +20,7 @@ interface Props {
   onEndReached: () => void;
   onShowSources: (card: BlurbCard) => void;
   onOpenDetail?: (card: BlurbCard) => void;
+  onMore?: (card: BlurbCard) => void;
   wide?: boolean;
   reactions?: Record<string, Feedback>;
   onReact?: (card: BlurbCard, pressed: Feedback) => void;
@@ -44,6 +45,7 @@ export function FeedPager({
   onReact,
   onActiveCard,
   active,
+  onMore,
 }: Props) {
   const p = usePalette();
   const list = useRef<FlatList<BlurbCard>>(null);
@@ -118,6 +120,7 @@ export function FeedPager({
             categories={categories}
             onShowSources={onShowSources}
             onOpenDetail={onOpenDetail}
+            onMore={onMore}
             onNext={last ? undefined : next}
             wide={wide}
             compact={compact}
@@ -129,7 +132,7 @@ export function FeedPager({
         </View>
       );
     },
-    [height, config, categories, onShowSources, onOpenDetail, next, wide, compact, items.length, done, p, reactions, onReact],
+    [height, config, categories, onShowSources, onOpenDetail, onMore, next, wide, compact, items.length, done, p, reactions, onReact],
   );
 
   return (

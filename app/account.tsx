@@ -14,7 +14,7 @@ import { fonts } from '../lib/theme';
 import { PasswordField, fieldStyles } from '../components/PasswordField';
 import { Shell } from '../components/Shell';
 import { Button } from '../components/States';
-import { TopicPicker } from '../components/TopicPicker';
+import { TopicStatePicker } from '../components/TopicStatePicker';
 
 type Section = 'email' | 'password' | 'topics' | 'data' | 'account' | 'session';
 type Msg = { text: string; error: boolean };
@@ -23,7 +23,7 @@ export default function AccountScreen() {
   const p = usePalette();
   const { categories } = useAppData();
   const acct = useAccount();
-  const [selected, setSelected] = useState<string[]>([]);
+  const [topics, setTopics] = useState<{ followed: string[]; hidden: string[] }>({ followed: [], hidden: [] });
   const [busy, setBusy] = useState<Section | null>(null);
   const [msgs, setMsgs] = useState<Partial<Record<Section, Msg>>>({});
   const [editingEmail, setEditingEmail] = useState(false);
@@ -38,7 +38,7 @@ export default function AccountScreen() {
     if (!acct.user) router.replace('/signin' as never);
   }, [acct.user]);
   useEffect(() => {
-    if (acct.prefs) setSelected(acct.prefs.followed);
+    if (acct.prefs) setTopics({ followed: acct.prefs.followed, hidden: acct.prefs.hidden });
   }, [acct.prefs]);
 
   async function run(section: Section, work: () => Promise<string | void>, done: string) {
@@ -86,7 +86,8 @@ export default function AccountScreen() {
   const card = [styles.card, { backgroundColor: p.surface, borderColor: p.border }];
   const input = [fieldStyles.input, { borderColor: p.borderStrong, backgroundColor: p.surface, color: p.ink }];
   const saved = acct.prefs?.followed ?? [];
-  const topicsChanged = saved.slice().sort().join() !== selected.slice().sort().join();
+  const key = (l: string[]) => l.slice().sort().join();
+  const topicsChanged = key(saved) !== key(topics.followed) || key(acct.prefs?.hidden ?? []) !== key(topics.hidden);
   const message = (s: Section) => {
     const m = msgs[s];
     return m ? (
@@ -182,11 +183,11 @@ export default function AccountScreen() {
             ? `“For you” puts ${saved.map((s) => categoryName(s, categories)).join(', ')} first.`
             : 'Pick topics to put them first in your “For you” feed.'}
         </Text>
-        <TopicPicker categories={categories} selected={selected} onChange={setSelected} />
+        <TopicStatePicker categories={categories} value={topics} onChange={setTopics} />
         {topicsChanged ? (
           <Button
             label={busy === 'topics' ? 'Saving…' : 'Save topics'}
-            onPress={() => void run('topics', () => acct.savePrefs(selected), 'Topics saved.')}
+            onPress={() => void run('topics', () => acct.savePrefs(topics.followed, topics.hidden), 'Topics saved.')}
           />
         ) : null}
         {message('topics')}
@@ -249,7 +250,7 @@ export default function AccountScreen() {
           disabled={!deleteConfirmed(deleteText) || busy === 'account'}
           onPress={() => void run('account', () => acct.deleteAccount(), 'Your account was deleted.')}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !deleteConfirmed(deleteText) }}
+          aria-disabled={!deleteConfirmed(deleteText)}
           style={[styles.danger, { backgroundColor: p.up, opacity: deleteConfirmed(deleteText) ? 1 : 0.4 }]}
         >
           <Text style={[styles.dangerText, { color: '#FFFFFF' }]}>{busy === 'account' ? 'Deleting…' : 'Delete my account'}</Text>

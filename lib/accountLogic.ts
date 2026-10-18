@@ -108,7 +108,11 @@ export function topicState(prefs: Pick<UserPrefs, 'followed' | 'hidden'> | null,
 
 // Sets one topic's state. A topic is never both followed and hidden (the server
 // rejects that with 422), so each state removes the slug from the other list.
-export function withTopicState(prefs: Pick<UserPrefs, 'followed' | 'hidden'>, slug: string, state: TopicState): { followed: string[]; hidden: string[] } {
+export function withTopicState(
+  prefs: Pick<UserPrefs, 'followed' | 'hidden'>,
+  slug: string,
+  state: TopicState,
+): { followed: string[]; hidden: string[] } {
   const followed = prefs.followed.filter((s) => s !== slug);
   const hidden = prefs.hidden.filter((s) => s !== slug);
   if (state === 'follow') followed.push(slug);

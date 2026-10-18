@@ -22,7 +22,7 @@ export function SortToggle({ mode, onChange, wide, forYou }: { mode: FeedTab; on
             key={o.mode}
             onPress={() => onChange(o.mode)}
             accessibilityRole="tab"
-            accessibilityState={{ selected: on }}
+            aria-selected={on}
             accessibilityHint={o.hint}
             style={[styles.tab, wide && styles.tabWide, { borderBottomColor: on ? p.accent : 'transparent' }]}
           >

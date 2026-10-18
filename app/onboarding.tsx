@@ -17,6 +17,7 @@ export default function OnboardingScreen() {
   const { categories } = useAppData();
   const acct = useAccount();
   const [selected, setSelected] = useState<string[]>([]);
+  const [hidden, setHidden] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +32,10 @@ export default function OnboardingScreen() {
     setBusy(true);
     setError(null);
     try {
-      await acct.savePrefs(selected);
+      await acct.savePrefs(
+        selected,
+        hidden.filter((h) => !selected.includes(h)),
+      );
       router.dismissTo('/?tab=for_you' as never);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save your topics.');
@@ -49,6 +53,12 @@ export default function OnboardingScreen() {
         Your “For you” feed puts these first. Likes and “less like this” fine-tune it over time. You can change this any time.
       </Text>
       <TopicPicker categories={categories} selected={selected} onChange={setSelected} />
+      <Text style={[styles.sub, { color: p.muted }]}>Topics to hide (optional): you won’t see these at all.</Text>
+      <TopicPicker
+        categories={categories.filter((c) => !selected.includes(c.slug))}
+        selected={hidden.filter((h) => !selected.includes(h))}
+        onChange={setHidden}
+      />
       {error ? (
         <Text style={[styles.error, { color: p.up }]} accessibilityRole="alert">
           {error}

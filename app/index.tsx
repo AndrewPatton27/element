@@ -8,7 +8,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import type { BlurbCard, CategorySlug } from '../contract/types.ts';
 import { useAppData } from '../lib/appData';
 import { useAccount } from '../lib/accountContext';
-import { forYouCoversTopics } from '../lib/accountLogic';
+import { forYouCoversTopics, withoutHidden } from '../lib/accountLogic';
 import { SIGN_IN_AGAIN_MESSAGE } from '../lib/session';
 import type { FeedTab } from '../lib/feedLogic';
 import { categoryName } from '../lib/format';
@@ -24,6 +24,8 @@ import { Shell, Wordmark } from '../components/Shell';
 import { SortToggle } from '../components/SortToggle';
 import { SourcesSheet } from '../components/SourcesSheet';
 import { DetailSheet } from '../components/DetailSheet';
+import { CardMenu } from '../components/CardMenu';
+import { UndoToast } from '../components/UndoToast';
 import { EmptyState, ErrorState, LoadingState } from '../components/States';
 
 const PROMPT_KEY = 'element.signin-prompt-dismissed';
@@ -40,6 +42,8 @@ export default function FeedScreen() {
   const [category, setCategory] = useState<CategorySlug | null>(null);
   const [sheetCard, setSheetCard] = useState<BlurbCard | null>(null);
   const [detailCard, setDetailCard] = useState<BlurbCard | null>(null);
+  const [menuCard, setMenuCard] = useState<BlurbCard | null>(null);
+  const [undo, setUndo] = useState<{ message: string; previous: { followed: string[]; hidden: string[] } } | null>(null);
   // The feed stays mounted under Numbers / About / Account; only drive it (keys,
   // view tracking) while it's the screen on top (B2).
   const [focused, setFocused] = useState(true);
@@ -64,12 +68,37 @@ export default function FeedScreen() {
   const showSources = useCallback((c: BlurbCard) => setSheetCard(c), []);
   const openDetail = useCallback((c: BlurbCard) => setDetailCard(c), []);
 
+  // Signed in: hidden topics leave the feed and the chips at once (the server filters too).
+  const hidden = signedIn ? (acct.prefs?.hidden ?? []) : [];
+  const items = withoutHidden(state.items, hidden);
+  const chipCategories = withoutHidden(categories, hidden);
+  useEffect(() => {
+    if (category && hidden.includes(category)) setCategory(null);
+  }, [category, hidden]);
+
+  const hideTopic = useCallback(
+    (c: BlurbCard) => {
+      setMenuCard(null);
+      const topic = categoryName(c.category, categories);
+      acct
+        .hideTopic(c.category)
+        .then((previous) => setUndo({ message: `${topic} topics hidden.`, previous }))
+        .catch(() => setUndo(null));
+    },
+    [acct, categories],
+  );
+  const undoHide = useCallback(() => {
+    if (undo) void acct.restoreTopics(undo.previous).catch(() => undefined);
+    setUndo(null);
+  }, [acct, undo]);
+  const clearUndo = useCallback(() => setUndo(null), []);
+
   const { noteCards, trackView, react } = acct;
   useEffect(() => {
     if (forYou) noteCards(state.items);
   }, [forYou, state.items, noteCards]);
 
-  const first = state.items.length === 0;
+  const first = items.length === 0;
   let body;
   if (first && state.error) body = <ErrorState message={state.error} onRetry={retry} />;
   else if (first && (state.loading || !state.done)) body = <LoadingState label="Loading the feed…" />;
@@ -84,7 +113,7 @@ export default function FeedScreen() {
   } else {
     body = (
       <FeedPager
-        items={state.items}
+        items={items}
         config={config}
         categories={categories}
         loadingMore={state.loading}
@@ -96,13 +125,14 @@ export default function FeedScreen() {
         reactions={signedIn ? acct.reactions : undefined}
         onReact={signedIn ? react : undefined}
         onActiveCard={signedIn && focused ? trackView : undefined}
-        active={focused && sheetCard === null && detailCard === null}
+        active={focused && sheetCard === null && detailCard === null && menuCard === null}
+        onMore={signedIn ? setMenuCard : undefined}
       />
     );
   }
 
   const inlineError =
-    state.items.length > 0 && state.error ? (
+    items.length > 0 && state.error ? (
       <Pressable onPress={retry} accessibilityRole="button" style={[styles.inlineError, { backgroundColor: p.dataSoft }]}>
         <Text style={{ color: p.dataInk, fontFamily: fonts.sansSemi }}>Could not load more. Tap to retry.</Text>
       </Pressable>
@@ -159,7 +189,17 @@ export default function FeedScreen() {
     </View>
   ) : undefined;
 
-  const chips = forYou ? forYouLine : <CategoryChips categories={categories} selected={category} onSelect={setCategory} wide={wide} />;
+  const chips = forYou ? (
+    forYouLine
+  ) : (
+    <CategoryChips
+      categories={chipCategories}
+      selected={category}
+      onSelect={setCategory}
+      wide={wide}
+      onEdit={signedIn ? () => router.navigate('/account' as never) : undefined}
+    />
+  );
 
   return (
     <Shell active="feed" aside={aside}>
@@ -185,6 +225,8 @@ export default function FeedScreen() {
       <View style={[styles.fill, wide && { marginTop: 14 }]}>{body}</View>
       <SourcesSheet card={sheetCard} config={config} onClose={() => setSheetCard(null)} />
       <DetailSheet card={detailCard} config={config} categories={categories} onClose={() => setDetailCard(null)} />
+      <CardMenu card={menuCard} categories={categories} onHideTopic={hideTopic} onClose={() => setMenuCard(null)} />
+      <UndoToast message={undo?.message ?? null} onUndo={undoHide} onDone={clearUndo} />
     </Shell>
   );
 }

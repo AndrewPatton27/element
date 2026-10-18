@@ -45,7 +45,7 @@ export function PasswordField({ label, value, onChangeText, autoComplete, placeh
           onPress={() => setVisible((v) => !v)}
           accessibilityRole="button"
           accessibilityLabel={passwordToggleLabel(visible)}
-          accessibilityState={{ checked: visible }}
+          aria-pressed={visible}
           hitSlop={4}
           style={({ pressed }) => [styles.eye, { opacity: pressed ? 0.6 : 1 }]}
         >

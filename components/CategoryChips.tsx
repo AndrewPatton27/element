@@ -11,9 +11,10 @@ interface Props {
   selected: CategorySlug | null;
   onSelect: (slug: CategorySlug | null) => void;
   wide?: boolean;
+  onEdit?: () => void; // signed in: a last chip that opens Account → Your topics
 }
 
-export function CategoryChips({ categories, selected, onSelect, wide }: Props) {
+export function CategoryChips({ categories, selected, onSelect, wide, onEdit }: Props) {
   const p = usePalette();
   const items: { slug: CategorySlug | null; name: string }[] = [{ slug: null, name: 'All' }, ...categories];
   const chips = items.map((c) => {
@@ -23,7 +24,7 @@ export function CategoryChips({ categories, selected, onSelect, wide }: Props) {
         key={c.slug ?? 'all'}
         onPress={() => onSelect(c.slug)}
         accessibilityRole="tab"
-        accessibilityState={{ selected: on }}
+        aria-selected={on}
         style={({ pressed }) => [
           styles.chip,
           { borderColor: on ? p.accent : p.borderStrong, backgroundColor: on ? p.accentSoft : p.surface, opacity: pressed ? 0.75 : 1 },
@@ -33,6 +34,22 @@ export function CategoryChips({ categories, selected, onSelect, wide }: Props) {
       </Pressable>
     );
   });
+  if (onEdit) {
+    chips.push(
+      <Pressable
+        key="edit"
+        onPress={onEdit}
+        accessibilityRole="link"
+        accessibilityLabel="Edit topics"
+        style={({ pressed }) => [
+          styles.chip,
+          { borderColor: p.borderStrong, borderStyle: 'dashed', backgroundColor: 'transparent', opacity: pressed ? 0.75 : 1 },
+        ]}
+      >
+        <Text style={[styles.text, { color: p.accentInk, fontFamily: fonts.sansSemi }]}>Edit topics</Text>
+      </Pressable>,
+    );
+  }
   if (wide) {
     return (
       <View style={styles.wrap} accessibilityRole="tablist">

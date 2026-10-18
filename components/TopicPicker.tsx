@@ -20,7 +20,7 @@ export function TopicPicker({ categories, selected, onChange }: { categories: Ca
             key={c.slug}
             onPress={() => onChange(toggleTopic(selected, c.slug))}
             accessibilityRole="checkbox"
-            accessibilityState={{ checked: on }}
+            aria-checked={on}
             accessibilityLabel={c.name}
             style={({ pressed }) => [
               styles.chip,

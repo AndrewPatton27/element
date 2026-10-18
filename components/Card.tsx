@@ -22,6 +22,7 @@ interface Props {
   categories: Category[];
   onShowSources: (card: BlurbCard) => void;
   onOpenDetail?: (card: BlurbCard) => void; // tap on the card body
+  onMore?: (card: BlurbCard) => void; // "⋯" options (signed in only)
   onNext?: () => void;
   wide?: boolean;
   compact?: boolean; // short screens: smaller type so the card fits
@@ -46,7 +47,7 @@ function metaLine(card: BlurbCard, categories: Category[]): string {
   return parts.join(' · ');
 }
 
-export function Card({ card, config, categories, onShowSources, onOpenDetail, onNext, wide, compact, reaction, onReact }: Props) {
+export function Card({ card, config, categories, onShowSources, onOpenDetail, onNext, wide, compact, reaction, onReact, onMore }: Props) {
   const hasDetail = cardDetail(card) !== null;
   // A malformed ticker from the server is skipped, not shown as an empty chip.
   const validTickers = card.tickers.filter((t) => t && typeof t.symbol === 'string' && t.symbol !== '');
@@ -66,6 +67,17 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
         <View style={styles.metaRight}>
           {card.updated_at ? <Text style={[styles.updated, { color: p.dataInk, borderColor: p.dataInk }]}>Updated</Text> : null}
           <Text style={[styles.metaText, wide && { fontSize: 14 }, { color: p.muted }]}>{metaLine(card, categories)}</Text>
+          {onMore ? (
+            <Pressable
+              onPress={() => onMore(card)}
+              accessibilityRole="button"
+              accessibilityLabel="More options for this card"
+              hitSlop={10}
+              style={styles.moreBtn}
+            >
+              <Text style={[styles.moreDots, { color: p.muted }]}>⋯</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -175,7 +187,7 @@ function ReactButton({ kind, on, onPress }: { kind: Feedback; on: boolean; onPre
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={like ? 'More like this' : 'Less like this'}
-      accessibilityState={{ selected: on }}
+      aria-pressed={on}
       hitSlop={6}
       style={({ pressed }) => [
         styles.react,
@@ -201,6 +213,8 @@ const styles = StyleSheet.create({
   cardWide: { padding: 32, gap: 18 },
   meta: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
   metaRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  moreBtn: { minWidth: 32, minHeight: 28, alignItems: 'center', justifyContent: 'center' },
+  moreDots: { fontSize: 20, lineHeight: 22 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingHorizontal: 10, borderRadius: 14 },
   badgeText: { fontFamily: fonts.sansSemi, fontSize: 13 },
   updated: { fontFamily: fonts.sansSemi, fontSize: 12, borderWidth: 1, borderRadius: 6, paddingHorizontal: 5 },

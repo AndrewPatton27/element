@@ -39,7 +39,6 @@ begin
   delete from core.user_events where user_id in (ua, ub);
   delete from core.user_prefs  where user_id in (ua, ub);
   update core.blurbs set status = 'hidden' where status = 'published';
-  delete from core.user_events where created_at > now() - interval '48 hours';   -- quiet slate for Trending
 
   -- FED: importance 10, 2 h old; SMALL: importance 1.6, brand new (19.2 h behind FED);
   -- N1/N2: two close deals cards; F0..F25 fillers (markets/energy) far below
@@ -131,7 +130,7 @@ begin
   page := api.feed('top', null, 10);
   seen := array(select x->>'id' from jsonb_array_elements(page->'items') x);
   cur  := page->>'next_cursor';
-  if array_length(string_to_array(cur, '|'), 1) <> 3 then raise exception 'FAIL: trending cursor has no generation: %', cur; end if;
+  if split_part(cur, '|', 3) !~ '^[0-9]+$' then raise exception 'FAIL: trending cursor has no generation: %', cur; end if;
   -- F8 is on page 2; both users now love it (+~4 h would lift it into page 1's range)
   perform set_config('role', 'none', true);
   insert into core.user_events (user_id, blurb_id, kind, dwell_ms)
@@ -225,10 +224,10 @@ begin
   perform set_config('role', 'none', true);
   -- A reads every card on page 1 after it was served (each would now be -100 h) ...
   insert into core.user_events (user_id, blurb_id, kind, dwell_ms, created_at)
-  select ua, x::uuid, 'dwell', 9000, clock_timestamp() + interval '1 second' from unnest(seen) x;
+  select ua, x::uuid, 'dwell', 9000, clock_timestamp() from unnest(seen) x;
   -- ... and a big new card is published
   insert into core.blurbs (dedupe_key, kind, headline, category, as_of, sort_at, published_at, rank_score)
-  values ('tr-NEW', 'summary', 'TR NEW', 'markets', now(), now(), clock_timestamp() + interval '1 second', base + 50);
+  values ('tr-NEW', 'summary', 'TR NEW', 'markets', now(), now(), clock_timestamp(), base + 50);
   perform set_config('role', 'authenticated', true);
   loop
     page := api.feed_for_you(cur, 10);
@@ -256,13 +255,19 @@ begin
   if not ok then raise exception 'FAIL: bad for-you cursor accepted'; end if;
 
   -- ---- 9. no more than 2 in a row from one topic (when another topic is available) ------
+  -- (13 of A's 16 cards are markets, so only the first 12 can be fully mixed)
   select max(run) into n from (
     select count(*) as run from (
       select o, cat, o - row_number() over (partition by cat order by o) as grp
         from (select o, x->>'category' as cat
-                from jsonb_array_elements(api.feed_for_you(null, 30)->'items') with ordinality as t(x, o)) q) q2
+                from jsonb_array_elements(api.feed_for_you(null, 30)->'items') with ordinality as t(x, o)
+               where o <= 12) q) q2
      group by cat, grp) q3;
-  if n > 2 then raise exception 'FAIL: % cards in a row from one topic', n; end if;
+  if n > 2 then
+    select string_agg(x->>'category', ',' order by o) into got
+      from jsonb_array_elements(api.feed_for_you(null, 30)->'items') with ordinality as t(x, o);
+    raise exception 'FAIL: % cards in a row from one topic: %', n, got;
+  end if;
 
   -- ---- 10. cold start = Trending order, followed topic boosted --------------------------
   perform set_config('request.jwt.claims', json_build_object('sub', ub, 'role', 'authenticated')::text, true);
@@ -273,10 +278,10 @@ begin
      or api.feed_for_you(null, 10)->'items'->1->>'headline' <> 'TR FED' then
     raise exception 'FAIL: cold start does not follow Trending';
   end if;
-  perform api.set_prefs(array['deals'], null);
-  select o into n from jsonb_array_elements(api.feed_for_you(null, 30)->'items') with ordinality as t(x, o) where x->>'headline' = 'TR N1';
-  select o into i from jsonb_array_elements(api.feed('top', null, 30)->'items') with ordinality as t(x, o) where x->>'headline' = 'TR N1';
-  if n >= i then raise exception 'FAIL: following deals did not move N1 up (% vs Trending %)', n, i; end if;
+  perform api.set_prefs(array['energy'], null);
+  select o into n from jsonb_array_elements(api.feed_for_you(null, 30)->'items') with ordinality as t(x, o) where x->>'headline' = 'TR F1';
+  select o into i from jsonb_array_elements(api.feed('top', null, 30)->'items') with ordinality as t(x, o) where x->>'headline' = 'TR F1';
+  if n >= i then raise exception 'FAIL: following energy did not move F1 up (% vs Trending %)', n, i; end if;
 
   -- ---- 11. users cannot see each other's data -------------------------------------------
   if (api.get_prefs()->'hidden_categories') <> '[]'::jsonb then raise exception 'FAIL: B sees A''s hidden topics'; end if;

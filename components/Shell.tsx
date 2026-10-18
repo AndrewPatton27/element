@@ -51,7 +51,7 @@ function BottomNav({ active, p, items }: { active: Tab; p: Palette; items: NavIt
         const on = key === active;
         const color = on ? p.accent : p.muted;
         return (
-          <Pressable key={key} onPress={() => go(href)} accessibilityRole="tab" accessibilityState={{ selected: on }} style={styles.bottomItem}>
+          <Pressable key={key} onPress={() => go(href)} accessibilityRole="tab" aria-selected={on} style={styles.bottomItem}>
             <Icon color={color} />
             <Text style={{ color, fontSize: 12, fontFamily: on ? fonts.sansSemi : fonts.sansMedium }}>{label}</Text>
           </Pressable>
@@ -74,7 +74,7 @@ function SideRail({ active, p, items, email }: { active: Tab; p: Palette; items:
             key={key}
             onPress={() => go(href)}
             accessibilityRole="tab"
-            accessibilityState={{ selected: on }}
+            aria-selected={on}
             style={({ pressed }) => [styles.railItem, { backgroundColor: on ? p.accentSoft : 'transparent', opacity: pressed ? 0.75 : 1 }]}
           >
             <Icon color={on ? p.accentInk : p.inkSoft} />

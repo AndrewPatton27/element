@@ -445,9 +445,21 @@ test('hide topics: three exclusive states', () => {
 });
 
 test('hidden topics leave the chips and the feed', () => {
-  const cats = [{ slug: 'tech', name: 'Tech' }, { slug: 'deals', name: 'Deals' }];
-  assert.deepEqual(withoutHidden(cats, ['deals']).map((c) => c.slug), ['tech']);
-  const cards = [{ id: 'a', category: 'deals' }, { id: 'b', category: 'tech' }];
-  assert.deepEqual(withoutHidden(cards, ['deals']).map((c) => c.id), ['b']);
+  const cats = [
+    { slug: 'tech', name: 'Tech' },
+    { slug: 'deals', name: 'Deals' },
+  ];
+  assert.deepEqual(
+    withoutHidden(cats, ['deals']).map((c) => c.slug),
+    ['tech'],
+  );
+  const cards = [
+    { id: 'a', category: 'deals' },
+    { id: 'b', category: 'tech' },
+  ];
+  assert.deepEqual(
+    withoutHidden(cards, ['deals']).map((c) => c.id),
+    ['b'],
+  );
   assert.equal(withoutHidden(cards, []), cards, 'nothing hidden: same list');
 });
