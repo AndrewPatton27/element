@@ -7,7 +7,9 @@ import { FlatList, Platform, Text, StyleSheet, View, type FlatListProps, type La
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
+import { scrollToIndexFallbackOffset } from '../lib/pagerLogic';
 import { Card } from './Card';
+import { CardErrorBoundary } from './ErrorBoundary';
 import type { Feedback } from '../lib/accountLogic';
 import { LoadingState } from './States';
 
@@ -73,6 +75,23 @@ export function FeedPager({
   );
   const next = useCallback(() => goTo(indexRef.current + 1), [goTo]);
 
+  // Fast key-nav can target a row that isn't laid out yet, which makes scrollToIndex
+  // throw "out of range". Wait one frame and retry; if it still can't, scroll to the
+  // computed offset (index * itemHeight) so navigation never throws or no-ops.
+  const onScrollToIndexFailed = useCallback(
+    (info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
+      const offset = scrollToIndexFallbackOffset(info, height);
+      requestAnimationFrame(() => {
+        try {
+          list.current?.scrollToIndex({ index: info.index, animated: true });
+        } catch {
+          list.current?.scrollToOffset({ offset, animated: true });
+        }
+      });
+    },
+    [height],
+  );
+
   // Page height changed (window resized, phone rotated): the old scroll offset no
   // longer lines up with a card, so jump straight back to the current one.
   useEffect(() => {
@@ -114,19 +133,21 @@ export function FeedPager({
       const last = i === items.length - 1 && done;
       return (
         <View style={[styles.page, wide && styles.pageWide, { height }]}>
-          <Card
-            card={item}
-            config={config}
-            categories={categories}
-            onShowSources={onShowSources}
-            onOpenDetail={onOpenDetail}
-            onMore={onMore}
-            onNext={last ? undefined : next}
-            wide={wide}
-            compact={compact}
-            reaction={reactions?.[item.id]}
-            onReact={onReact}
-          />
+          <CardErrorBoundary resetKey={item.id}>
+            <Card
+              card={item}
+              config={config}
+              categories={categories}
+              onShowSources={onShowSources}
+              onOpenDetail={onOpenDetail}
+              onMore={onMore}
+              onNext={last ? undefined : next}
+              wide={wide}
+              compact={compact}
+              reaction={reactions?.[item.id]}
+              onReact={onReact}
+            />
+          </CardErrorBoundary>
           {/* the edge of the next card peeking out below, as in the design */}
           <View style={[styles.stack, { backgroundColor: p.surface, borderColor: p.border, opacity: last ? 0 : 1 }]} />
         </View>
@@ -151,6 +172,7 @@ export function FeedPager({
           getItemLayout={(_, i) => ({ length: height, offset: height * i, index: i })}
           onEndReached={onEndReached}
           onEndReachedThreshold={2}
+          onScrollToIndexFailed={onScrollToIndexFailed}
           onViewableItemsChanged={onViewable}
           viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
           windowSize={5}

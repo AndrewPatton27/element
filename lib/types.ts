@@ -14,8 +14,11 @@ const isStr = (x: unknown): x is string => typeof x === 'string';
 const isStrOrNull = (x: unknown): x is string | null => x === null || typeof x === 'string';
 const isNum = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
 
+// Only https:// is accepted — this matches the database CHECK
+// (blurb_sources.url like 'https://%') and the "every card links to its source"
+// rule, so a non-https (cleartext) link can never reach Linking.openURL.
 export function isHttpUrl(x: unknown): x is string {
-  return isStr(x) && /^https?:\/\/[^\s]+$/i.test(x);
+  return isStr(x) && /^https:\/\/[^\s]+$/i.test(x);
 }
 
 export function isSource(x: unknown): x is Source {

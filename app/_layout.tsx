@@ -17,6 +17,7 @@ import { AppDataProvider } from '../lib/appData';
 import { AccountProvider } from '../lib/accountContext';
 import { light, paletteFor } from '../lib/theme';
 import { ConfigErrorScreen } from '../components/States';
+import { AppErrorBoundary } from '../components/ErrorBoundary';
 
 export default function RootLayout() {
   const scheme = useColorScheme();
@@ -36,19 +37,21 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <StatusBar style={p === light ? 'dark' : 'light'} />
       {result.ok ? (
-        <AppDataProvider api={result.api}>
-          <AccountProvider account={result.account}>
-            <Stack screenOptions={{ headerShown: false, animation: 'none', contentStyle: { backgroundColor: p.bg } }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="numbers" />
-              <Stack.Screen name="about" />
-              <Stack.Screen name="account" />
-              <Stack.Screen name="signin" />
-              <Stack.Screen name="onboarding" />
-              <Stack.Screen name="reset-password" />
-            </Stack>
-          </AccountProvider>
-        </AppDataProvider>
+        <AppErrorBoundary>
+          <AppDataProvider api={result.api}>
+            <AccountProvider account={result.account}>
+              <Stack screenOptions={{ headerShown: false, animation: 'none', contentStyle: { backgroundColor: p.bg } }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="numbers" />
+                <Stack.Screen name="about" />
+                <Stack.Screen name="account" />
+                <Stack.Screen name="signin" />
+                <Stack.Screen name="onboarding" />
+                <Stack.Screen name="reset-password" />
+              </Stack>
+            </AccountProvider>
+          </AppDataProvider>
+        </AppErrorBoundary>
       ) : (
         <ConfigErrorScreen error={result.error} />
       )}
