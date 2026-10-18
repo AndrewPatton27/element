@@ -28,14 +28,14 @@ Run these from the repo root.
    ```bash
    grep EXPO_PUBLIC_API_MODE .env
    ```
-4. Build the website into `dist/`:
+4. Build the website into `dist-pages/` (this also moves the font files out of a `node_modules` folder, which Cloudflare Pages refuses to upload; without it the fonts silently fall back to a system font):
    ```bash
-   npx expo export -p web
+   npm run export:web
    ```
-5. Make sure no server-side key ended up in the build. Only `EXPO_PUBLIC_*` values are bundled, but check anyway: search `dist/` for the values of `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY` and `FRED_API_KEY`. There must be no matches.
+5. Make sure no server-side key ended up in the build. Only `EXPO_PUBLIC_*` values are bundled, but check anyway: search `dist-pages/` for the values of `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY` and `FRED_API_KEY`. There must be no matches.
 6. Upload to Cloudflare Pages:
    ```bash
-   npx wrangler@4 pages deploy dist --project-name element-news --branch main --commit-dirty=true
+   npx wrangler@4 pages deploy dist-pages --project-name element-news --branch main --commit-dirty=true
    ```
    It ends with "Deployment complete!" and a preview link; https://element-news.pages.dev updates within seconds.
 7. Check the live site: open it at phone width and desktop width, swipe a few cards, open "More detail", check the Numbers and About pages, and check the browser console for errors.
@@ -49,6 +49,9 @@ Cloudflare keeps every upload. In the Cloudflare dashboard go to Workers & Pages
 The site only reads data through Supabase's public `api` schema. Database changes (files in `supabase/migrations/`) are applied separately in the Supabase SQL editor, in file-name order, before deploying an app version that needs them. See `supabase/supabase.md`.
 
 ## Notes
+
+- Build into `dist-pages/`, not `dist/`: a local preview (`wrangler pages dev dist`) can lock `dist/` on Windows.
+- After deploying, check one font URL returns `font/ttf` (not `text/html`).
 
 - Password-reset links use the Supabase Auth URL settings: Site URL `https://element-news.pages.dev`, and redirect URLs `https://element-news.pages.dev/**` and `http://localhost:8090/**`.
 - Routes such as `/about` and `/reset-password` work as deep links because the app is a single-page app (`web.output: "single"` in `app.json`).

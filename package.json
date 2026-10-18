@@ -41,7 +41,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "export:web": "expo export -p web",
+    "export:web": "expo export -p web --output-dir dist-pages && node scripts/fix-pages-assets.mjs dist-pages",
     "test:app": "node --experimental-strip-types --test \"lib/__tests__/*.test.ts\"",
     "test:ingest": "npm --prefix ingest test",
     "deploy": "npm run export:web && wrangler deploy",

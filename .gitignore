@@ -12,6 +12,7 @@ docs/
 node_modules/
 .expo/
 dist/
+dist-pages/
 web-build/
 .wrangler/
 supabase/.temp/
