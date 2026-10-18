@@ -110,3 +110,7 @@ export const font = { small: 12, meta: 13, chip: 14, body: 16, cardBody: 18, tit
 export const WIDE_BREAKPOINT = 1024;
 export const RAIL_WIDTH = 220;
 export const ASIDE_WIDTH = 340;
+// The centred content column on wide screens (the news cards). The bottom nav is
+// capped to the same width so its icons line up with the cards and never spill
+// past them.
+export const CARD_MAX_WIDTH = 640;

@@ -1,6 +1,7 @@
 // Feed screen. Phones: wordmark, Top / Latest (/ For you) tabs, category chips,
-// the swipe pager, bottom nav. Wide web: left rail, feed column, Numbers to know
-// on the right. Guests see a gentle sign-in prompt; the feed never needs an account.
+// the swipe pager, bottom nav. Wide web: wordmark + feed column, Numbers to know
+// on the right, and the same nav in a bottom bar. Guests see a gentle sign-in
+// prompt; the feed never needs an account.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -21,7 +22,7 @@ import { fonts } from '../lib/theme';
 import { CategoryChips } from '../components/CategoryChips';
 import { FeedPager } from '../components/FeedPager';
 import { CloseIcon } from '../components/Icons';
-import { NumbersPanel } from '../components/NumbersPanel';
+import { NumbersTicker } from '../components/NumbersTicker';
 import { Shell, Wordmark } from '../components/Shell';
 import { SortToggle } from '../components/SortToggle';
 import { SourcesSheet } from '../components/SourcesSheet';
@@ -244,14 +245,8 @@ export default function FeedScreen() {
     </View>
   ) : null;
 
-  const aside = wide ? (
-    <View style={[styles.asideCard, { backgroundColor: p.surface, borderColor: p.border }]}>
-      <Text style={[styles.asideTitle, { color: p.ink }]} accessibilityRole="header">
-        Numbers to know
-      </Text>
-      <NumbersPanel api={api} config={config} variant="compact" />
-    </View>
-  ) : undefined;
+  // Numbers to know now rides a looping ticker across the top of the wide feed,
+  // so the main column can sit centred with no right rail.
 
   const chips = forYou ? (
     forYouLine
@@ -266,9 +261,11 @@ export default function FeedScreen() {
   );
 
   return (
-    <Shell active="feed" aside={aside}>
+    <Shell active="feed">
       {wide ? (
         <View style={styles.wideTop}>
+          <NumbersTicker api={api} config={config} />
+          <Wordmark size={30} />
           <SortToggle mode={mode} onChange={setMode} wide forYou={signedIn} />
           {chips}
           {prompt}
@@ -315,6 +312,4 @@ const styles = StyleSheet.create({
   forYouLine: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 36 },
   forYouText: { flex: 1, fontFamily: fonts.sans, fontSize: 14, lineHeight: 19 },
   forYouEdit: { fontFamily: fonts.sansSemi, fontSize: 14 },
-  asideCard: { borderWidth: 1, borderRadius: 20, padding: 20, gap: 4 },
-  asideTitle: { fontFamily: fonts.serif, fontSize: 24, letterSpacing: -0.24, marginBottom: 6 },
 });
