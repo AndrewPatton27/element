@@ -109,7 +109,10 @@ export function followReasonText(card: Pick<BlurbCard, 'follow_reason'>, categor
   for (const prefix of REASON_PREFIXES) {
     if (reason.startsWith(prefix)) {
       const rest = reason.slice(prefix.length).trim();
-      const named = categories.find((c) => c.slug === rest)?.name ?? sourceLabel(rest);
+      // A lowercase slug ("policy") is a topic even when the category list has not loaded.
+      const named =
+        categories.find((c) => c.slug === rest)?.name ??
+        (/^[a-z][a-z-]*$/.test(rest) ? categoryName(rest, categories) : sourceLabel(rest));
       return `${prefix}${named}`;
     }
   }

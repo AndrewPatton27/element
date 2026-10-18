@@ -71,6 +71,7 @@ test('followReasonText turns a topic slug into its name and leaves other text al
   assert.equal(followReasonText({ follow_reason: 'Related to economy' }, cats), 'Related to Economy');
   assert.equal(followReasonText({ follow_reason: 'Because you follow AAPL' }, cats), 'Because you follow AAPL');
   assert.equal(followReasonText({ follow_reason: 'Because you follow Federal Reserve Board' }, cats), 'Because you follow Federal Reserve');
+  assert.equal(followReasonText({ follow_reason: 'Because you follow personal-finance' }, cats), 'Because you follow Money');
   assert.equal(followReasonText({ follow_reason: 'Something else' }, cats), 'Something else');
   assert.equal(followReasonText({}, cats), null);
   assert.equal(followReasonText({ follow_reason: '  ' }, cats), null);
@@ -105,7 +106,7 @@ test('mock followingFeed: followed-topic cards say why; no follows gives the top
   assert.ok(none.items.every((c) => c.follow_reason === undefined));
   const page = api.followingFeed({ topics: ['policy'], sources: [], tickers: [] });
   assert.equal(page.items[0].id, 'b');
-  assert.equal(followReasonText(page.items[0], cats), 'Because you follow policy');
+  assert.equal(followReasonText(page.items[0], cats), 'Because you follow Government');
   const bySource = api.followingFeed({ topics: [], sources: ['Federal Reserve Board'], tickers: [] });
   assert.equal(followReasonText(bySource.items[0], cats), 'Because you follow Federal Reserve');
 });

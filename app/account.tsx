@@ -22,6 +22,8 @@ import { PasswordField, fieldStyles } from '../components/PasswordField';
 import { OutlineButton, PrimaryButton, ListRow, SectionLabel } from '../components/FormParts';
 import { ScreenShell } from '../components/ScreenShell';
 import { TopicStatePicker } from '../components/TopicStatePicker';
+import { FollowingWatchlist } from '../components/FollowingWatchlist';
+import { useFollows } from '../lib/useFollows';
 
 type Section = 'email' | 'password' | 'topics' | 'sources' | 'data' | 'account' | 'session';
 type Msg = { text: string; error: boolean };
@@ -35,6 +37,7 @@ export default function AccountScreen() {
   const [myCategories, setMyCategories] = useState<Category[] | null>(null);
   const categories = myCategories ?? publicCategories;
   const acct = useAccount();
+  const { follows, toggleTicker } = useFollows();
   const [topics, setTopics] = useState<{ followed: string[]; hidden: string[] }>({ followed: [], hidden: [] });
   const [busy, setBusy] = useState<Section | null>(null);
   const [msgs, setMsgs] = useState<Partial<Record<Section, Msg>>>({});
@@ -163,6 +166,8 @@ export default function AccountScreen() {
       {message('topics')}
     </View>
   );
+
+  const watchlistSection = <FollowingWatchlist tickers={follows.tickers} onToggle={toggleTicker} />;
 
   const sourcesSection =
     hiddenSources !== null ? (
@@ -337,6 +342,7 @@ export default function AccountScreen() {
         <View style={styles.cols}>
           <View style={styles.colMain}>
             {topicsSection}
+            {watchlistSection}
             {sourcesSection}
           </View>
           <View style={styles.colSide}>{settings}</View>
@@ -344,6 +350,7 @@ export default function AccountScreen() {
       ) : (
         <>
           {topicsSection}
+          {watchlistSection}
           {sourcesSection}
           {settings}
         </>

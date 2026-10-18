@@ -53,4 +53,6 @@ Card footer: the disclaimer is built once and placed by `disclaimerPlacement` (`
 | `SearchResultCard.tsx` | One result tile (badge, topic, headline, summary, optional "Because you follow X", source row, "More detail", AI label and disclaimer once, share-alike credit). |
 | `SearchResults.tsx` | A list of tiles in one or two columns with loading, error, empty and "Show more" states. Shared by Search and Following. |
 | `FollowingManager.tsx` | The "You follow" panel: removable chips, plus topic and source pickers and a ticker box. |
+| `FollowingWatchlist.tsx` | "Watchlist" on the Me screen (designs `Mobile-Me` / `Web-Me`): followed company tickers as removable chips and "+ Add ticker". Stored on this device via `useFollows`. News only, no prices. |
+
 | `FollowingButton.tsx` | The Follow / "✓ Following" pill. |

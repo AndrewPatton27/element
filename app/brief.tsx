@@ -34,6 +34,7 @@ import { MOBILE_HEADER_HEIGHT, fonts, space } from '../lib/theme';
 import { BriefEmpty, BriefMeta, BriefTabs } from '../components/BriefChrome';
 import { BriefMovers, BriefNumbers } from '../components/BriefNumbers';
 import { BriefStories } from '../components/BriefStories';
+import { NumbersTicker } from '../components/NumbersTicker';
 import { DetailSheet } from '../components/DetailSheet';
 import { ScreenShell } from '../components/ScreenShell';
 import { Shell, Wordmark } from '../components/Shell';
@@ -215,6 +216,11 @@ export default function BriefScreen() {
         </View>
         {switchTabs}
       </View>
+      {mode === 'weekly' ? (
+        <View style={[styles.strip, { borderBottomColor: p.border }]}>
+          <NumbersTicker api={api} config={config} />
+        </View>
+      ) : null}
       <ScrollView
         style={styles.fill}
         contentContainerStyle={styles.scroll}
@@ -232,6 +238,7 @@ export default function BriefScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  strip: { borderBottomWidth: 1 },
   header: { flexDirection: 'row', alignItems: 'flex-end', height: MOBILE_HEADER_HEIGHT, paddingLeft: 16, paddingRight: 12, borderBottomWidth: 1 },
   brand: { height: MOBILE_HEADER_HEIGHT - 1, justifyContent: 'center', marginRight: 6 },
   scroll: { paddingHorizontal: space.page, paddingTop: 14, paddingBottom: space.md, gap: 18 },
