@@ -1,16 +1,20 @@
 // The four example panels of the tour (designs Mobile-Tutorial*.dc.html and
-// Web-Tutorial*.dc.html). Everything here is a practice illustration: nothing is
-// focusable or tappable except in components/Tutorial.tsx, and the decorative
-// buttons are hidden from screen readers (the legend under each panel says it).
+// Web-Tutorial*.dc.html). Everything here is a practice illustration. Only the
+// practice card's buttons (source, like, dislike, share) are tappable, and they
+// only reach the practice handlers, which save nothing. Other decorative pieces
+// are hidden from screen readers (the legend under each panel says it).
 
-import type { ReactNode } from 'react';
-import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Palette } from '../lib/theme';
 import { fonts } from '../lib/theme';
+import type { PracticeReaction } from '../lib/tutorialLogic';
 import {
+  PRACTICE_SAMPLE,
   SAMPLE_CATEGORIES,
   SAMPLE_TICKER,
   TUTORIAL_AI_LABEL,
+  TUTORIAL_MOTION,
   type KeyTile,
   type LegendItem,
   type RecapRow,
@@ -49,24 +53,41 @@ function ExampleHead({ p, caption, sparkle }: { p: Palette; caption?: string; sp
   );
 }
 
-// Step 1: the practice card. `sway` is the animated translateX (0 with reduced motion).
+// Step 1: the practice card. `swayX` / `swayRotate` drive the design's elsway loop
+// (0 with reduced motion). The buttons are real Pressables, but they only call the
+// practice handlers (components/TutorialPractice.tsx), which save nothing.
+type AnimNum = Animated.AnimatedInterpolation<number> | Animated.Value | number;
+type AnimStr = Animated.AnimatedInterpolation<string> | string;
+
 export function PracticeCard(props: {
   p: Palette;
   web: boolean;
   title: string;
   lead?: string;
   caption?: string;
-  sway: Animated.AnimatedInterpolation<number> | Animated.Value | number;
-  likeOpacity: Animated.AnimatedInterpolation<number> | number;
-  dislikeOpacity: Animated.AnimatedInterpolation<number> | number;
+  swayX: AnimNum;
+  swayRotate: AnimStr;
+  likeOpacity: AnimNum;
+  dislikeOpacity: AnimNum;
+  reaction: PracticeReaction | null;
+  onLike: () => void;
+  onDislike: () => void;
+  onShare: () => void;
+  onSource: () => void;
 }) {
-  const { p, web } = props;
+  const { p, web, reaction } = props;
+  const liked = reaction === 'like';
+  const disliked = reaction === 'dislike';
   return (
     <Animated.View
       style={[
         styles.card,
         web && styles.cardWeb,
-        { backgroundColor: p.surface, borderColor: p.border, transform: [{ translateX: props.sway as number }] },
+        {
+          backgroundColor: p.surface,
+          borderColor: p.border,
+          transform: [{ translateX: props.swayX as number }, { rotate: props.swayRotate as string }],
+        },
       ]}
     >
       <ExampleHead p={p} caption={props.caption} sparkle />
@@ -79,48 +100,98 @@ export function PracticeCard(props: {
       </View>
       <View>
         <Badge n={2} p={p} style={[styles.badgeTopRight, { zIndex: 1 }]} />
-        <View style={[styles.sourceRow, { backgroundColor: p.surfaceMuted, borderColor: p.borderStrong }]}>
+        <Pressable
+          onPress={props.onSource}
+          accessibilityRole="button"
+          accessibilityLabel="Practice source. On real cards this opens where the story came from."
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+            styles.sourceRow,
+            { backgroundColor: pressed ? p.accentSoft : p.surfaceMuted, borderColor: pressed || hovered ? p.accent : p.borderStrong },
+          ]}
+        >
           <LinkIcon color={p.ink} size={18} />
-          <Text style={[styles.sourceName, { color: p.ink }]}>Source name · Type</Text>
-          <Text style={[styles.small, { color: p.muted }]}>1 source</Text>
-        </View>
+          <Text style={[styles.sourceName, { color: p.ink }]}>{PRACTICE_SAMPLE.source}</Text>
+          <Text style={[styles.small, { color: p.muted }]}>{PRACTICE_SAMPLE.sourceCount}</Text>
+        </Pressable>
       </View>
-      <View style={styles.rowBetween} aria-hidden importantForAccessibility="no-hide-descendants">
-        <Animated.View
-          style={[styles.pill, { borderColor: p.warn, backgroundColor: WARN_SOFT, opacity: props.dislikeOpacity, transform: [{ rotate: '-4deg' }] }]}
+      <View style={styles.rowBetween}>
+        <Pressable
+          onPress={props.onDislike}
+          accessibilityRole="button"
+          accessibilityLabel="Practice dislike"
+          accessibilityState={{ selected: disliked }}
+          hitSlop={6}
+          style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.94 : 1 }] })}
         >
-          <ThumbDownIcon color={p.warn} size={18} />
-          <Text style={[styles.pillText, { color: p.warn }]}>DISLIKE</Text>
-        </Animated.View>
-        <Animated.View
-          style={[styles.pill, { borderColor: p.accent, backgroundColor: p.accentSoft, opacity: props.likeOpacity, transform: [{ rotate: '4deg' }] }]}
+          <Animated.View
+            style={[
+              styles.pill,
+              { borderColor: p.warn, backgroundColor: disliked ? p.warn : WARN_SOFT, opacity: disliked ? 1 : props.dislikeOpacity, transform: [{ rotate: '-4deg' }] },
+            ]}
+          >
+            <ThumbDownIcon color={disliked ? p.onAccent : p.warn} size={18} />
+            <Text style={[styles.pillText, { color: disliked ? p.onAccent : p.warn }]}>DISLIKE</Text>
+          </Animated.View>
+        </Pressable>
+        <Pressable
+          onPress={props.onLike}
+          accessibilityRole="button"
+          accessibilityLabel="Practice like"
+          accessibilityState={{ selected: liked }}
+          hitSlop={6}
+          style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.94 : 1 }] })}
         >
-          <Text style={[styles.pillText, { color: p.accentInk }]}>LIKE</Text>
-          <ThumbUpIcon color={p.accentInk} size={18} />
-        </Animated.View>
+          <Animated.View
+            style={[
+              styles.pill,
+              { borderColor: p.accent, backgroundColor: liked ? p.accent : p.accentSoft, opacity: liked ? 1 : props.likeOpacity, transform: [{ rotate: '4deg' }] },
+            ]}
+          >
+            <Text style={[styles.pillText, { color: liked ? p.onAccent : p.accentInk }]}>LIKE</Text>
+            <ThumbUpIcon color={liked ? p.onAccent : p.accentInk} size={18} />
+          </Animated.View>
+        </Pressable>
       </View>
       <View style={[styles.cardFoot, { borderTopColor: p.divider }]}>
         <View style={styles.aiWrap}>
           <Text style={[styles.ai, { color: p.muted }]}>{TUTORIAL_AI_LABEL}</Text>
           <Badge n={3} p={p} style={styles.badgeAi} />
         </View>
-        <View style={styles.footIcons} aria-hidden importantForAccessibility="no-hide-descendants">
+        <View style={styles.footIcons}>
           {web ? (
             <>
-              <View style={styles.iconBox}>
+              <IconButton p={p} label="Practice dislike" active={disliked} activeBg={WARN_SOFT} onPress={props.onDislike}>
                 <ThumbDownIcon color={p.warn} size={22} />
-              </View>
-              <View style={styles.iconBox}>
+              </IconButton>
+              <IconButton p={p} label="Practice like" active={liked} activeBg={p.accentSoft} onPress={props.onLike}>
                 <ThumbUpIcon color={p.accent} size={22} />
-              </View>
+              </IconButton>
             </>
           ) : null}
-          <View style={styles.iconBox}>
+          <IconButton p={p} label="Practice share. On real cards this opens Share." onPress={props.onShare}>
             <ShareIcon color={p.ink} size={22} />
-          </View>
+          </IconButton>
         </View>
       </View>
     </Animated.View>
+  );
+}
+
+function IconButton(props: { p: Palette; label: string; active?: boolean; activeBg?: string; onPress: () => void; children: ReactNode }) {
+  const { p, active } = props;
+  return (
+    <Pressable
+      onPress={props.onPress}
+      accessibilityRole="button"
+      accessibilityLabel={props.label}
+      accessibilityState={active === undefined ? undefined : { selected: active }}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
+        styles.iconBox,
+        { backgroundColor: active ? (props.activeBg ?? p.accentSoft) : pressed || hovered ? p.surfaceMuted : 'transparent', transform: [{ scale: pressed ? 0.9 : 1 }] },
+      ]}
+    >
+      {props.children}
+    </Pressable>
   );
 }
 
@@ -140,12 +211,15 @@ export function Legend({ p, items, web }: { p: Palette; items: LegendItem[]; web
   );
 }
 
-export function Tiles({ p, tiles, web }: { p: Palette; tiles: KeyTile[]; web: boolean }) {
+export function Tiles({ p, tiles, web, nudge }: { p: Palette; tiles: KeyTile[]; web: boolean; nudge?: AnimNum }) {
   return (
     <View style={styles.tiles} aria-label={web ? 'How to react and move' : 'Swipe gestures'}>
       {tiles.map((t) => {
         const next = t.tone === 'next';
         const color = t.tone === 'warn' ? p.warn : next ? p.accentInk : p.accent;
+        // Phones: the ← / → arrows nudge outwards (design .elnl / .elnr).
+        const dir = t.key === '←' ? -1 : t.key === '→' ? 1 : 0;
+        const nudgeX = dir !== 0 && nudge !== undefined && typeof nudge !== 'number' ? Animated.multiply(nudge, dir) : 0;
         return (
           <View
             key={t.title}
@@ -160,7 +234,7 @@ export function Tiles({ p, tiles, web }: { p: Palette; tiles: KeyTile[]; web: bo
               ) : t.key === 'thumbs-down' ? (
                 <ThumbDownIcon color={color} size={20} />
               ) : (
-                <Text style={[styles.kbdText, { color }]}>{t.key}</Text>
+                <Animated.Text style={[styles.kbdText, { color, transform: [{ translateX: nudgeX as number }] }]}>{t.key}</Animated.Text>
               )}
             </View>
             <Text style={[styles.tileTitle, { color: next ? p.accentInk : p.ink }]}>{t.title}</Text>
@@ -172,10 +246,16 @@ export function Tiles({ p, tiles, web }: { p: Palette; tiles: KeyTile[]; web: bo
   );
 }
 
-// Step 2: the top of the feed (numbers strip + categories).
+// Step 2: the top of the feed (numbers strip + categories). `marquee` is a linear
+// 0→1 loop (design elscroll); the track moves by half its measured width, so the
+// doubled list wraps seamlessly. 0 = still (reduced motion).
 export function FeedTopPanel({ p, web, caption, note, marquee }: { p: Palette; web: boolean; caption?: string; note?: string; marquee: Animated.Value | number }) {
   const tone = (t: 'up' | 'down' | 'flat') => (t === 'up' ? p.up : t === 'down' ? p.down : p.flat);
   const items = SAMPLE_TICKER.concat(SAMPLE_TICKER);
+  const gap = web ? TUTORIAL_MOTION.marquee.gapWeb : TUTORIAL_MOTION.marquee.gapMobile;
+  const [trackW, setTrackW] = useState(0);
+  const shift =
+    typeof marquee === 'number' || trackW <= 0 ? 0 : marquee.interpolate({ inputRange: [0, 1], outputRange: [0, -trackW / 2] });
   return (
     <View style={[styles.section, styles.sectionFlush, { backgroundColor: p.surface, borderColor: p.border }]}>
       <View style={styles.padX}>
@@ -187,9 +267,12 @@ export function FeedTopPanel({ p, web, caption, note, marquee }: { p: Palette; w
           aria-label="Numbers to know, sample values"
           style={[styles.strip, { borderColor: p.border, backgroundColor: p.surfaceMuted }]}
         >
-          <Animated.View style={[styles.stripTrack, { transform: [{ translateX: marquee as number }] }]}>
+          <Animated.View
+            onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
+            style={[styles.stripTrack, { gap, transform: [{ translateX: shift as number }] }]}
+          >
             {items.map((t, i) => (
-              <Text key={i} numberOfLines={1} style={[styles.stripLabel, { color: p.inkSoft }]}>
+              <Text key={i} numberOfLines={1} style={[styles.stripLabel, { color: p.inkSoft, marginRight: i === items.length - 1 ? gap : 0 }]}>
                 {t.label}{' '}
                 <Text style={[styles.stripValue, { color: p.ink }]}>{t.value}</Text>{' '}
                 <Text style={{ fontFamily: fonts.sansSemi, color: tone(t.tone) }}>{t.change}</Text>
@@ -358,7 +441,7 @@ const styles = StyleSheet.create({
   aiWrap: { flex: 1, paddingRight: 24 },
   ai: { fontFamily: fonts.sans, fontSize: 12, lineHeight: 16 },
   footIcons: { flexDirection: 'row' },
-  iconBox: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  iconBox: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   legend: { gap: 6 },
   legendRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   legendText: { flex: 1, fontFamily: fonts.sans, fontSize: 15, lineHeight: 21 },
@@ -372,8 +455,8 @@ const styles = StyleSheet.create({
   section: { borderRadius: 24, borderWidth: 1, padding: 16, gap: 14, overflow: 'hidden' },
   sectionFlush: { paddingHorizontal: 0, gap: 16 },
   padX: { paddingHorizontal: 18 },
-  strip: { height: 44, borderTopWidth: 1, borderBottomWidth: 1, overflow: 'hidden', justifyContent: 'center' },
-  stripTrack: { flexDirection: 'row', gap: 24, paddingLeft: 16, flexShrink: 0, ...(Platform.OS === 'web' ? { width: 'max-content' } : null) } as object,
+  strip: { height: 44, borderTopWidth: 1, borderBottomWidth: 1, overflow: 'hidden', justifyContent: 'center', paddingLeft: 16 },
+  stripTrack: { flexDirection: 'row', flexShrink: 0, alignSelf: 'flex-start', ...(Platform.OS === 'web' ? { width: 'max-content' } : null) } as object,
   stripLabel: { fontFamily: fonts.sans, fontSize: 11, letterSpacing: 0.4, flexShrink: 0, ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' } : null) } as object,
   stripValue: { fontFamily: fonts.serif, fontSize: 16, letterSpacing: 0 },
   chips: { flexDirection: 'row', gap: 8, overflow: 'hidden' },

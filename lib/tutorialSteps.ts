@@ -60,6 +60,39 @@ export const SAMPLE_TICKER = [
 ];
 export const SAMPLE_CATEGORIES = ['All', 'World', 'Government', 'Economy'];
 
+// The practice card is its own sample object, never a real Blurb: nothing with this
+// id is ever sent anywhere (see the practice demo in lib/tutorialLogic.ts).
+export const PRACTICE_SAMPLE = Object.freeze({
+  id: 'tutorial-practice-sample',
+  practice: true as const,
+  source: 'Source name · Type',
+  sourceCount: '1 source',
+});
+
+// Motion, copied from the design CSS (@keyframes in Mobile-/Web-Tutorial*.dc.html).
+// Every animation there is `ease-in-out` per keyframe segment (marquee: linear),
+// loops forever, and stops under prefers-reduced-motion (pills then sit at opacity 1).
+// `at` = keyframe offsets 0..1; the other arrays are the values at those offsets.
+export const TUTORIAL_MOTION = {
+  // .elcard elsway 6s: left (dislike), back, right (like), back.
+  sway: {
+    ms: 6000,
+    at: [0, 0.1, 0.22, 0.34, 0.6, 0.72, 0.84, 1],
+    x: [0, -14, -14, 0, 14, 14, 0, 0],
+    rotateMobile: [0, -2, -2, 0, 2, 2, 0, 0],
+    rotateWeb: [0, -1.5, -1.5, 0, 1.5, 1.5, 0, 0],
+  },
+  // .elleft / .elright 6s: the DISLIKE and LIKE pills light up as the card leans.
+  dislikePill: { ms: 6000, at: [0, 0.1, 0.22, 0.34, 1], opacity: [0.3, 1, 1, 0.3, 0.3] },
+  likePill: { ms: 6000, at: [0, 0.4, 0.6, 0.72, 0.84, 1], opacity: [0.3, 0.3, 1, 1, 0.3, 0.3] },
+  // .elhint 1.6s: the continue arrow bounces up (phones) or down (web) 9 px.
+  hint: { ms: 1600, at: [0, 0.5, 1], y: 9 },
+  // .elnl / .elnr 1.6s (phones): the ← / → swipe arrows nudge 5 px outwards.
+  nudge: { ms: 1600, at: [0, 0.5, 1], x: 5 },
+  // .elmarq elscroll: the numbers strip slides by half its (doubled) width, linear.
+  marquee: { msMobile: 30000, msWeb: 40000, gapMobile: 32, gapWeb: 44 },
+} as const;
+
 export function getTutorialSteps(variant: TutorialVariant): TutorialStep[] {
   const web = variant === 'web';
   const tap = web ? 'Click' : 'Tap';

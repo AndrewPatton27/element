@@ -9,13 +9,14 @@
 // Create a free account. Phones: swipe up = next, swipe down = back. Web: ↓/→/PageDown
 // next, ↑/←/PageUp back, Esc skips; the wheel moves a step when the step fits on screen.
 // The tour's key handler runs first (capture) and stops the feed behind it from moving.
+// Motion follows the design @keyframes (components/TutorialMotion.tsx); the practice
+// card on step 1 is interactive but saves nothing (components/TutorialPractice.tsx).
 // With reduced motion the practice card, ticker and hint arrow stay still.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   AccessibilityInfo,
   Animated,
-  Easing,
   PanResponder,
   Platform,
   Pressable,
@@ -40,52 +41,14 @@ import {
   progressLabel,
   shouldAutoShow,
 } from '../lib/tutorialLogic';
-import { PRACTICE_FOOTER, TUTORIAL_FOOTNOTE, getTutorialSteps } from '../lib/tutorialSteps';
+import { PRACTICE_FOOTER, TUTORIAL_FOOTNOTE, TUTORIAL_MOTION, getTutorialSteps } from '../lib/tutorialSteps';
 import { usePalette, useWide } from '../lib/useTheme';
 import { ChevronLeftIcon, ChevronUpIcon } from './Icons';
-import { BriefFollowingPanel, FeedTopPanel, Legend, PracticeCard, Recap, Tiles } from './TutorialParts';
+import { useKeyframeLoop, useLinearLoop, useReducedMotion } from './TutorialMotion';
+import { BriefFollowingPanel, FeedTopPanel, Legend, Recap } from './TutorialParts';
+import { PracticeArea } from './TutorialPractice';
 
 export type TutorialExit = 'skip' | 'done' | 'signup';
-
-const NATIVE = Platform.OS !== 'web';
-
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      if (typeof window === 'undefined') return;
-      const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-      if (!mq) return;
-      setReduced(mq.matches);
-      const on = () => setReduced(mq.matches);
-      mq.addEventListener?.('change', on);
-      return () => mq.removeEventListener?.('change', on);
-    }
-    let alive = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((v) => alive && setReduced(v))
-      .catch(() => {});
-    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
-    return () => {
-      alive = false;
-      sub.remove();
-    };
-  }, []);
-  return reduced;
-}
-
-// A looping 0→1 value; stays at 0 with reduced motion.
-function useLoop(ms: number, reduced: boolean, easing = Easing.inOut(Easing.ease)): Animated.Value {
-  const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    v.setValue(0);
-    if (reduced) return;
-    const loop = Animated.loop(Animated.timing(v, { toValue: 1, duration: ms, easing, useNativeDriver: NATIVE }));
-    loop.start();
-    return () => loop.stop();
-  }, [v, ms, reduced, easing]);
-  return v;
-}
 
 export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
   const p = usePalette();
@@ -166,15 +129,13 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
     [web, count, next, back],
   );
 
-  // Motion: the card sways left (dislike) then right (like) over 6 s; the hint bounces.
-  const sway = useLoop(6000, reduced, Easing.linear);
-  const bounce = useLoop(1600, reduced);
-  const marquee = useLoop(16000, reduced, Easing.linear);
-  const swayX = sway.interpolate({ inputRange: [0, 0.1, 0.22, 0.34, 0.6, 0.72, 0.84, 1], outputRange: [0, -14, -14, 0, 14, 14, 0, 0] });
-  const dislikeOp = reduced ? 1 : sway.interpolate({ inputRange: [0, 0.1, 0.22, 0.34, 1], outputRange: [0.3, 1, 1, 0.3, 0.3] });
-  const likeOp = reduced ? 1 : sway.interpolate({ inputRange: [0, 0.4, 0.6, 0.72, 0.84, 1], outputRange: [0.3, 0.3, 1, 1, 0.3, 0.3] });
-  const bounceY = bounce.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, web ? 9 : -9, 0] });
-  const marqueeX = marquee.interpolate({ inputRange: [0, 1], outputRange: [0, -420] });
+  // Motion (design @keyframes, values in TUTORIAL_MOTION): the continue arrow bounces
+  // (elhint 1.6 s), the numbers strip scrolls (elscroll 30 s phones / 40 s web).
+  // The practice card's loops live in components/TutorialPractice.tsx.
+  const bounce = useKeyframeLoop(TUTORIAL_MOTION.hint.at, TUTORIAL_MOTION.hint.ms, reduced);
+  const marquee = useLinearLoop(web ? TUTORIAL_MOTION.marquee.msWeb : TUTORIAL_MOTION.marquee.msMobile, reduced || s.id !== 'top');
+  const hintY = TUTORIAL_MOTION.hint.y * (web ? 1 : -1);
+  const bounceY = bounce.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, hintY, 0] });
 
   const progress = progressLabel(step, count);
   const H = web ? styles.h1Web : styles.h1;
@@ -232,20 +193,16 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
           </View>
 
           {s.id === 'card' ? (
-            <>
-              <PracticeCard
-                p={p}
-                web={web}
-                title={s.title}
-                lead={s.lead}
-                caption={s.exampleCaption}
-                sway={reduced ? 0 : swayX}
-                likeOpacity={likeOp}
-                dislikeOpacity={dislikeOp}
-              />
-              <Legend p={p} items={s.legend} web={web} />
-              {s.tiles ? <Tiles p={p} tiles={s.tiles} web={web} /> : null}
-            </>
+            <PracticeArea
+              p={p}
+              web={web}
+              reduced={reduced}
+              title={s.title}
+              lead={s.lead}
+              caption={s.exampleCaption}
+              tiles={s.tiles}
+              legend={<Legend p={p} items={s.legend} web={web} />}
+            />
           ) : null}
 
           {s.id === 'top' || s.id === 'brief' ? (
@@ -254,7 +211,7 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
                 {s.title}
               </Text>
               {s.id === 'top' ? (
-                <FeedTopPanel p={p} web={web} caption={s.exampleCaption} note={s.practiceNote} marquee={reduced ? 0 : (marqueeX as unknown as Animated.Value)} />
+                <FeedTopPanel p={p} web={web} caption={s.exampleCaption} note={s.practiceNote} marquee={reduced ? 0 : marquee} />
               ) : (
                 <BriefFollowingPanel p={p} web={web} caption={s.exampleCaption} note={s.practiceNote} />
               )}
@@ -316,7 +273,13 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
               >
                 {web ? <Text style={[styles.continueText, { color: p.accent }]}>{s.continueHint}</Text> : null}
                 <Animated.View style={{ transform: [{ translateY: reduced ? 0 : bounceY }, { rotate: web ? '180deg' : '0deg' }] }}>
-                  <ChevronUpIcon color={p.accent} size={30} strokeWidth={2.4} />
+                  {/* Design: a double chevron, the trailing one at 45% opacity. */}
+                  <View style={styles.hintIcon}>
+                    <ChevronUpIcon color={p.accent} size={30} strokeWidth={2.4} />
+                    <View style={styles.hintTrail}>
+                      <ChevronUpIcon color={p.accent} size={30} strokeWidth={2.4} />
+                    </View>
+                  </View>
                 </Animated.View>
                 {!web ? <Text style={[styles.continueText, { color: p.accent }]}>{s.continueHint}</Text> : null}
               </Pressable>
@@ -390,5 +353,8 @@ const styles = StyleSheet.create({
   backText: { fontFamily: fonts.sansSemi, fontSize: 15 },
   continue: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center' },
   continueText: { fontFamily: fonts.sansSemi, fontSize: 16 },
+  hintIcon: { width: 30, height: 30 },
+  // The design's second path sits 5 of 24 viewBox units lower (6 px at 30 px).
+  hintTrail: { position: 'absolute', left: 0, top: 6, opacity: 0.45 },
   footer: { fontFamily: fonts.sans, fontSize: 12, textAlign: 'center', paddingHorizontal: 4 },
 });
