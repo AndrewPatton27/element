@@ -63,7 +63,7 @@ All in `src/config.ts`; the full explanation is in `ingest.md`.
 
 | Config value | Default | Meaning |
 |---|---|---|
-| `promptVersion` / `templateVersion` | `sum-v5` / `tpl-v5` | stored on each card; `--rewrite` redoes cards on any other version |
+| `promptVersion` / `templateVersion` | `sum-v6` / `tpl-v5` | stored on each card; `--rewrite` redoes cards on any other version |
 | `secExhibit.items` / `.types` / `.primaryMaxChars` | `['2.02']` / `['EX-99.1','EX-99.01','EX-99']` / `3000` | Item 2.02 filings also fetch the EX-99.1 press release (page host `www.sec.gov`) for the AI |
 | `earningsFigures.requiredItems` | `['2.02']` | an earnings card from these items needs a digit in its body (`no_figures`); template cards too |
 | `fedRegister.maxAirworthinessPerRun` | `1` | FAA airworthiness directives allowed per run (others: `skip faa_directive_cap`) |
@@ -71,8 +71,8 @@ All in `src/config.ts`; the full explanation is in `ingest.md`.
 | `usgs.keepAlerts` / `usgs.minMagnitudeWithoutAlert` | `['yellow','orange','red']` / `6.5` | quakes with a green or missing alert are skipped when at sea (no country, ridge, rise, ocean) or under M6.5 |
 | `cpsc.rewriteLookbackDays` | `120` | how far back `--rewrite` looks for an old recall |
 | `cpsc.maxPerRun` | `5` | NEW recalls processed per run; recalls an earlier run already handled do not count, so each run moves on to the next unprocessed ones |
-| `wiki.lookbackDays` | `3` | UTC days of Wikipedia "In the news" feeds read per run, today included; a story on several days becomes one card |
-| `nasa.maxAgeDays` / `nasa.feedPages` | `14` / `2` | NASA news releases from the last 14 days (was 7); feed page 2 (`?paged=2`) is read too, since the feed holds only 10 posts per page and mixes in APOD and image articles |
+| `wiki.lookbackDays` | `1` | UTC days of Wikipedia "In the news" feeds read per run, today included (live runs: past-day feeds had 0 news; set 2 or 3 to read earlier days, a story on several days becomes one card) |
+| `nasa.maxAgeDays` / `nasa.feedPages` | `14` / `1` | NASA news releases from the last 14 days (was 7); only feed page 1 is read, since `?paged=2` answers HTTP 403 in live runs (set `feedPages` to 2 to read it; the feed holds only 10 posts per page and mixes in APOD and image articles) |
 
 ## How publishing will work
 

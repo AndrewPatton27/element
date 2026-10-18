@@ -113,6 +113,7 @@ export async function summarizeWithChain(
   const source = {
     text: input.text, licenseClass: input.item.license_class, tickers: input.item.tickers.map((t) => t.symbol), category: input.item.category,
     requireFigures: requiresFigures(input.item),      // event_type earnings (set in code) -> the body must have figures
+    checkFlow: true,                                  // AI drafts must not repeat themselves (template drafts never come through here)
   };
   const log: string[] = [];
 

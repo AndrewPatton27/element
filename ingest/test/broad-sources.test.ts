@@ -131,16 +131,15 @@ test('wiki: copy limit 10 words applies to Wikipedia text', () => {
   assert.match(validateDraft(copied, src).errors.join(), /copies \d+ consecutive words .*limit 10/);
 });
 
-test('wiki pipeline: API requests for today and the 2 days before, AI cards in world with the attribution on card and source; low relevance skipped', async () => {
+test('wiki pipeline: API request for today only (default), AI cards in world with the attribution on card and source; low relevance skipped', async () => {
   const seen: SummarizeInput[] = [];
   const { d, dry, requests } = deps([fakeAi(seen), templateSummarizer]);
   const s = await runOnce(d, { only: ['wiki'] });
+  assert.equal(config.wiki.lookbackDays, 1);
   assert.deepEqual(requests, [
     { url: 'https://en.wikipedia.org/api/rest_v1/feed/featured/2026/10/17', kind: 'api' },
-    { url: 'https://en.wikipedia.org/api/rest_v1/feed/featured/2026/10/16', kind: 'api' },
-    { url: 'https://en.wikipedia.org/api/rest_v1/feed/featured/2026/10/15', kind: 'api' },
   ]);
-  assert.equal(s.published, 5, '4 stories today + 1 story only in yesterday\'s feed (the other one repeats today\'s)');
+  assert.equal(s.published, 4, '4 stories in today\'s feed');
   for (const c of dry.cards) {
     assert.equal(c.category, 'world');
     assert.equal(c.event_type, 'world_event');
@@ -154,7 +153,7 @@ test('wiki pipeline: API requests for today and the 2 days before, AI cards in w
   const low = deps([fakeAi([], 2), templateSummarizer]);
   const s2 = await runOnce(low.d, { only: ['wiki'] });
   assert.equal(s2.published, 0);
-  assert.equal(low.lines.filter((l) => l.startsWith('skip low_relevance (2)')).length, 5);
+  assert.equal(low.lines.filter((l) => l.startsWith('skip low_relevance (2)')).length, 4);
 });
 
 // ---- CPSC ----------------------------------------------------------------------------------
@@ -321,11 +320,11 @@ test('nasa: only news releases (APOD and image articles dropped); release text w
   const seen: SummarizeInput[] = [];
   const { d, dry, requests } = deps([fakeAi(seen), templateSummarizer]);
   const s = await runOnce(d, { only: ['nasa'] });
+  assert.equal(config.nasa.feedPages, 1);
   assert.deepEqual(requests, [
     { url: 'https://www.nasa.gov/news-release/feed/', kind: 'api' },
-    { url: 'https://www.nasa.gov/news-release/feed/?paged=2', kind: 'api' },
   ]);
-  assert.equal(s.published, 2, 'page 1 release + the 9-day-old release on page 2');
+  assert.equal(s.published, 1, 'the page 1 release only (the 9-day-old release is on page 2, which is not read by default)');
   assert.equal(dry.cards[0].category, 'science');
   assert.equal(seen[0].text, seen[0].item.summary_text);
   assert.doesNotThrow(() => assertAllowed(config.nasa.feedUrl, 'api'));

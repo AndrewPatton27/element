@@ -233,7 +233,7 @@ test('prompt: college-student audience, 8th-grade plain language, explain jargon
   assert.match(p, /8th-grade reading level/);
   assert.match(p, /short sentences\. No jargon/);
   assert.match(p, /explain it in a few plain words/);
-  assert.match(p, /Sentence 1 says what happened/);
+  assert.match(p, /The headline says what happened\. Body sentence 1 does NOT say it again/);   // sum-v6: sentence 1 continues the headline
   assert.match(p, /ONLY if that follows directly from the facts/);
   assert.match(p, /aim for about 60/);
   assert.match(p, /"everyday_relevance": a whole number from 1 to 5/);

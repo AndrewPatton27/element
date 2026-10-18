@@ -53,10 +53,10 @@ const ai = (draft: Partial<SummaryDraft>, calls: string[] = []): Summarizer => (
 
 // ---- selection ---------------------------------------------------------------------------
 
-test('--rewrite: CLI flag; current versions are sum-v5 and tpl-v5; only older cards are selected', async () => {
+test('--rewrite: CLI flag; current versions are sum-v6 and tpl-v5; only older cards are selected', async () => {
   assert.equal(parseArgs(['--rewrite', '--limit', '5']).rewrite, true);
-  assert.deepEqual(currentVersions(), ['sum-v5', 'tpl-v5']);
-  const fresh = [{ ...byId(1), id: 'a', prompt_version: 'sum-v5' }, { ...byId(3), id: 'b', prompt_version: 'tpl-v5' }];
+  assert.deepEqual(currentVersions(), ['sum-v6', 'tpl-v5']);
+  const fresh = [{ ...byId(1), id: 'a', prompt_version: 'sum-v6' }, { ...byId(3), id: 'b', prompt_version: 'tpl-v5' }];
   const r = rewriteDeps([...fresh, byId(3)], [templateSummarizer]);
   const s = await runRewrite(r.deps, { limit: 10 });
   assert.equal(s.selected, 1, 'only the old data card');
@@ -67,7 +67,7 @@ test('--rewrite: CLI flag; current versions are sum-v5 and tpl-v5; only older ca
 
 // ---- in-place update -------------------------------------------------------------------------
 
-test('AI card: same licensed text (allowlisted page fetch), same chain; updated in place with detail, sum-v5', async () => {
+test('AI card: same licensed text (allowlisted page fetch), same chain; updated in place with detail, sum-v6', async () => {
   const calls: string[] = [];
   const r = rewriteDeps([byId(1)], [ai({}, calls), templateSummarizer]);
   const s = await runRewrite(r.deps);
@@ -81,7 +81,7 @@ test('AI card: same licensed text (allowlisted page fetch), same chain; updated 
   assert.equal(p.id, byId(1).id, 'same card id');
   assert.equal(p.headline, 'The Fed shares a new statement');
   assert.equal(p.ai_generated, true);
-  assert.equal(p.prompt_version, 'sum-v5');
+  assert.equal(p.prompt_version, 'sum-v6');
   assert.deepEqual(p.detail, DETAIL);
   assert.ok(!('sort_at' in p) && !('category' in p), 'order and category are never sent');
 });
@@ -177,8 +177,8 @@ test('chain: a valid card with a bad detail keeps the card and drops the detail'
   assert.ok(r.log.some((l) => /detail dropped \(card kept\)/.test(l)));
 });
 
-test('prompt sum-v5 asks for the detail; Gemini and Groq schemas require it', () => {
-  assert.equal(config.promptVersion, 'sum-v5');
+test('prompt sum-v6 asks for the detail; Gemini and Groq schemas require it', () => {
+  assert.equal(config.promptVersion, 'sum-v6');
   const it = { source: 'fed_rss', source_name: 'Federal Reserve Board', doc_label: 'Press release', published_at: '2026-10-17T00:00:00Z', tickers: [], category: 'policy', event_type: 'fed' } as unknown as RawItem;
   const p = buildPrompt({ item: it, text: 'T' });
   assert.match(p, /"detail": a longer, still easy version for readers who tap the card/);

@@ -174,7 +174,7 @@ test('rewrite: an earnings AI card gets the figures from EX-99.1; if the AI cann
   const s = await runRewrite(ok.deps);
   assert.equal(s.revised, 1);
   const [p] = ok.dry.revisions;
-  assert.ok(p.action === 'revise' && p.body === 'Apple reported revenue of $102.5 billion.' && p.prompt_version === 'sum-v5');
+  assert.ok(p.action === 'revise' && p.body === 'Apple reported revenue of $102.5 billion.' && p.prompt_version === 'sum-v6');
 
   const bad = rewriteRun([appleCard({ body: 'Apple filed a report.' })], [aiDraft('Apple shared results.'), templateSummarizer]);
   const s2 = await runRewrite(bad.deps);
@@ -342,7 +342,7 @@ test('prompt: earnings cards must state figures; retry hint names no_figures; ot
 
 // ---- (f) versions ---------------------------------------------------------------------------------
 
-test('versions: prompt sum-v5 and template tpl-v5 (the next --rewrite revisits every older card)', () => {
-  assert.equal(config.promptVersion, 'sum-v5');
+test('versions: prompt sum-v6 and template tpl-v5 (the next --rewrite revisits every older card)', () => {
+  assert.equal(config.promptVersion, 'sum-v6');
   assert.equal(config.templateVersion, 'tpl-v5');
 });

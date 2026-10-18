@@ -52,6 +52,7 @@ export interface SourceText {
   tickers?: string[];            // tickers known from filing metadata
   category?: string;             // the card's real category in code (e.g. 'safety' for CPSC recalls)
   requireFigures?: boolean;      // the card's real event_type is earnings (set in code); default: draft.event_type === 'earnings'
+  checkFlow?: boolean;           // AI drafts only (the chain sets it): run the repetition check. Template/data wording is fixed and exempt.
 }
 
 export interface Result {
@@ -261,6 +262,96 @@ export function trimBodyToFit(draft: Draft, errors: string[]): Draft | null {
   return { ...draft, body: kept.join(' ') };
 }
 
+// ---- flow and no repetition (D-58) ---------------------------------------------------
+
+const STOP_WORDS = new Set((
+  'a an the and or but nor so yet for of in on at to by up as is are was were be been being am do does did done '
+  + 'has have had having it its it\'s this that these those there here then than with without from into onto over under '
+  + 'about after before during while until since also just only very more most much many some any each every other '
+  + 'such not can could will would may might must shall should who whom whose which what when where why how all both '
+  + 'one two now new said says say their they them his her him she he you your our out off too per via'
+).split(/\s+/));
+
+/** Crude stemmer so "rises/rose-like" forms of one word match ("taxes" ~ "tax", "raised" ~ "raise"). */
+function stem(w: string): string {
+  let s = w;
+  if (s.length > 4 && s.endsWith('ies')) s = `${s.slice(0, -3)}y`;
+  else if (s.length > 5 && s.endsWith('ing')) s = s.slice(0, -3);
+  else if (s.length > 4 && s.endsWith('ed')) s = s.slice(0, -2);
+  else if (s.length > 4 && s.endsWith('es')) s = s.slice(0, -2);
+  else if (s.length > 3 && s.endsWith('s') && !s.endsWith('ss')) s = s.slice(0, -1);
+  if (s.length > 3 && s.endsWith('e')) s = s.slice(0, -1);
+  return s;
+}
+
+/**
+ * The content words of a text for the repetition check: lower case, stop words, numbers and words
+ * shorter than config.repetition.minWordLength dropped, the rest lightly stemmed. A set (each word once).
+ */
+export function contentWords(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of text.toLowerCase().replace(/[‘’]/g, "'").split(/[^a-z0-9']+/)) {
+    const w = raw.replace(/'s$/, '').replace(/^'+|'+$/g, '');
+    if (w.length < config.repetition.minWordLength || /\d/.test(w) || STOP_WORDS.has(w)) continue;
+    out.add(stem(w));
+  }
+  return out;
+}
+
+const plain = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Share of `a`'s words that are also in `b` (0 when `a` is empty). */
+function shareIn(a: Set<string>, b: Set<string>): number {
+  if (!a.size) return 0;
+  let n = 0;
+  for (const w of a) if (b.has(w)) n++;
+  return n / a.size;
+}
+
+/**
+ * Flow check for an AI card (rules in .kiro/steering/element-cards.md, "Flow and no repetition"):
+ *  (a) the first summary sentence must not restate the headline: it fails when it starts with the
+ *      headline text, or when at least config.repetition.headlineOverlapMax of the headline's content
+ *      words appear in it;
+ *  (b) no two summary sentences may be near-duplicates: the shorter one's content words are at least
+ *      config.repetition.sentenceOverlapMax inside the other.
+ * Returns error strings (they are shown to the model on the retry), [] when the card reads well.
+ * Template and data cards are never passed here (their fixed wording is exempt).
+ */
+export function checkRepetition(headline: string, body: string | null | undefined): string[] {
+  const c = config.repetition;
+  const sentences = splitSentences(body ?? '');
+  if (!sentences.length) return [];
+  const errors: string[] = [];
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
+
+  const h = plain(headline);
+  const first = plain(sentences[0]);
+  const hWords = contentWords(headline);
+  const fWords = contentWords(sentences[0]);
+  if (h.split(' ').length >= 3 && (first === h || first.startsWith(`${h} `))) {
+    errors.push('repetition: the first summary sentence starts with the headline; begin with the next most useful fact instead');
+  } else if (hWords.size >= c.minHeadlineWords) {
+    const share = shareIn(hWords, fWords);
+    if (share >= c.headlineOverlapMax) {
+      errors.push(`repetition: the first summary sentence repeats the headline (${pct(share)} of its key words, limit ${pct(c.headlineOverlapMax)}); it must add the next most useful fact instead of restating it`);
+    }
+  }
+
+  const sets = sentences.map(contentWords);
+  for (let i = 0; i < sets.length; i++) {
+    for (let j = i + 1; j < sets.length; j++) {
+      const [small, big] = sets[i].size <= sets[j].size ? [sets[i], sets[j]] : [sets[j], sets[i]];
+      if (small.size < c.minSentenceWords) continue;
+      const share = shareIn(small, big);
+      if (share >= c.sentenceOverlapMax) {
+        errors.push(`repetition: summary sentences ${i + 1} and ${j + 1} say nearly the same thing (${pct(share)} shared key words, limit ${pct(c.sentenceOverlapMax)}); each sentence must add something new`);
+      }
+    }
+  }
+  return errors;
+}
+
 /** Full validation of a draft against the licensed source text it came from. */
 export function validateDraft(draft: Draft, source: SourceText): Result {
   const errors = checkShape(draft);
@@ -280,6 +371,11 @@ export function validateDraft(draft: Draft, source: SourceText): Result {
   if ((source.requireFigures ?? draft.event_type === 'earnings') && !hasFigures(draft.body)) {
     errors.push('no_figures: an earnings card must state real figures (a number from the source) in the body');
   }
+
+  // 1a. flow: the summary continues the headline and no sentence repeats another (AI drafts only;
+  // template wording is fixed, e.g. "X reports a change in its top leaders" / "X told the SEC about a change
+  // among its top leaders", and would fail the headline-overlap test)
+  if (source.checkFlow) errors.push(...checkRepetition(draft.headline, draft.body));
 
   // 1b. no model numbers, SKUs, UPCs or lot numbers in the headline or summary (key points only)
   const codes = mentionsProductCodes(text);

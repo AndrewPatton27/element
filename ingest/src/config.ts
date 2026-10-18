@@ -56,7 +56,9 @@ export const config = {
   // v4 (2026-10-17): plain headline+body rules (no over-specific details; precise details only in detail.key_points).
   // v5 (2026-10-18): earnings cards must state figures (EX-99.1 press release is fed to the AI), no model
   // numbers/SKUs/UPCs/lot numbers in the headline or summary, sentence-case headlines.
-  promptVersion: 'sum-v5',
+  // v6 (2026-10-18): flow and no repetition (D-58): the first body sentence continues from the headline
+  // instead of restating it, no sentence repeats another, no filler; the validator rejects repetition.
+  promptVersion: 'sum-v6',
   // Version stored on template and data cards (no AI). tpl-v2 = plain wording (2026-10-17).
   // `--rewrite` redoes every published card whose prompt_version is neither this nor promptVersion.
   // v4: plain USGS headline+body and plain Federal Register headline. v5: sentence-case template headlines,
@@ -78,6 +80,21 @@ export const config = {
     keyPointMaxWords: 15,
   },
   bodyMaxWords: 60,
+  // Repetition check for AI drafts (validateDraft; template and data cards never go through it, their
+  // fixed wording is exempt). Compares "content words": lower-cased, lightly stemmed, with stop words,
+  // numbers and words shorter than minWordLength left out.
+  repetition: {
+    minWordLength: 3,
+    // (a) the first summary sentence restates the headline when this share of the headline's content
+    // words also appears in it (or it starts with the headline text). Tuned on the fixtures: a normal
+    // first sentence reuses the entity and the topic noun (about 0.3 to 0.5), a restatement reuses nearly all.
+    headlineOverlapMax: 0.7,
+    minHeadlineWords: 3,                       // a headline with fewer content words is only checked for "starts with"
+    // (b) two summary sentences are near-duplicates when this share of the shorter one's content words
+    // appears in the other.
+    sentenceOverlapMax: 0.7,
+    minSentenceWords: 3,                       // shorter sentences ("Revenue grew 12%.") are not compared
+  },
   maxTickersPerCard: 5,
   maxSourcesPerCard: 8,
   // Max consecutive words copied from the source (numbers and 8-K item titles don't count).
@@ -262,7 +279,9 @@ export const config = {
     // How many UTC days of "In the news" feeds one run reads, today included (3 = today and the 2
     // days before). Stories are deduplicated across days by external_id and URL; a day whose feed
     // fails or has no `news` list is logged and skipped. The same allowlisted API and parser are used.
-    lookbackDays: 3,
+    // Live 2026-10-17: the past-day feeds had 0 news stories (the featured feed lists news only for
+    // the current day), so 1 = today only. Raise it if the API starts returning past news.
+    lookbackDays: 1,
     aiTextMaxChars: 1500,
     category: 'world',
     eventType: 'world_event',
@@ -297,7 +316,7 @@ export const config = {
     // reads `feedPages - 1` older pages of the same feed (WordPress `?paged=N`, same allowlisted host).
     // An older page that fails is logged and skipped.
     maxAgeDays: 14,
-    feedPages: 2,
+    feedPages: 1,                               // live 2026-10-17: ?paged=2 answered HTTP 403, so only page 1 is read
     category: 'science',
     eventType: 'science',
     attribution: 'Source: NASA',

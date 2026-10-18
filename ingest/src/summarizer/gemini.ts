@@ -43,8 +43,15 @@ export function buildPrompt(input: SummarizeInput): string {
     'Use ONLY facts stated in the SOURCE TEXT. If the text is thin, say only what it says.',
     'WRITING STYLE: very easy to understand. Use plain words at about an 8th-grade reading level and short sentences. No jargon.',
     '- If a term like "convertible notes" or "restatement" cannot be avoided, explain it in a few plain words (for example "borrowed money that can turn into shares").',
-    '- Sentence 1 says what happened, in plain words.',
+    '- The headline says what happened. Body sentence 1 does NOT say it again: it continues from the headline and adds the next most useful fact (who or what is affected, how much, where, or what changes).',
     '- The last sentence says why it matters to a regular person or a student, but ONLY if that follows directly from the facts in the source. Never guess, predict prices or give advice. If it does not follow, leave it out.',
+    'FLOW AND NO REPETITION (a card that breaks one of these is rejected):',
+    '- The headline and the body read as ONE piece. The first body sentence picks up where the headline stops and adds the next most useful fact. It must NEVER restate the headline or reuse its wording.',
+    '  Bad (do not copy, example only): headline "IRS lets people pay taxes by card" -> body "The IRS now lets people pay taxes by card. ..."',
+    '  Good (example only): headline "IRS lets people pay taxes by card" -> body "Taxpayers can use a debit or credit card directly, without a third-party service. The change takes effect next year."',
+    '- Every sentence adds something new. No sentence repeats an earlier one in other words, and no phrase is repeated.',
+    '- No filler such as "This means that...", "In summary...", "It is important to note...".',
+    '- The "detail" continues the story too: its key_points add new facts and must NOT copy or reword the body sentences.',
     `HARD LIMITS (a card that breaks one is rejected): headline at most ${config.headlineMaxChars} characters including spaces; body 2 or 3 sentences and at most ${config.bodyMaxWords} words in total.`,
     'Rules:',
     `- "headline": short and plain, at most ${config.headlineMaxChars} characters (aim for about ${config.headlineTargetChars}).`,
@@ -53,7 +60,7 @@ export function buildPrompt(input: SummarizeInput): string {
     '- Never include model numbers, SKUs, UPCs or lot numbers in the headline or the body. If they matter, put them in "detail".key_points only.',
     '- Leave precise technical details OUT of the headline AND the body: no exact distances, compass bearings, coordinates, exact clock times, docket, item or section numbers, model numbers, or long official titles. Name the broad place or thing people recognize (the country, state, or company), not the nearest small town or precise spot.',
     '- Keep only the one or two numbers that matter most (the magnitude, the dollar amount, the percent change). Precise details (exact location, times, model or docket numbers) belong ONLY in "detail".key_points, never in the headline or the body.',
-    `- "body": 2 or 3 short sentences, at most ${config.bodyMaxWords} words (aim for about ${Math.round(config.bodyMaxWords * 0.75)}), or null if the text has no facts beyond the headline. Give the big picture: what happened, where in broad terms, and why it matters.`,
+    `- "body": 2 or 3 short sentences, at most ${config.bodyMaxWords} words (aim for about ${Math.round(config.bodyMaxWords * 0.75)}), or null if the text has no facts beyond the headline. Give the big picture beyond the headline: where in broad terms, who is affected, and why it matters.`,
     '- Every number you write must appear in the source text exactly. Do not calculate new numbers.',
     '- Never give investment advice or opinions. Do not use words like buy, sell, hold, invest in, recommend, price target, guaranteed, undervalued, or overvalued.',
     '- For a product recall or safety card, give the plain safety instruction as a direct order and do NOT use the word "should": write "Stop using it and contact the company for a refund" rather than "consumers should stop using it". Phrases like stop using, contact the company, and return it for a refund are fine.',
@@ -91,6 +98,9 @@ export function buildPrompt(input: SummarizeInput): string {
     lines.push('', `Your previous answer was rejected for: ${input.retryErrors.join('; ')}. Fix these problems.`);
     if (input.retryErrors.some((e) => /^no_figures/.test(e))) {
       lines.push('Put the key figures from the source (for example revenue and profit, with the dollar amounts) in the body. Use the numbers exactly as written in the source.');
+    }
+    if (input.retryErrors.some((e) => /^repetition/.test(e))) {
+      lines.push('Rewrite the body so its first sentence adds a NEW fact instead of repeating the headline, and no two sentences say the same thing. Do not use the headline\'s words again in sentence 1.');
     }
     if (input.retryErrors.some((e) => /longer than/.test(e))) {
       lines.push(`Write it shorter: headline at most ${config.headlineMaxChars} characters, body at most ${config.bodyMaxWords} words in 2 or 3 sentences.`);

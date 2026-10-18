@@ -129,10 +129,23 @@ test('FAA cap counts only NEW directives: an already-handled newest directive no
   assert.equal(t.upserted.includes(docs[3].html_url), false, 'the capped directive is not recorded');
 });
 
+// The defaults read today's Wikipedia feed only and NASA feed page 1 only (live runs: past-day feeds had 0 news,
+// NASA ?paged=2 answers HTTP 403). The multi-day / multi-page code paths stay tested by raising the value here.
+async function withConfig<T>(obj: object, key: string, value: number, fn: () => Promise<T>): Promise<T> {
+  const o = obj as Record<string, number>;
+  const was = o[key];
+  try {
+    o[key] = value;
+    return await fn();
+  } finally {
+    o[key] = was;
+  }
+}
+
 // ---- Wikipedia: look-back over several days -------------------------------------------------------------
 
 test('wiki url: daysBack walks back whole UTC days across month and year ends', () => {
-  assert.equal(config.wiki.lookbackDays, 3);
+  assert.equal(config.wiki.lookbackDays, 1);
   assert.equal(wikiFeedUrl(DRY_NOW), 'https://en.wikipedia.org/api/rest_v1/feed/featured/2026/10/17');
   assert.equal(wikiFeedUrl(DRY_NOW, 1), 'https://en.wikipedia.org/api/rest_v1/feed/featured/2026/10/16');
   assert.equal(wikiFeedUrl(new Date('2026-11-01T01:00:00Z'), 2), 'https://en.wikipedia.org/api/rest_v1/feed/featured/2026/10/30');
@@ -141,9 +154,9 @@ test('wiki url: daysBack walks back whole UTC days across month and year ends', 
   assert.throws(() => assertAllowed(wikiFeedUrl(DRY_NOW, 2), 'page'), /page host not allowed/);
 });
 
-test('wiki pipeline: reads today and the 2 days before; a story on several days becomes one card; a day with no news list is fine', async () => {
+test('wiki pipeline (lookbackDays 3): reads today and the 2 days before; a story on several days becomes one card; a day with no news list is fine', async () => {
   const t = setup(new Set());
-  const s = await runOnce(t.deps, { only: ['wiki'] });
+  const s = await withConfig(config.wiki, 'lookbackDays', 3, () => runOnce(t.deps, { only: ['wiki'] }));
   assert.deepEqual(t.requests, [wikiFeedUrl(DRY_NOW), wikiFeedUrl(DRY_NOW, 1), wikiFeedUrl(DRY_NOW, 2)]);
   assert.equal(s.published, 5, '4 stories today + 1 only yesterday; Navi Pillay is in both feeds');
   assert.equal(t.dry.cards.filter((c) => c.dedupe_key === 'https://en.wikipedia.org/wiki/Navi_Pillay').length, 1);
@@ -154,44 +167,44 @@ test('wiki pipeline: reads today and the 2 days before; a story on several days 
   assert.ok(t.dry.cards.every((c) => c.category === 'world' && c.sources[0].license_class === 'cc_by_sa' && /^Adapted from Wikipedia /.test(c.attribution!)));
 });
 
-test('wiki pipeline: stories handled in an earlier run are skipped without an AI call; the newer-day story is still picked up', async () => {
+test('wiki pipeline (lookbackDays 3): stories handled in an earlier run are skipped without an AI call; the newer-day story is still picked up', async () => {
   const base = setup(new Set());
-  await runOnce(base.deps, { only: ['wiki'] });
+  await withConfig(config.wiki, 'lookbackDays', 3, () => runOnce(base.deps, { only: ['wiki'] }));
   const handled = new Set(base.dry.cards.map((c) => c.dedupe_key).filter((u) => u !== 'https://en.wikipedia.org/wiki/Example_City_flood'));
   const t = setup(handled);
-  const s = await runOnce(t.deps, { only: ['wiki'] });
+  const s = await withConfig(config.wiki, 'lookbackDays', 3, () => runOnce(t.deps, { only: ['wiki'] }));
   assert.equal(s.published, 1);
   assert.equal(t.titles.length, 1);
   assert.ok(t.lines.some((l) => /4 already handled/.test(l)), t.lines.join('\n'));
 });
 
-test('wiki pipeline: a failing past day is logged and the other days still run; lookbackDays 1 reads today only', async () => {
+test('wiki pipeline: a failing past day is logged and the other days still run (lookbackDays 3); the default reads today only', async () => {
   const fixture = fixtureFetcher();
-  const t = setup(new Set(), async (url, kind, ttl) => {
+  const failYesterday: Deps['fetchText'] = async (url, kind, ttl) => {
     if (url === wikiFeedUrl(DRY_NOW, 1)) throw new Error('HTTP 404 from en.wikipedia.org');
     return fixture(url, kind, ttl);
-  });
-  const s = await runOnce(t.deps, { only: ['wiki'] });
+  };
+  const t = setup(new Set(), failYesterday);
+  const s = await withConfig(config.wiki, 'lookbackDays', 3, () => runOnce(t.deps, { only: ['wiki'] }));
   assert.equal(s.published, 4);
+  assert.deepEqual(t.requests, [wikiFeedUrl(DRY_NOW), wikiFeedUrl(DRY_NOW, 1), wikiFeedUrl(DRY_NOW, 2)], 'the failing day does not stop the next one');
   assert.ok(t.lines.includes('wiki: feed for 2026-10-16 failed: HTTP 404 from en.wikipedia.org'), t.lines.join('\n'));
 
-  const w = config.wiki as { lookbackDays: number };
-  const was = w.lookbackDays;
-  try {
-    w.lookbackDays = 1;
-    const one = setup(new Set());
-    await runOnce(one.deps, { only: ['wiki'] });
-    assert.deepEqual(one.requests, [wikiFeedUrl(DRY_NOW)]);
-  } finally {
-    w.lookbackDays = was;
-  }
+  // default (lookbackDays 1): today only; the failing past day is never requested, so no failure is logged
+  assert.equal(config.wiki.lookbackDays, 1);
+  const one = setup(new Set(), failYesterday);
+  const s1 = await runOnce(one.deps, { only: ['wiki'] });
+  assert.deepEqual(one.requests, [wikiFeedUrl(DRY_NOW)]);
+  assert.equal(s1.published, 4, "4 stories in today's feed");
+  assert.ok(!one.lines.some((l) => /feed for .* failed/.test(l)), one.lines.join('\n'));
+  assert.ok(one.lines.some((l) => /^wiki: 1 days read \(2026-10-17: 4 stories, 4 new to this run\); 4 candidates, 4 new, 0 already handled$/.test(l)), one.lines.join('\n'));
 });
 
 // ---- NASA --------------------------------------------------------------------------------------------------
 
 test('nasa: window is 14 days; only real news releases count (image articles, APOD and blog posts are dropped); pages overlap safely', () => {
   assert.equal(config.nasa.maxAgeDays, 14);
-  assert.equal(config.nasa.feedPages, 2);
+  assert.equal(config.nasa.feedPages, 1);
   assert.equal(nasaFeedUrl(1), 'https://www.nasa.gov/news-release/feed/');
   assert.equal(nasaFeedUrl(2), 'https://www.nasa.gov/news-release/feed/?paged=2');
   assert.doesNotThrow(() => assertAllowed(nasaFeedUrl(2), 'api'));
@@ -206,30 +219,41 @@ test('nasa: window is 14 days; only real news releases count (image articles, AP
   assert.ok(!links.some((l) => /image-article|blogs|apod/.test(l)));
 });
 
-test('nasa pipeline: reads feed page 1 and page 2, publishes both recent news releases, skips ones an earlier run handled', async () => {
+test('nasa pipeline (feedPages 2): reads feed page 1 and page 2, publishes both recent news releases, skips ones an earlier run handled', async () => {
   const t = setup(new Set());
-  const s = await runOnce(t.deps, { only: ['nasa'] });
+  const s = await withConfig(config.nasa, 'feedPages', 2, () => runOnce(t.deps, { only: ['nasa'] }));
   assert.deepEqual(t.requests, [nasaFeedUrl(1), nasaFeedUrl(2)]);
   assert.equal(s.published, 2, t.lines.join('\n'));
   assert.ok(t.dry.cards.every((c) => c.category === 'science' && c.sources[0].name === 'NASA'));
   assert.ok(t.lines.some((l) => /^nasa: 8 feed items over 2 page\(s\), 2 news releases in the last 14 days, 0 already handled, 2 new$/.test(l)), t.lines.join('\n'));
 
   const again = setup(new Set(t.dry.cards.map((c) => c.dedupe_key)));
-  const s2 = await runOnce(again.deps, { only: ['nasa'] });
+  const s2 = await withConfig(config.nasa, 'feedPages', 2, () => runOnce(again.deps, { only: ['nasa'] }));
   assert.equal(s2.published, 0);
   assert.equal(again.titles.length, 0);
   assert.ok(again.lines.some((l) => /2 already handled, 0 new$/.test(l)), again.lines.join('\n'));
 });
 
-test('nasa pipeline: a failing page 2 is logged and page 1 still publishes', async () => {
+test('nasa pipeline: a failing page 2 is logged and page 1 still publishes (feedPages 2); the default never requests page 2', async () => {
   const fixture = fixtureFetcher();
   const t = setup(new Set(), async (url, kind, ttl) => {
     if (url === nasaFeedUrl(2)) throw new Error('HTTP 404 from www.nasa.gov');
     return fixture(url, kind, ttl);
   });
-  const s = await runOnce(t.deps, { only: ['nasa'] });
+  const s = await withConfig(config.nasa, 'feedPages', 2, () => runOnce(t.deps, { only: ['nasa'] }));
   assert.equal(s.published, 1);
   assert.ok(t.lines.includes('nasa: feed page 2 failed (continuing): HTTP 404 from www.nasa.gov'), t.lines.join('\n'));
+
+  // default (feedPages 1): only page 1 is requested, so the failing page 2 is never hit
+  assert.equal(config.nasa.feedPages, 1);
+  const one = setup(new Set(), async (url, kind, ttl) => {
+    if (url === nasaFeedUrl(2)) throw new Error('HTTP 403 from www.nasa.gov');
+    return fixture(url, kind, ttl);
+  });
+  const s1 = await runOnce(one.deps, { only: ['nasa'] });
+  assert.deepEqual(one.requests, [nasaFeedUrl(1)]);
+  assert.equal(s1.published, 1, 'only the page 1 release; the 9-day-old release is on page 2');
+  assert.ok(!one.lines.some((l) => /feed page 2 failed/.test(l)), one.lines.join('\n'));
 });
 
 test('cpscUrl is unchanged by the new-only cap (14-day lookback, one request)', async () => {
