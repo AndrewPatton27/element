@@ -171,3 +171,19 @@ export function practiceHandlers(dispatch: (e: PracticeEvent) => void) {
     dismiss: () => dispatch({ type: 'dismiss' }),
   };
 }
+
+// The two bottom buttons of every step. Back is hidden on step 1; Next becomes Done
+// on the last step and finishes the tour (the seen flag is saved by the caller).
+export interface NavButtons {
+  showBack: boolean;
+  primaryLabel: 'Next' | 'Done';
+}
+
+export function navButtons(step: number, count: number): NavButtons {
+  return { showBack: clampStep(step, count) > 0, primaryLabel: isLastStep(step, count) ? 'Done' : 'Next' };
+}
+
+/** What pressing Next does: go to the next step, or finish on the last one. */
+export function nextOrDone(step: number, count: number): { type: 'step'; step: number } | { type: 'done' } {
+  return isLastStep(step, count) ? { type: 'done' } : { type: 'step', step: nextStep(step, count) };
+}

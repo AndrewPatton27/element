@@ -265,3 +265,12 @@ test('motion values match the design @keyframes', () => {
     for (let i = 1; i < at.length; i++) assert.ok(at[i] > at[i - 1], `${k} offsets increase`);
   }
 });
+
+test('bottom buttons: Back hidden on step 1, Next becomes Done on the last step', async () => {
+  const { navButtons, nextOrDone } = await import('../tutorialLogic.ts');
+  assert.deepEqual(navButtons(0, 4), { showBack: false, primaryLabel: 'Next' });
+  assert.deepEqual(navButtons(2, 4), { showBack: true, primaryLabel: 'Next' });
+  assert.deepEqual(navButtons(3, 4), { showBack: true, primaryLabel: 'Done' });
+  assert.deepEqual(nextOrDone(1, 4), { type: 'step', step: 2 });
+  assert.deepEqual(nextOrDone(3, 4), { type: 'done' });
+});

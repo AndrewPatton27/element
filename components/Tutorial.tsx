@@ -291,10 +291,10 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
                 onPress={back}
                 accessibilityRole="button"
                 accessibilityLabel="Back, previous step"
-                style={({ pressed }) => [styles.navBtn, { borderColor: p.border, opacity: pressed ? 0.6 : 1 }]}
+                style={({ pressed }) => [styles.navBtn, { borderColor: p.borderStrong, backgroundColor: p.surface, opacity: pressed ? 0.6 : 1 }]}
               >
                 <ChevronLeftIcon color={p.inkSoft} size={20} />
-                <Text style={[styles.backText, { color: p.inkSoft }]}>Back</Text>
+                <Text style={[styles.backText, { color: p.ink }]}>Back</Text>
               </Pressable>
             ) : (
               <View style={styles.back} />
@@ -319,19 +319,15 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
                 
               </Pressable>
             ) : null}
-            {!last ? (
-              <Pressable
-                onPress={next}
-                accessibilityRole="button"
-                accessibilityLabel="Next"
-                style={({ pressed }) => [styles.navBtn, { backgroundColor: p.accent, borderColor: p.accent, opacity: pressed ? 0.8 : 1 }]}
-              >
-                <Text style={[styles.navBtnText, { color: '#FFFFFF' }]}>Next</Text>
-                <ChevronRightIcon color="#FFFFFF" size={18} />
-              </Pressable>
-            ) : (
-              <View style={styles.back} />
-            )}
+            <Pressable
+              onPress={last ? () => onExit('done') : next}
+              accessibilityRole="button"
+              accessibilityLabel={last ? 'Done, finish the tour' : 'Next'}
+              style={({ pressed }) => [styles.navBtn, { backgroundColor: '#0B6B5D', borderColor: '#0B6B5D', opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={[styles.navBtnText, { color: '#FFFFFF' }]}>{last ? 'Done' : 'Next'}</Text>
+              {last ? null : <ChevronRightIcon color="#FFFFFF" size={18} />}
+            </Pressable>
           </View>
 
           {/* The disclaimer, once per step. */}
@@ -395,7 +391,7 @@ const styles = StyleSheet.create({
   secondary: { minHeight: 52, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { fontFamily: fonts.sansSemi, fontSize: 16 },
   footnote: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 18, textAlign: 'center' },
-  nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' },
+  nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 'auto', paddingTop: 4 },
   back: { width: 88, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 2 },
   backText: { fontFamily: fonts.sansSemi, fontSize: 15 },
   navBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 44, minWidth: 92, paddingHorizontal: 16, borderRadius: 22, borderWidth: 1 },
