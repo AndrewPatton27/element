@@ -10,26 +10,35 @@ export function createMockFeatureApi(cards: BlurbCard[], numbers: MacroFact[], t
     const slice = items.slice(start, start + limit);
     return { items: slice, next_cursor: start + slice.length < items.length ? String(start + slice.length) : null };
   };
+  // Same rules as api.daily_brief / api.weekly_brief (migration 20261018030000_brief_depth.sql):
+  // a section for every topic (best 8, most important first), deeper for the top topics, one card per story.
+  const BRIEF_MAX_SECTIONS = 8;
+  const BRIEF_WIDEN_BELOW = 12;
+  const storyKey = (c: BlurbCard) => (c as { dedupe_key?: string }).dedupe_key ?? c.id; // server cards carry dedupe_key
+  const briefLimit = (rank: number, top: number) => (rank <= 3 ? top : rank <= 5 ? 3 : 2);
   const brief = (requestedWindow: number): Brief => {
-    const cutoff = (hours: number) => Date.now() - hours * 3_600_000;
+    const inWindow = (hours: number) => cards.filter((c) => Date.parse(c.sort_at) >= Date.now() - hours * 3_600_000);
     let window_hours = requestedWindow;
-    let ranked = cards.filter((c) => Date.parse(c.sort_at) >= cutoff(window_hours));
-    if (requestedWindow === 24 && ranked.length < 6) {
-      window_hours = 48;
-      ranked = cards.filter((c) => Date.parse(c.sort_at) >= cutoff(window_hours));
+    if (requestedWindow === 24) {
+      if (inWindow(24).length < BRIEF_WIDEN_BELOW) window_hours = inWindow(48).length < BRIEF_WIDEN_BELOW ? 72 : 48;
     }
-    if (requestedWindow === 168) ranked = cards.filter((c) => Date.parse(c.sort_at) >= cutoff(168));
-    ranked.sort((a, b) => (b.importance ?? 1) * Math.pow(0.5, Math.max(0, Date.now() - Date.parse(b.sort_at)) / 43_200_000) - (a.importance ?? 1) * Math.pow(0.5, Math.max(0, Date.now() - Date.parse(a.sort_at)) / 43_200_000));
+    const top = requestedWindow === 168 ? 8 : 6;
+    const seen = new Set<string>();
+    const ranked = inWindow(window_hours)
+      .sort((a, b) => mockRankScore(b) - mockRankScore(a) || (a.id < b.id ? 1 : -1))
+      .filter((c) => (seen.has(storyKey(c)) ? false : (seen.add(storyKey(c)), true)));
     const groups = new Map<string, BlurbCard[]>();
-    for (const c of ranked) groups.set(c.category, [...(groups.get(c.category) ?? []), c]);
+    for (const c of ranked) groups.set(c.category, [...(groups.get(c.category) ?? []), c]); // each group is best-first
+    const topics = [...groups.entries()].sort((a, b) => mockRankScore(b[1][0]) - mockRankScore(a[1][0]) || b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1)).slice(0, BRIEF_MAX_SECTIONS);
     return {
       generated_at: new Date().toISOString(), window_hours,
-      headline_cards: [...groups.values()].slice(0, 3).map((g) => g[0]),
-      sections: [...groups.entries()].slice(0, 5).map(([category, grouped]) => ({ category, label: category, cards: grouped.slice(0, 3) })),
+      headline_cards: topics.slice(0, 3).map(([, g]) => g[0]),
+      sections: topics.map(([category, grouped], i) => ({
+        category, slug: category, label: category, rank: i + 1, total: grouped.length, cards: grouped.slice(0, briefLimit(i + 1, top)),
+      })),
       numbers: numbers.slice(0, 4),
     };
-  };
-  return {
+  };  return {
     search(q: string, cursor?: string | null, limit = 20) {
       // Same rules as api.search v2: any word, similar words, typos, tickers; Trending order.
       return page(rankSearch(cards, q, mockRankScore), cursor, limit);

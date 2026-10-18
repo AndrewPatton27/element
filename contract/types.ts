@@ -153,12 +153,26 @@ export interface FeedPage {
   next_cursor: string | null;
 }
 
+/**
+ * One topic in a brief. slug/rank/total were added by the depth update (all optional, so older
+ * servers and mocks still fit): `rank` 1 = most important topic, `total` = eligible stories the
+ * topic has in the window (`cards` holds only the top few), `slug` = category slug.
+ */
+export interface BriefSection {
+  category: string;
+  label: string;
+  cards: BlurbCard[];
+  slug?: string;
+  rank?: number;
+  total?: number;
+}
+
 /** Daily or weekly editorial brief assembled from published cards and macro facts. */
 export interface Brief {
   generated_at: string;
   window_hours: number;
   headline_cards: BlurbCard[];
-  sections: { category: string; label: string; cards: BlurbCard[] }[];
+  sections: BriefSection[];
   numbers: MacroFact[];
 }
 
