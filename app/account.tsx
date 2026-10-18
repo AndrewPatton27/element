@@ -160,6 +160,7 @@ export default function AccountScreen() {
         )}
         {message('email')}
         {outline('Sign out', () => void run('session', () => acct.signOut(), 'Signed out.'))}
+        {message('session')}
       </View>
 
       <View style={card}>
@@ -224,7 +225,7 @@ export default function AccountScreen() {
                 <View style={styles.sourceText}>
                   <Text style={[styles.sourceName, { color: on ? p.ink : p.muted }]}>{s.name}</Text>
                   {info ? (
-                    <Text style={[styles.help, { color: p.muted }]} numberOfLines={2}>
+                    <Text style={[styles.help, { color: p.muted }]}>
                       {info.gives}
                     </Text>
                   ) : null}
@@ -318,7 +319,6 @@ export default function AccountScreen() {
         </Pressable>
         {message('account')}
       </View>
-      {message('session')}
     </Shell>
   );
 }
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
   sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 10, borderTopWidth: 1 },
   sourceText: { flex: 1, gap: 2 },
   sourceName: { fontFamily: fonts.sansSemi, fontSize: 15 },
-  aboutLink: { fontFamily: fonts.sansSemi, fontSize: 13, textDecorationLine: 'underline' },
+  aboutLink: { fontFamily: fonts.sansSemi, fontSize: 13, textDecorationLine: 'underline', paddingVertical: 10 },
   danger: { minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   dangerText: { fontFamily: fonts.sansSemi, fontSize: 16 },
 });

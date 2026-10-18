@@ -1,6 +1,6 @@
 // Text formatting for cards and the numbers panel. Pure: no React imports.
 
-import type { Category, MacroFact } from '../contract/types.ts';
+import type { BlurbCard, Category, MacroFact } from '../contract/types.ts';
 
 export const HEADLINE_MAX_CHARS = 90;
 
@@ -21,6 +21,13 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   const d = new Date(t);
   const base = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
   return d.getUTCFullYear() === now.getUTCFullYear() ? base : `${base}, ${d.getUTCFullYear()}`;
+}
+
+// The one time label for a card, used by the feed card and its detail sheet so they never
+// disagree. Data cards: as_of is the observation date (the numbers panel shows the period),
+// so show when the card was published. Every other card shows as_of.
+export function cardTime(card: Pick<BlurbCard, 'kind' | 'published_at' | 'as_of'>, now: Date = new Date()): string {
+  return relativeTime(card.kind === 'data' ? card.published_at : card.as_of, now);
 }
 
 export function clampText(text: string, max: number): string {

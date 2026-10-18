@@ -1,4 +1,4 @@
-// "Numbers to know": six macro numbers, each with a plain-language line, the
+// "Numbers to know": the macro numbers, each with a plain-language line, the
 // change (glyph + word), the original agency, and the FRED notice.
 
 import { StyleSheet, Text, View } from 'react-native';

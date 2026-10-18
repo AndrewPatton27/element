@@ -6,7 +6,7 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
 import { NO_DETAIL_MESSAGE, cardDetail, detailParagraphs } from '../lib/detail';
-import { categoryName, clampHeadline, relativeTime } from '../lib/format';
+import { cardTime, categoryName, clampHeadline } from '../lib/format';
 import { cardLabels, shareAlikeCredit } from '../lib/labels';
 import { usePalette, useWide } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
@@ -44,7 +44,7 @@ export function DetailSheet({ card, config, categories, onClose }: Props) {
           {wide ? null : <View style={[styles.handle, { backgroundColor: p.handle }]} />}
           <View style={styles.header}>
             <Text style={[styles.meta, { color: p.muted }]}>
-              {categoryName(card.category, categories)} · {relativeTime(card.as_of)}
+              {categoryName(card.category, categories)} · {cardTime(card)}
             </Text>
             <Pressable
               onPress={onClose}

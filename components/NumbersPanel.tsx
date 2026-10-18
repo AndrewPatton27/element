@@ -12,7 +12,7 @@ import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
 import { changeColor } from './DataCard';
 import { openUrl } from './SourceChip';
-import { ErrorState, LoadingState } from './States';
+import { EmptyState, ErrorState, LoadingState } from './States';
 
 export function useNumbers(api: Api) {
   const [facts, setFacts] = useState<MacroFact[] | null>(null);
@@ -49,6 +49,7 @@ export function NumbersPanel({ api, config, variant }: Props) {
 
   if (error) return <ErrorState title="Could not load the numbers" message={error} onRetry={retry} />;
   if (!facts) return <LoadingState />;
+  if (facts.length === 0) return <EmptyState message="No numbers yet. Check back soon." />;
 
   const noticeEls = notices.map((n) => (
     <Text

@@ -4,7 +4,7 @@
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppConfig, BlurbCard, Category } from '../contract/types.ts';
-import { categoryName, clampHeadline, eventLabel, relativeTime } from '../lib/format';
+import { cardTime, categoryName, clampHeadline, eventLabel } from '../lib/format';
 import { cardLabels, shareAlikeCredit } from '../lib/labels';
 import { OPEN_DETAIL_HINT, cardDetail } from '../lib/detail';
 import { usePalette } from '../lib/useTheme';
@@ -42,13 +42,14 @@ function metaLine(card: BlurbCard, categories: Category[]): string {
   const event = eventLabel(card.event_type);
   const parts = [category];
   if (event && !category.toLowerCase().includes(event.toLowerCase())) parts.push(event);
-  // Data cards: as_of is the observation date (the panel shows the period), so show when it was published.
-  parts.push(relativeTime(card.kind === 'data' ? card.published_at : card.as_of));
+  // Same label the detail sheet shows (lib/format cardTime), so the two never disagree.
+  parts.push(cardTime(card));
   return parts.join(' · ');
 }
 
 export function Card({ card, config, categories, onShowSources, onOpenDetail, onNext, wide, compact, reaction, onReact, onMore }: Props) {
   const hasDetail = cardDetail(card) !== null;
+  const opensDetail = !!onOpenDetail && hasDetail;
   // A malformed ticker from the server is skipped, not shown as an empty chip.
   const validTickers = card.tickers.filter((t) => t && typeof t.symbol === 'string' && t.symbol !== '');
   const p = usePalette();
@@ -65,14 +66,13 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
           <Text style={[styles.badgeText, { color: badge.fg }]}>{badge.text}</Text>
         </View>
         <View style={styles.metaRight}>
-          {card.updated_at ? <Text style={[styles.updated, { color: p.dataInk, borderColor: p.dataInk }]}>Updated</Text> : null}
+          {/* No "Updated" badge: every rewrite pass sets updated_at, so it said nothing (audit C1). */}
           <Text style={[styles.metaText, wide && { fontSize: 14 }, { color: p.muted }]}>{metaLine(card, categories)}</Text>
           {onMore ? (
             <Pressable
               onPress={() => onMore(card)}
               accessibilityRole="button"
               accessibilityLabel="More options for this card"
-              hitSlop={10}
               style={styles.moreBtn}
             >
               <Text style={[styles.moreDots, { color: p.muted }]}>⋯</Text>
@@ -83,13 +83,14 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
 
       {/* Only this middle part may shrink (and clip); the source row, AI label and
           disclaimer below never do, so they are always visible. Tapping it opens the
-          detail sheet (the source row and the buttons below keep their own actions). The
-          hint is part of the label because react-native-web drops accessibilityHint. */}
+          detail sheet, but only when the card has detail (otherwise the sheet would just
+          say "not available"); the source row and the buttons below keep their own actions.
+          The hint is part of the label because react-native-web drops accessibilityHint. */}
       <Pressable
-        onPress={onOpenDetail ? () => onOpenDetail(card) : undefined}
-        disabled={!onOpenDetail}
-        accessibilityRole={onOpenDetail ? 'button' : undefined}
-        accessibilityLabel={onOpenDetail ? `${card.headline}. ${OPEN_DETAIL_HINT}` : undefined}
+        onPress={opensDetail ? () => onOpenDetail?.(card) : undefined}
+        disabled={!opensDetail}
+        accessibilityRole={opensDetail ? 'button' : undefined}
+        accessibilityLabel={opensDetail ? `${card.headline}. ${OPEN_DETAIL_HINT}` : undefined}
         style={[styles.middle, wide && { gap: 18 }, compact && { gap: 10 }]}
       >
         <Text
@@ -129,12 +130,11 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
       </Pressable>
 
       <View style={styles.sourceBlock}>
-        {onOpenDetail && hasDetail ? (
+        {opensDetail ? (
           <Pressable
-            onPress={() => onOpenDetail(card)}
+            onPress={() => onOpenDetail?.(card)}
             accessibilityRole="button"
             accessibilityLabel={`More detail. ${OPEN_DETAIL_HINT}`}
-            hitSlop={6}
             style={styles.more}
           >
             <Text style={[styles.moreText, { color: p.accentInk }]}>More detail ›</Text>
@@ -160,7 +160,7 @@ export function Card({ card, config, categories, onShowSources, onOpenDetail, on
           </View>
         )}
         {onNext ? (
-          <Pressable onPress={onNext} accessibilityRole="button" accessibilityLabel="Next card" hitSlop={8} style={styles.next}>
+          <Pressable onPress={onNext} accessibilityRole="button" accessibilityLabel="Next card" style={styles.next}>
             {wide ? null : <ChevronUpIcon color={p.muted} />}
             <Text style={[styles.nextText, wide && { fontSize: 14 }, { color: p.muted }]}>{wide ? 'Next: press ↓ or scroll' : 'Swipe up'}</Text>
           </Pressable>
@@ -188,7 +188,6 @@ function ReactButton({ kind, on, onPress }: { kind: Feedback; on: boolean; onPre
       accessibilityRole="button"
       accessibilityLabel={like ? 'More like this' : 'Less like this'}
       aria-pressed={on}
-      hitSlop={6}
       style={({ pressed }) => [
         styles.react,
         { borderColor: on ? p.accent : p.borderStrong, backgroundColor: on ? p.accentSoft : 'transparent', opacity: pressed ? 0.7 : 1 },
@@ -203,9 +202,22 @@ function ReactButton({ kind, on, onPress }: { kind: Feedback; on: boolean; onPre
   );
 }
 
+// Tap targets are real 44 px boxes: react-native-web's Pressable ignores hitSlop, so padding
+// via hitSlop never existed on the website. The negative margins hand the extra height back to
+// the layout (it spills only into the card's own padding/gaps), so compact cards still fit.
 const styles = StyleSheet.create({
   reactRow: { flex: 1, flexDirection: 'row', gap: 8 },
-  react: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1 },
+  react: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 44,
+    marginVertical: -4,
+    paddingHorizontal: 14,
+    borderRadius: 22,
+    borderWidth: 1,
+  },
   reactText: { fontFamily: fonts.sansSemi, fontSize: 13 },
   disclaimerAlone: { flexShrink: 0, marginTop: -6 },
   card: { flex: 1, borderWidth: 1, borderRadius: 24, padding: 24, gap: 16, overflow: 'hidden' },
@@ -213,11 +225,10 @@ const styles = StyleSheet.create({
   cardWide: { padding: 32, gap: 18 },
   meta: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
   metaRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  moreBtn: { minWidth: 32, minHeight: 28, alignItems: 'center', justifyContent: 'center' },
+  moreBtn: { minWidth: 44, minHeight: 44, marginVertical: -8, marginHorizontal: -6, alignItems: 'center', justifyContent: 'center' },
   moreDots: { fontSize: 20, lineHeight: 22 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingHorizontal: 10, borderRadius: 14 },
   badgeText: { fontFamily: fonts.sansSemi, fontSize: 13 },
-  updated: { fontFamily: fonts.sansSemi, fontSize: 12, borderWidth: 1, borderRadius: 6, paddingHorizontal: 5 },
   metaText: { fontFamily: fonts.sans, fontSize: 13 },
   headline: { fontFamily: fonts.serif },
   body: { fontFamily: fonts.sans, fontSize: 18, lineHeight: 27 },
@@ -227,11 +238,11 @@ const styles = StyleSheet.create({
   ticker: { fontFamily: fonts.sansMedium, fontSize: 13, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 3 },
   middle: { flexShrink: 1, minHeight: 0, overflow: 'hidden', gap: 16 },
   spacer: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0 },
-  more: { alignSelf: 'flex-start', minHeight: 28, justifyContent: 'center' },
+  more: { alignSelf: 'flex-start', minHeight: 44, marginTop: -8, marginBottom: -6, justifyContent: 'center' },
   moreText: { fontFamily: fonts.sansSemi, fontSize: 14 },
   sourceBlock: { gap: 8, flexShrink: 0 },
   footer: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, paddingTop: 12, flexShrink: 0 },
   footerText: { flex: 1 },
-  next: { minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  next: { minHeight: 44, marginVertical: -6, flexDirection: 'row', alignItems: 'center', gap: 6 },
   nextText: { fontFamily: fonts.sansMedium, fontSize: 13 },
 });

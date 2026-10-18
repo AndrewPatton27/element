@@ -94,7 +94,7 @@ export default function AboutScreen() {
       <Section title="How we collect it">
         <Bullets
           items={[
-            'A small program checks the official feeds and data services above every few minutes while it runs, several times a day.',
+            'A small program checks the official feeds and data services above several times a day.',
             'It downloads full pages from only three websites: sec.gov, federalreserve.gov and bls.gov. Everything else comes from the source’s own feed or data service.',
             'It tells the SEC who we are on every request, as the SEC requires.',
           ]}
@@ -171,6 +171,6 @@ const styles = StyleSheet.create({
   bullet: { fontFamily: fonts.sansSemi, fontSize: 16, lineHeight: 24 },
   source: { borderTopWidth: 1, paddingTop: 12, gap: 4 },
   sourceName: { fontFamily: fonts.sansSemi, fontSize: 16 },
-  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 16, rowGap: 4, paddingTop: 2 },
-  link: { fontFamily: fonts.sansSemi, fontSize: 14, textDecorationLine: 'underline' },
+  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 16, rowGap: 0, paddingTop: 2 },
+  link: { fontFamily: fonts.sansSemi, fontSize: 14, textDecorationLine: 'underline', paddingVertical: 10 },
 });
