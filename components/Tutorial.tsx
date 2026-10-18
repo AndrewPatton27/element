@@ -116,7 +116,7 @@ export function Tutorial({ onExit }: { onExit: (how: TutorialExit) => void }) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const action = keyToAction(e.key, stepRef.current, count);
       // Swallow the feed's own keys while the tour is open, even when they do nothing here.
-      if (action || ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'j', 'k'].includes(e.key)) {
+      if (action || ['ArrowDown', 'ArrowUp'].includes(e.key)) {
         e.preventDefault();
         e.stopImmediatePropagation();
       }

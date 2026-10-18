@@ -1,5 +1,5 @@
 // Vertical one-card-per-screen pager. FlatList with paging and snap. On web the
-// arrow keys, PageUp/PageDown and j/k move between cards; wide web also shows a
+// the up and down arrow keys (and only those) move between cards; wide web also shows a
 // "Next: press ↓ or scroll" button in the card footer.
 //
 // Swipe to react (touch, phone layouts, signed in): drag right = like, left =
@@ -349,10 +349,10 @@ export function FeedPager({
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (['ArrowDown', 'PageDown', 'j'].includes(e.key)) {
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
         goTo(indexRef.current + 1);
-      } else if (['ArrowUp', 'PageUp', 'k'].includes(e.key)) {
+      } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         goTo(indexRef.current - 1);
       }
