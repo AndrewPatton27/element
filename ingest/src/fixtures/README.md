@@ -1,4 +1,4 @@
-# Fixtures for offline tests and `--dry-run`
+﻿# Fixtures for offline tests and `--dry-run`
 
 Labels: **REAL** = verbatim fetched content. **RECONSTRUCTED** = every value comes from a live fetch, but the file was re-assembled field by field. **SYNTHETIC** = hand-made in the documented format. Each file says its label in its first line (or `_comment` field).
 
@@ -11,6 +11,7 @@ Labels: **REAL** = verbatim fetched content. **RECONSTRUCTED** = every value com
 | `fred-DGS10-observations.json` | SYNTHETIC (FRED JSON shape) |
 | `sec-company-tickers-exchange.json` | SYNTHETIC (SEC ticker list shape) |
 | `sec-filing-index.html`, `sec-primary-8k.html` | SYNTHETIC (generic filing pages, no company facts) |
+| `sec-exhibit-99-1.html` | SYNTHETIC (generic EX-99.1 earnings press release with invented figures; the exhibit every Item 2.02 filing resolves to in the dry run and tests) |
 | `fed-press-release.html` | SYNTHETIC (generic press-release page) |
 | `fedreg-agencies.json` | REAL (Federal Register API query B, per_page=5, fetched 2026-10-17 22:06 UTC; byte-for-byte, so no label inside the file) |
 | `fedreg-significant.json` | REAL (Federal Register API query A, per_page=4, fetched 2026-10-17 22:06 UTC; byte-for-byte, so no label inside the file) |

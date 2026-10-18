@@ -32,13 +32,14 @@ function dryDeps(providers: Summarizer[] = [templateSummarizer]) {
   return { deps, dry, lines, requested };
 }
 
-test('dry run end to end: 8 template cards (1 Fed, 2 BEA, 5 USGS), Federal Register, Wikipedia, CPSC and off-list SEC skipped, every card valid', async () => {
+test('dry run end to end: 5 template cards (1 Fed, 2 BEA, 2 USGS), Federal Register, Wikipedia, CPSC and off-list SEC skipped, every card valid', async () => {
   const { deps, dry, lines, requested } = dryDeps();
   const stats = await runOnce(deps);
-  assert.equal(stats.published, 8);
-  assert.equal(stats.template, 8);
+  assert.equal(stats.published, 5);
+  assert.equal(stats.template, 5);
   assert.equal(dry.cards.filter((c) => c.sources[0].name === 'Federal Register').length, 0, 'no template Federal Register cards');
   assert.equal(lines.filter((l) => l.startsWith('skip template_not_allowed')).length, 15);   // 5 Federal Register, 4 Wikipedia, 5 CPSC, 1 NASA
+  assert.equal(lines.filter((l) => l.startsWith('skip low_interest')).length, 3, 'green-alert quakes: 2 on the Mid-Atlantic Ridge, 1 small one in Panama');
   assert.ok(lines.includes('skip routine_5.02: Costco Wholesale Corp 8-K'), 'Costco bonus-criteria 5.02 is routine');
   assert.ok(lines.some((l) => /not candidates: not_watched 1/.test(l)), 'GoPro is not on the watch list');
   assert.ok(lines.includes('sec: watch list 152 of 152 companies resolved'));
@@ -49,9 +50,9 @@ test('dry run end to end: 8 template cards (1 Fed, 2 BEA, 5 USGS), Federal Regis
     assert.equal(c.ai_generated, false);
   }
   assert.deepEqual(dry.cards.filter((c) => c.category !== 'science').map((c) => c.headline).sort(), [
-    'Gross Domestic Product, 2nd Quarter 2026 (Third Estimate)',
+    'Gross domestic product, 2nd quarter 2026 (third estimate)',
     "Minutes of the Board's discount rate meetings on August 17, September 9, and September…",
-    'U.S. International Trade in Goods and Services, August 2026',
+    'U.S. international trade in goods and services, August 2026',
   ]);
   // every request went to an allowlisted government host (data.sec.gov: per-company filing lists)
   for (const u of requested) {
@@ -81,7 +82,7 @@ test('with an AI provider the pipeline publishes AI cards that passed validation
     name: 'gemini', usesAi: true,
     async summarize(i) {
       const c = i.item.company ?? 'The Fed';
-      return { headline: `${c} shares new results`, body: null, category: i.item.category, event_type: i.item.event_type, tickers: i.item.tickers.map((t) => t.symbol), everyday_relevance: 5 };
+      return { headline: `${c} shares new results`, body: i.item.company ? 'Revenue was $102.5 billion for the quarter.' : null, category: i.item.category, event_type: i.item.event_type, tickers: i.item.tickers.map((t) => t.symbol), everyday_relevance: 5 };
     },
   };
   const a = dryDeps([ai, templateSummarizer]);

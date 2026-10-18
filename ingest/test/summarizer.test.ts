@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { summarizeWithChain, memoryCounter, fileCounter } from '../src/summarizer/chain.ts';
@@ -38,8 +38,12 @@ function fake(name: string, outputs: (SummaryDraft | Error)[]): Summarizer & { c
   return s;
 }
 
-test('template cards pass the validator (SEC 2.02, SEC 5.02, Fed)', () => {
-  for (const item of [gopro, costco, fedItem]) {
+test('template cards pass the validator (SEC 5.02, Fed); the 2.02 template card has no figures and fails no_figures', () => {
+  const g = templateDraft({ item: gopro, text: '' });
+  const gv = validateDraft(g, { text: gopro.summary_text, licenseClass: gopro.license_class, tickers: ['GPRO'], requireFigures: true });
+  assert.equal(gv.ok, false);
+  assert.match(gv.errors.join(), /no_figures/);
+  for (const item of [costco, fedItem]) {
     const d = templateDraft({ item, text: item.summary_text });
     const v = validateDraft(d, { text: item.summary_text, licenseClass: item.license_class, tickers: item.tickers.map((t) => t.symbol) });
     assert.deepEqual(v.errors, [], d.headline);

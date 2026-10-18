@@ -19,7 +19,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { aiDailyCap, config } from '../config.ts';
-import { assertSummarizable, checkRelevance, checkShape, trimBodyToFit, validateDetail, validateDraft, type SourceText } from '../validate.ts';
+import { assertSummarizable, checkRelevance, checkShape, requiresFigures, trimBodyToFit, validateDetail, validateDraft, type SourceText } from '../validate.ts';
 import { templateSummarizer } from './template.ts';
 import type { SummarizeInput, Summarizer, SummaryDraft } from '../types.ts';
 
@@ -110,7 +110,10 @@ export async function summarizeWithChain(
   const now = opts.now ?? Date.now;
   const state = opts.state ?? createChainState();      // no state passed: no memory between items
   assertSummarizable(input.item.license_class);   // throws before any provider sees the text
-  const source = { text: input.text, licenseClass: input.item.license_class, tickers: input.item.tickers.map((t) => t.symbol), category: input.item.category };
+  const source = {
+    text: input.text, licenseClass: input.item.license_class, tickers: input.item.tickers.map((t) => t.symbol), category: input.item.category,
+    requireFigures: requiresFigures(input.item),      // event_type earnings (set in code) -> the body must have figures
+  };
   const log: string[] = [];
 
   for (const p of providers) {

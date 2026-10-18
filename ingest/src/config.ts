@@ -53,10 +53,15 @@ export const config = {
   // After a 429, a provider is skipped for this long within the same run (next provider or template).
   rateLimitCooldownMs: 60_000,
   aiDailyCapCode: 600,                         // Gemini hard cap in code; effective cap = min(this, freeRpd)
-  promptVersion: 'sum-v4',                     // v4 (2026-10-17): plain headline+body rules (no over-specific details; precise details only in detail.key_points)
+  // v4 (2026-10-17): plain headline+body rules (no over-specific details; precise details only in detail.key_points).
+  // v5 (2026-10-18): earnings cards must state figures (EX-99.1 press release is fed to the AI), no model
+  // numbers/SKUs/UPCs/lot numbers in the headline or summary, sentence-case headlines.
+  promptVersion: 'sum-v5',
   // Version stored on template and data cards (no AI). tpl-v2 = plain wording (2026-10-17).
   // `--rewrite` redoes every published card whose prompt_version is neither this nor promptVersion.
-  templateVersion: 'tpl-v4',                   // v4: plain USGS headline+body and plain Federal Register headline
+  // v4: plain USGS headline+body and plain Federal Register headline. v5: sentence-case template headlines,
+  // generic CPSC template (no product codes), figure-less earnings and low-interest quake template cards dropped.
+  templateVersion: 'tpl-v5',
   providerOrder: ['gemini', 'groq', 'template'] as const, // a list on purpose: adding a provider is one entry
 
   // ---- card limits ------------------------------------------------------------
@@ -172,15 +177,42 @@ export const config = {
     significantQuery: false,
     fields: ['title', 'abstract', 'html_url', 'publication_date', 'agencies', 'document_number', 'type'],
     maxAgeDays: 14,
+    // FAA airworthiness directives (title contains "Airworthiness Directives") are near-identical aircraft
+    // fix orders that flooded the feed (4 in a row on 2026-10-17). At most this many become card candidates
+    // per run; the rest are skipped and logged as faa_directive_cap.
+    maxAirworthinessPerRun: 1,
     category: 'policy',                        // fixed in code; event_type stays null (ranking 'default')
     attributionPrefix: 'Source: Federal Register (National Archives)',
     // No published rate limit: poll at most hourly (2 requests per run). Not enforced; the CLI is run by hand.
     minPollMinutes: 60,
   },
+  // Importance override used by src/ranking.ts (the TypeScript mirror of the database formula). An FAA
+  // airworthiness directive is capped at this importance (default policy rule = 2 x 1.25 = 2.5 otherwise)
+  // so it stops leading Trending. The database formula needs the same change in a migration.
+  ranking: {
+    airworthinessImportance: 1.5,
+  },
   secTickersUrl: 'https://www.sec.gov/files/company_tickers_exchange.json',
   // Per-company filing list (JSON, data.sec.gov, API host list). {cik} = 10-digit CIK.
   secSubmissionsUrl: 'https://data.sec.gov/submissions/CIK{cik}.json',
   secLookbackDays: 10,                         // per-company 8-Ks filed within this many days
+  // Earnings press release. An Item 2.02 8-K is usually a cover page; the figures sit in the EX-99.1
+  // exhibit (a page on www.sec.gov, so the page host list already allows it). For a filing with one of
+  // these items the exhibit is fetched through the same limiter and cache and its text goes to the AI
+  // FIRST (capped like the primary document at sourceTextMaxChars), then at most primaryMaxChars of the
+  // primary document. `types` = exhibit types in order of preference.
+  secExhibit: {
+    items: ['2.02'],
+    types: ['EX-99.1', 'EX-99.01', 'EX-99'],
+    primaryMaxChars: 3000,
+  },
+  // A card whose event_type is earnings must have at least one digit in its body (validator reason
+  // no_figures). For SEC filings the rule applies to filings with one of requiredItems (2.02 results);
+  // a card from 4.01 (auditor change) or 4.02 (restatement notice) alone is exempt: news without a results
+  // table. Template cards are held to the same rule, so a figure-less Item 2.02 template card is skipped.
+  earningsFigures: {
+    requiredItems: ['2.02'],
+  },
   // Household-name US public companies (by ticker), weighted toward brands college students and young
   // adults know and use. SEC cards are only made for these. CIKs are resolved from the SEC ticker list
   // at run time; a ticker missing from that list is logged and skipped. Left out on purpose:
@@ -240,6 +272,7 @@ export const config = {
   cpsc: {
     url: 'https://www.saferproducts.gov/RestWebServices/Recall?format=json&RecallDateStart={start}',
     lookbackDays: 14,
+    rewriteLookbackDays: 120,                   // --rewrite looks this far back to find an old recall again
     maxPerRun: 5,                               // recalls can flood the feed (PM review 2)
     category: 'safety',
     eventType: 'recall',
@@ -260,6 +293,14 @@ export const config = {
   usgs: {
     url: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson',
     maxAgeDays: 7,
+    // Publishing threshold. PAGER alerts in keepAlerts are always published. A quake whose alert is green
+    // or missing is skipped (logged as low_interest) when it is at sea / on an ocean ridge or rise / has no
+    // country in its place name, OR when its magnitude is under minMagnitudeWithoutAlert.
+    keepAlerts: ['yellow', 'orange', 'red'],
+    minMagnitudeWithoutAlert: 6.5,
+    // Place names that mean open water even when they have a comma (the usual case is no comma at all:
+    // "central Mid-Atlantic Ridge" has no country).
+    atSeaPattern: /\b(ridge|rise|ocean|sea|trench|seamounts?|fracture zone)\b/i,
     category: 'science',
     eventType: 'science',
     sourceName: 'U.S. Geological Survey',

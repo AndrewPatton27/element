@@ -125,8 +125,8 @@ test('pipeline: off-list, low-value and routine 5.02 filings are skipped before 
     name: 'gemini', usesAi: true,
     async summarize(i) {
       aiSaw.push(i.item.url);
-      // deliberately "wrong" category: the 8-K items must override it
-      return { headline: `${i.item.company} reports a new filing`, body: null, category: 'deals', event_type: null, tickers: i.item.tickers.map((t) => t.symbol), everyday_relevance: 4 };
+      // deliberately "wrong" category: the 8-K items must override it. The figure comes from the EX-99.1 exhibit.
+      return { headline: `${i.item.company} reports a new filing`, body: 'The company reported revenue of $102.5 billion for the quarter.', category: 'deals', event_type: null, tickers: i.item.tickers.map((t) => t.symbol), everyday_relevance: 4 };
     },
   };
   const dry = createDryRunPublisher();

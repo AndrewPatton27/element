@@ -6,7 +6,7 @@
 
 import { aiDailyCap, config, minIntervalMs } from '../config.ts';
 import { fetchAllowed, type FetchLike } from '../allowlist.ts';
-import { AI_CATEGORY_SLUGS } from '../validate.ts';
+import { AI_CATEGORY_SLUGS, requiresFigures } from '../validate.ts';
 import type { SummarizeInput, Summarizer, SummaryDraft } from '../types.ts';
 
 /** A provider answered 429; the chain puts it in a cooldown and moves on. */
@@ -49,6 +49,8 @@ export function buildPrompt(input: SummarizeInput): string {
     'Rules:',
     `- "headline": short and plain, at most ${config.headlineMaxChars} characters (aim for about ${config.headlineTargetChars}).`,
     '- The headline must say WHAT HAPPENED in plain words, leading with the event (for example "Earthquake", "Recall", "New rule", "Earnings", "CEO steps down").',
+    '- Use sentence case in the headline: capitalise only the first word and proper nouns (names of people, companies, places, agencies, product brands, tickers). Write "Primark recalls children\'s coin purses", not "Primark Recalls Children\'s Coin Purses".',
+    '- Never include model numbers, SKUs, UPCs or lot numbers in the headline or the body. If they matter, put them in "detail".key_points only.',
     '- Leave precise technical details OUT of the headline AND the body: no exact distances, compass bearings, coordinates, exact clock times, docket, item or section numbers, model numbers, or long official titles. Name the broad place or thing people recognize (the country, state, or company), not the nearest small town or precise spot.',
     '- Keep only the one or two numbers that matter most (the magnitude, the dollar amount, the percent change). Precise details (exact location, times, model or docket numbers) belong ONLY in "detail".key_points, never in the headline or the body.',
     `- "body": 2 or 3 short sentences, at most ${config.bodyMaxWords} words (aim for about ${Math.round(config.bodyMaxWords * 0.75)}), or null if the text has no facts beyond the headline. Give the big picture: what happened, where in broad terms, and why it matters.`,
@@ -76,8 +78,20 @@ export function buildPrompt(input: SummarizeInput): string {
       + 'Keep investment words (buy, sell, invest in, price target) out of it.',
     );
   }
+  if (requiresFigures(it)) {
+    lines.push(
+      '',
+      'THIS IS AN EARNINGS CARD. The body MUST state the real figures from the source text, such as revenue, profit or loss, '
+      + 'or earnings per share, and how they compare with a year earlier or with the company\'s own forecast if the source says so. '
+      + 'A card with no number in the body is rejected. Describe what the company said about its results, never the filing itself '
+      + '(no talk of exhibits, press releases, conference calls or links). If the source text has no figures, write only what it does say.',
+    );
+  }
   if (input.retryErrors?.length) {
     lines.push('', `Your previous answer was rejected for: ${input.retryErrors.join('; ')}. Fix these problems.`);
+    if (input.retryErrors.some((e) => /^no_figures/.test(e))) {
+      lines.push('Put the key figures from the source (for example revenue and profit, with the dollar amounts) in the body. Use the numbers exactly as written in the source.');
+    }
     if (input.retryErrors.some((e) => /longer than/.test(e))) {
       lines.push(`Write it shorter: headline at most ${config.headlineMaxChars} characters, body at most ${config.bodyMaxWords} words in 2 or 3 sentences.`);
     }

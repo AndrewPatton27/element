@@ -72,6 +72,9 @@ export function clampedPublishedAt(d: FrDoc, now: Date): string {
 
 const tidy = (s: string) => s.replace(/\s+/g, ' ').trim();
 
+/** true for an FAA airworthiness directive (the title says "Airworthiness Directive(s)"). */
+export const isAirworthinessDirective = (title: string | null | undefined): boolean => /\bairworthiness directives?\b/i.test(title ?? '');
+
 /** Document -> RawItem (AI text = abstract only, agency credit line), or a skip reason (not a rule, no abstract, bad URL). */
 export function fedRegDocToItem(d: FrDoc, now: Date): { item: RawItem } | { skip: FedRegSkipReason } {
   if (d.type && d.type !== 'Rule') return { skip: 'not_a_rule' };

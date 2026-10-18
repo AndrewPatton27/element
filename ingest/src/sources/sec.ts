@@ -393,3 +393,25 @@ export function findPrimaryDocUrl(indexHtml: string, indexUrl: string): string |
 export function filingText(html: string): string {
   return htmlToText(html, config.sourceTextMaxChars);
 }
+
+/**
+ * Finds the earnings press-release exhibit (EX-99.1, then EX-99.01, then EX-99; config.secExhibit.types)
+ * on a filing index page: the row whose Type column is that exhibit type and whose document is an
+ * .htm/.html page. Only a www.sec.gov /Archives/ URL is accepted. Returns null if there is none.
+ * Other exhibits (EX-99.2 slides, EX-10 contracts, XBRL files) are never picked.
+ */
+export function findExhibitUrl(indexHtml: string, indexUrl: string, types: readonly string[] = config.secExhibit.types): string | null {
+  const rows = blocks(indexHtml, 'tr');
+  const typeOf = (row: string) => /<td[^>]*>\s*(EX-[0-9A-Z.]+)\s*<\/td>/i.exec(row)?.[1]?.toUpperCase() ?? null;
+  for (const want of types) {
+    for (const r of rows) {
+      if (typeOf(r) !== want.toUpperCase()) continue;
+      const m = /href="([^"]+\.htm[l]?)"/i.exec(r);
+      if (!m) continue;
+      let u: URL;
+      try { u = new URL(m[1].replace(/^\/ix\?doc=/, ''), indexUrl); } catch { continue; }
+      if (u.protocol === 'https:' && u.hostname === 'www.sec.gov' && u.pathname.startsWith('/Archives/')) return u.toString();
+    }
+  }
+  return null;
+}

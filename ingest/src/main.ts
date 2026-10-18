@@ -81,6 +81,7 @@ export function fixtureFetcher(): Deps['fetchText'] {
     if (url === fr[1]) return fixture('fedreg-significant.json');
     if (/www\.sec\.gov\/Archives\/.+-index\.htm$/.test(url)) return fixture('sec-filing-index.html');
     if (/www\.sec\.gov\/Archives\/.+\/primary-8k\.htm$/.test(url)) return fixture('sec-primary-8k.html');
+    if (/www\.sec\.gov\/Archives\/.+\/ex99-1\.htm$/.test(url)) return fixture('sec-exhibit-99-1.html');
     if (/www\.federalreserve\.gov\/newsevents\/pressreleases\//.test(url)) return fixture('fed-press-release.html');
     if (url.startsWith(config.feeds.fredObservations) && new URL(url).searchParams.get('series_id') === 'DGS10') {
       return fixture('fred-DGS10-observations.json');

@@ -3,6 +3,7 @@
 // Inputs: SummarizeInput (only the item's metadata is read). Outputs: a SummaryDraft.
 
 import { config } from '../config.ts';
+import { sentenceCase } from '../text.ts';
 import type { SummarizeInput, Summarizer, SummaryDraft } from '../types.ts';
 
 /** Short label for headlines and a plain explanation for the body, per 8-K item. */
@@ -129,9 +130,21 @@ export function templateDraft(input: SummarizeInput): SummaryDraft {
       tickers: [],
     };
   }
-  // Federal Reserve or BEA release: the public-domain title is the headline.
+  if (it.source === 'cpsc') {
+    // Never published by the pipeline (no relevance score without the AI). Generic on purpose: the recall
+    // title is full of brand names, model numbers, SKUs and Title Case, none of which belong in a headline.
+    return {
+      headline: 'A product recall was announced',
+      body: `${config.cpsc.sourceName} announced a product recall. Open the source to see which product it covers and what to do.`,
+      category: it.category,
+      event_type: it.event_type,
+      tickers: [],
+    };
+  }
+  // Federal Reserve or BEA release: the public-domain title is the headline, in sentence case
+  // (only everyday words are lowercased; names and acronyms keep their capitals).
   return {
-    headline: cutAtWord(it.title, config.headlineMaxChars),
+    headline: cutAtWord(sentenceCase(it.title), config.headlineMaxChars),
     body: it.source === 'bea_rss'
       ? 'The U.S. Bureau of Economic Analysis, the government office that tracks the economy, posted this report. Open the source to read it.'
       : 'The Federal Reserve, the central bank that sets U.S. interest rates, posted this news. Open the source to read it.',

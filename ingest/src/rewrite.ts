@@ -13,16 +13,19 @@
 import { config } from './config.ts';
 import type { Deps } from './pipeline.ts';
 import { buildPublishPayload } from './publish.ts';
+import { secFilingPageText } from './sec-text.ts';
 import { beaItemToItem } from './sources/bea.ts';
+import { cpscToItem, cpscUrl, parseCpscJson } from './sources/cpsc.ts';
 import { fedItemToItem, fedPageText, mergeFedItems, parseRss } from './sources/fed.ts';
 import { fedRegDocToItem, type FrDoc } from './sources/fedreg.ts';
 import { buildDataCard, observationFromFact } from './sources/macro.ts';
-import { classifySecEntry, filingText, findPrimaryDocUrl, parseSubmissionsJson } from './sources/sec.ts';
+import { nasaToItem, parseNasaRss } from './sources/nasa.ts';
+import { classifySecEntry, parseSubmissionsJson } from './sources/sec.ts';
 import { parseUsgsGeoJson, usgsDraft, usgsToItem } from './sources/usgs.ts';
 import { createChainState, summarizeWithChain } from './summarizer/chain.ts';
 import { templateDraft } from './summarizer/template.ts';
 import type { RawItem, RevisableCard, RevisePayload } from './types.ts';
-import { SUMMARIZABLE, validatePublish } from './validate.ts';
+import { hasFigures, requiresFigures, SUMMARIZABLE, validatePublish } from './validate.ts';
 
 export interface RewriteStats {
   selected: number;
@@ -36,12 +39,12 @@ export interface RewriteStats {
 /** Versions that count as current: the AI prompt and the template wording. */
 export const currentVersions = (): string[] => [config.promptVersion, config.templateVersion];
 
-type Rebuilt = { item: RawItem; pageText: () => Promise<string> } | { reason: string };
+type Rebuilt = { item: RawItem; pageText: () => Promise<string> } | { reason: string } | { hide: string };
 
 const noPage = async () => '';
 
 /** Rebuilds the RawItem (and how to get its page text) for a card, from the same sources a normal run uses. */
-async function rebuildItem(card: RevisableCard, deps: Pick<Deps, 'fetchText' | 'now'>): Promise<Rebuilt> {
+async function rebuildItem(card: RevisableCard, deps: Pick<Deps, 'fetchText' | 'now' | 'log'>): Promise<Rebuilt> {
   const src = card.item;
   if (!src) return { reason: 'no collected item behind this card' };
   const url = src.url;
@@ -56,14 +59,8 @@ async function rebuildItem(card: RevisableCard, deps: Pick<Deps, 'fetchText' | '
       if (!('item' in r)) return { reason: `filing not a card candidate (${r.skip})` };
       const item = { ...r.item, url, tickers: card.tickers.length ? card.tickers : r.item.tickers };
       if (item.tickers[0]) item.company = item.tickers[0].name;
-      return {
-        item,
-        pageText: async () => {
-          const index = await deps.fetchText(url, 'page', config.cacheTtlMinutes);
-          const doc = findPrimaryDocUrl(index, url);
-          return doc ? filingText(await deps.fetchText(doc, 'page', config.cacheTtlMinutes)) : '';
-        },
-      };
+      // primary document, plus the EX-99.1 press release for an earnings filing (same fetch path as a normal run)
+      return { item, pageText: () => secFilingPageText(deps.fetchText, item, deps.log) };
     }
     case 'fed_rss': {
       const item = fedItemToItem({ title: src.title ?? card.headline, link: url, description: '', category: null, pubDate: card.as_of, guid: src.external_id ?? url });
@@ -89,10 +86,24 @@ async function rebuildItem(card: RevisableCard, deps: Pick<Deps, 'fetchText' | '
       const f = feed.find((x) => x.id === src.external_id || x.properties?.url === url);
       if (!f) return { reason: 'earthquake no longer in the USGS significant-week feed' };
       const r = usgsToItem(f, deps.now);
-      return 'item' in r ? { item: r.item, pageText: noPage } : { reason: `earthquake not usable (${r.skip})` };
+      if ('item' in r) return { item: r.item, pageText: noPage };
+      // A published quake that the current threshold would not publish (green alert at sea, or small) is hidden.
+      return r.skip === 'low_interest' ? { hide: `low_interest (${r.note})` } : { reason: `earthquake not usable (${r.skip})` };
+    }
+    case 'cpsc': {
+      // Recalls older than the normal lookback are looked up over a longer window; one that aged out is kept unchanged.
+      const list = parseCpscJson(await deps.fetchText(cpscUrl(deps.now, config.cpsc.rewriteLookbackDays), 'api', 0));
+      const hit = list.find((x) => x.URL === url || (src.external_id && x.RecallNumber === src.external_id));
+      if (!hit) return { reason: 'recall no longer in the CPSC list' };
+      const r = cpscToItem(hit, deps.now);
+      return 'item' in r ? { item: r.item, pageText: noPage } : { reason: `recall not usable (${r.skip})` };
+    }
+    case 'nasa': {
+      const hit = parseNasaRss(await deps.fetchText(config.nasa.feedUrl, 'api', 0)).find((x) => x.link === url);
+      return hit ? { item: nasaToItem(hit, deps.now), pageText: noPage } : { reason: 'release no longer in the NASA feed' };
     }
     default:
-      return { reason: `source ${src.source} is not supported by --rewrite (it was added after the plain-language prompt)` };
+      return { reason: `source ${src.source} is not supported by --rewrite (Wikipedia stories leave the feed after one day)` };
   }
 }
 
@@ -140,12 +151,18 @@ export async function runRewrite(deps: Deps, opts: { limit?: number } = {}): Pro
       if (card.kind !== 'summary') { stats.kept++; deps.log(`kept (kind ${card.kind}): ${card.headline}`); continue; }
 
       const rb = await rebuildItem(card, deps);
+      if ('hide' in rb) { await revise(card, { id: card.id, action: 'hide', note: rb.hide }, 'rule'); continue; }
       if ('reason' in rb) { stats.kept++; deps.log(`kept (${rb.reason}): ${card.headline}`); continue; }
       const it = rb.item;
 
       // 2. template cards: same metadata, current plain template (no AI)
       if (!card.ai_generated) {
         const draft = it.source === 'usgs' ? usgsDraft(it) : templateDraft({ item: it, text: '' });
+        // An earnings card without figures is hidden, not kept (a template card cannot state figures).
+        if (requiresFigures(it) && !hasFigures(draft.body)) {
+          await revise(card, { id: card.id, action: 'hide', note: 'no_figures' }, 'template');
+          continue;
+        }
         const p = buildPublishPayload(it, draft, { aiGenerated: false, model: null });
         await revise(card, { id: card.id, action: 'revise', headline: p.headline, body: p.body, ai_generated: false, model: null, prompt_version: config.templateVersion, detail: p.detail ?? null }, 'template');
         continue;
@@ -171,11 +188,21 @@ export async function runRewrite(deps: Deps, opts: { limit?: number } = {}): Pro
         continue;
       }
       if (!r.ai_generated) {
+        // No valid AI draft. An earnings card that already has no figures (and cannot get any now) is hidden;
+        // anything else keeps its old card, e.g. when the AI was only capped or rate limited.
+        if (requiresFigures(it) && !hasFigures(card.body)) {
+          await revise(card, { id: card.id, action: 'hide', note: 'no_figures' }, r.provider);
+          continue;
+        }
         stats.kept++;
         deps.log(`kept (no valid AI draft; old card unchanged): ${card.headline}  (${r.log.join(' | ')})`);
         continue;
       }
       const p = buildPublishPayload(it, r.draft, { aiGenerated: true, model: r.model });
+      if (requiresFigures(it) && !hasFigures(p.body)) {      // cannot happen (the validator rejects it); belt and braces
+        await revise(card, { id: card.id, action: 'hide', note: 'no_figures' }, r.provider);
+        continue;
+      }
       const v = validatePublish(p);
       if (!v.ok) { stats.kept++; deps.log(`kept (publish check failed: ${v.errors.join('; ')}): ${card.headline}`); continue; }
       await revise(card, { id: card.id, action: 'revise', headline: p.headline, body: p.body, ai_generated: true, model: r.model, prompt_version: config.promptVersion, detail: p.detail ?? null }, `${r.provider}, relevance ${r.relevance}${p.detail ? ', with detail' : ', no detail'}`);

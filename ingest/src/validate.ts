@@ -5,6 +5,7 @@
 // Outputs: { ok, errors } results, the license gate (assertSummarizable) and text helpers.
 
 import { config } from './config.ts';
+import { mentionsProductCodes } from './text.ts';
 
 /**
  * Categories the AI may choose (Gemini/Groq schema enum, SEC tiebreak). The original 9 business
@@ -50,11 +51,30 @@ export interface SourceText {
   licenseClass: string;          // 'company_filing' | 'public_domain'
   tickers?: string[];            // tickers known from filing metadata
   category?: string;             // the card's real category in code (e.g. 'safety' for CPSC recalls)
+  requireFigures?: boolean;      // the card's real event_type is earnings (set in code); default: draft.event_type === 'earnings'
 }
 
 export interface Result {
   ok: boolean;
   errors: string[];
+}
+
+// ---- earnings figures -------------------------------------------------------------
+
+/** true if the text has at least one digit (a figure: dollars, percent, per-share, a count). */
+export const hasFigures = (body: string | null | undefined): boolean => /\d/.test(body ?? '');
+
+/**
+ * Must the card for this item state figures? Yes when its event_type is earnings (set in code from the
+ * 8-K items). An SEC filing is held to it only when it has an Item in config.earningsFigures.requiredItems
+ * (2.02, results of operations); an earnings card that comes only from 4.01 (auditor change) or 4.02
+ * (restatement notice) has no results table to quote.
+ */
+export function requiresFigures(item: { source?: string; event_type?: string | null; items?: { number: string }[] }): boolean {
+  if (item.event_type !== 'earnings') return false;
+  if (item.source !== 'sec_8k') return true;
+  const need = config.earningsFigures.requiredItems as readonly string[];
+  return (item.items ?? []).some((i) => need.includes(i.number));
 }
 
 // ---- helpers -------------------------------------------------------------------
@@ -253,6 +273,17 @@ export function validateDraft(draft: Draft, source: SourceText): Result {
   // slugs, so draft.category is used only as a fallback when the source carries no category.
   const advice = findAdvice(text, source.category ?? draft.category);
   if (advice.length) errors.push(`advice language: ${advice.join(', ')}`);
+
+  // A card with event_type earnings whose body has no digit is rejected (reason no_figures).
+  // Items filed under 4.01 or 4.02 only are exempt (config.earningsFigures); the real event_type is
+  // set in code (source.requireFigures), the draft's own event_type is the fallback for direct calls.
+  if ((source.requireFigures ?? draft.event_type === 'earnings') && !hasFigures(draft.body)) {
+    errors.push('no_figures: an earnings card must state real figures (a number from the source) in the body');
+  }
+
+  // 1b. no model numbers, SKUs, UPCs or lot numbers in the headline or summary (key points only)
+  const codes = mentionsProductCodes(text);
+  if (codes.length) errors.push(`product codes in headline or body (${codes.join(', ')}): model, SKU, UPC and lot numbers go in detail key points only`);
 
   // 2. every number must appear in the source
   const srcNums = new Set(extractNumbers(source.text));

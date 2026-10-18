@@ -10,7 +10,7 @@ import { runOnce, templateAllowed, type Deps } from '../src/pipeline.ts';
 import { createDryRunPublisher } from '../src/publish.ts';
 import { cpscToItem, cpscUrl, parseCpscJson, selectRecalls } from '../src/sources/cpsc.ts';
 import { nasaToItem, parseNasaRss, selectNasaReleases } from '../src/sources/nasa.ts';
-import { parseUsgsGeoJson, plainQuakeLocation, usgsDraft, usgsHeadline, usgsToItem } from '../src/sources/usgs.ts';
+import { isAtSea, lowInterestReason, parseUsgsGeoJson, plainQuakeLocation, usgsDraft, usgsHeadline, usgsToItem, type UsgsFeature } from '../src/sources/usgs.ts';
 import { parseWikiFeed, storyDate, storyText, wikiFeedUrl, wikiItemToItem, wikimediaUserAgent } from '../src/sources/wiki.ts';
 import { memoryCounter } from '../src/summarizer/chain.ts';
 import { RESPONSE_SCHEMA } from '../src/summarizer/gemini.ts';
@@ -206,7 +206,8 @@ test('usgs: template card from title/mag/place/time, event URL as the source, US
   for (const s of [dft.headline, dft.body!]) {
     assert.doesNotMatch(s, /48 km|WNW|Khuzdar|05:06|UTC/, s);
   }
-  const ridge = usgsDraft((usgsToItem(f[2], DRY_NOW) as { item: RawItem }).item);
+  // (the real ridge quake has a green alert and is now skipped as low interest; an orange one shows the wording)
+  const ridge = usgsDraft((usgsToItem({ ...f[2], properties: { ...f[2].properties, alert: 'orange' } }, DRY_NOW) as { item: RawItem }).item);
   assert.equal(ridge.headline, 'Magnitude 6.8 earthquake on the Mid-Atlantic Ridge');
   assert.match(ridge.body!, /struck on the Mid-Atlantic Ridge\. .* official tsunami warnings come from tsunami\.gov\./);
   assert.doesNotMatch(ridge.body!, /central|km|UTC/);
@@ -217,8 +218,9 @@ test('usgs: template card from title/mag/place/time, event URL as the source, US
   const { d, dry } = deps([ai, templateSummarizer]);
   const s = await runOnce(d, { only: ['usgs'] });
   assert.equal(aiCalls, 0);
-  assert.equal(s.published, 5);
-  assert.equal(s.template, 5);
+  assert.equal(s.published, 2, 'Pakistan (yellow) and Russia (green but M6.9 on land)');
+  assert.equal(s.skipped, 3, 'two green ridge quakes and the M6.1 Panama quake');
+  assert.equal(s.template, 2);
   for (const c of dry.cards) {
     assert.equal(c.category, 'science');
     assert.equal(c.event_type, 'science');
@@ -228,6 +230,44 @@ test('usgs: template card from title/mag/place/time, event URL as the source, US
   }
   const again = await runOnce(d, { only: ['usgs'] });
   assert.equal(again.published, 0, 'dedupe on the event URL');
+});
+
+// ---- USGS publishing threshold (audit A1.12) ------------------------------------------------
+
+test('usgs threshold: yellow/orange/red always publish; green or no alert is skipped at sea / ridge / no country or under M6.5', () => {
+  assert.equal(config.usgs.minMagnitudeWithoutAlert, 6.5);
+  assert.deepEqual([...config.usgs.keepAlerts], ['yellow', 'orange', 'red']);
+  const f = parseUsgsGeoJson(USGS);
+  const low = (p: Partial<UsgsFeature['properties']>) => lowInterestReason({ mag: 6.9, place: '76 km NE of Ozernovskiy, Russia', alert: 'green', ...p });
+  // kept
+  assert.equal(low({}), null, 'M6.9 green on land (Russia) stays');
+  assert.equal(low({ alert: null }), null, 'no alert but big and near a country stays');
+  for (const a of ['yellow', 'orange', 'red', 'YELLOW']) {
+    assert.equal(low({ alert: a, mag: 4.5, place: 'central Mid-Atlantic Ridge' }), null, `${a} always stays, even small and at sea`);
+  }
+  // skipped
+  assert.match(low({ place: 'central Mid-Atlantic Ridge' })!, /green alert, at sea or no country/);
+  assert.match(low({ place: 'southern East Pacific Rise', alert: null })!, /no alert, at sea or no country/);
+  assert.match(low({ place: '120 km S of Kodiak, Alaska, Pacific Ocean' })!, /at sea/, 'ocean word even with a comma');
+  assert.match(low({ place: 'Fiji region' })!, /at sea or no country/, 'no comma = no country');
+  assert.match(low({ mag: 6.1, place: '17 km W of Río Grande, Panama' })!, /magnitude 6\.1 under 6\.5/);
+  assert.equal(low({ mag: 6.5, place: '17 km W of Río Grande, Panama' }), null, '6.5 is the threshold');
+  assert.equal(low({ mag: 6.8, place: '10 km N of Ridgecrest, CA' }), null, '"Ridgecrest" is not a ridge');
+  assert.equal(isAtSea('Seaside, Oregon'), false, '"Seaside" is not the sea');
+  // on the real week: Pakistan (yellow) and Russia stay; both ridge quakes and Panama are skipped with a logged reason
+  const results = f.map((x) => usgsToItem(x, DRY_NOW));
+  assert.deepEqual(results.map((r) => ('item' in r ? 'item' : r.skip)), ['item', 'item', 'low_interest', 'low_interest', 'low_interest']);
+  assert.match(String((results[4] as { note?: string }).note), /magnitude 6\.1 under 6\.5/);
+});
+
+test('usgs pipeline: skipped quakes are counted and logged with the reason, nothing is published for them', async () => {
+  const { d, dry, lines } = deps([templateSummarizer]);
+  const s = await runOnce(d, { only: ['usgs'] });
+  assert.equal(s.published, 2);
+  assert.equal(s.skipped, 3);
+  assert.deepEqual(dry.cards.map((c) => c.headline).sort(), ['Magnitude 5.7 earthquake hits Pakistan', 'Magnitude 6.9 earthquake hits Russia']);
+  assert.ok(lines.includes('skip low_interest (green alert, at sea or no country): USGS us6000u214'), lines.join('\n'));
+  assert.ok(lines.includes('skip low_interest (green alert, magnitude 6.1 under 6.5): USGS us6000u1wn'), lines.join('\n'));
 });
 
 // ---- USGS plain headlines (Drew's rules: no distance, bearing, nearest town or time) -------

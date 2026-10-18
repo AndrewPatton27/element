@@ -30,16 +30,44 @@ export function parseUsgsGeoJson(text: string): UsgsFeature[] {
   return f.filter((x): x is UsgsFeature => !!x && typeof x.id === 'string' && !!x.properties);
 }
 
-export type UsgsSkipReason = 'bad_url' | 'too_old' | 'no_data';
+export type UsgsSkipReason = 'bad_url' | 'too_old' | 'no_data' | 'low_interest';
 
-/** Feature -> RawItem, or a skip reason (missing data, older than config.usgs.maxAgeDays, non-USGS URL). */
-export function usgsToItem(f: UsgsFeature, now: Date): { item: RawItem } | { skip: UsgsSkipReason } {
+/** true when the place name means open water: no country after a comma, or a ridge / rise / ocean / sea / trench word. */
+export function isAtSea(place: string | null | undefined): boolean {
+  const p = (place ?? '').trim();
+  if (!p || !p.includes(',')) return true;                 // "central Mid-Atlantic Ridge": no country
+  return config.usgs.atSeaPattern.test(p);
+}
+
+/**
+ * Publishing threshold. A PAGER alert of yellow, orange or red always publishes. A quake whose alert is
+ * green or missing is low interest (returns the reason) when it is at sea / on an ocean ridge or rise / has
+ * no country, or when its magnitude is under config.usgs.minMagnitudeWithoutAlert (6.5). Otherwise null.
+ */
+export function lowInterestReason(p: { mag?: number | null; place?: string | null; alert?: string | null }): string | null {
+  const alert = (p.alert ?? '').toLowerCase();
+  if ((config.usgs.keepAlerts as readonly string[]).includes(alert)) return null;
+  const alertText = alert || 'no';
+  if (isAtSea(p.place)) return `${alertText} alert, at sea or no country`;
+  if (typeof p.mag === 'number' && p.mag < config.usgs.minMagnitudeWithoutAlert) {
+    return `${alertText} alert, magnitude ${p.mag.toFixed(1)} under ${config.usgs.minMagnitudeWithoutAlert}`;
+  }
+  return null;
+}
+
+/**
+ * Feature -> RawItem, or a skip reason (missing data, older than config.usgs.maxAgeDays, non-USGS URL,
+ * low interest: see lowInterestReason). `note` explains a low_interest skip for the log.
+ */
+export function usgsToItem(f: UsgsFeature, now: Date): { item: RawItem } | { skip: UsgsSkipReason; note?: string } {
   const p = f.properties;
   if (typeof p.mag !== 'number' || !p.time || !p.title) return { skip: 'no_data' };
   if (p.time < now.getTime() - config.usgs.maxAgeDays * 86_400_000) return { skip: 'too_old' };
   let url: URL;
   try { url = new URL(p.url ?? ''); } catch { return { skip: 'bad_url' }; }
   if (url.protocol !== 'https:' || url.hostname !== 'earthquake.usgs.gov') return { skip: 'bad_url' };
+  const low = lowInterestReason(p);
+  if (low) return { skip: 'low_interest', note: low };
   return {
     item: {
       source: 'usgs',

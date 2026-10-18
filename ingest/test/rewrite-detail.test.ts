@@ -1,4 +1,4 @@
-// --rewrite (redo older cards in place) and the in-depth detail (D-37).
+﻿// --rewrite (redo older cards in place) and the in-depth detail (D-37).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -53,10 +53,10 @@ const ai = (draft: Partial<SummaryDraft>, calls: string[] = []): Summarizer => (
 
 // ---- selection ---------------------------------------------------------------------------
 
-test('--rewrite: CLI flag; current versions are sum-v4 and tpl-v4; only older cards are selected', async () => {
+test('--rewrite: CLI flag; current versions are sum-v5 and tpl-v5; only older cards are selected', async () => {
   assert.equal(parseArgs(['--rewrite', '--limit', '5']).rewrite, true);
-  assert.deepEqual(currentVersions(), ['sum-v4', 'tpl-v4']);
-  const fresh = [{ ...byId(1), id: 'a', prompt_version: 'sum-v4' }, { ...byId(3), id: 'b', prompt_version: 'tpl-v4' }];
+  assert.deepEqual(currentVersions(), ['sum-v5', 'tpl-v5']);
+  const fresh = [{ ...byId(1), id: 'a', prompt_version: 'sum-v5' }, { ...byId(3), id: 'b', prompt_version: 'tpl-v5' }];
   const r = rewriteDeps([...fresh, byId(3)], [templateSummarizer]);
   const s = await runRewrite(r.deps, { limit: 10 });
   assert.equal(s.selected, 1, 'only the old data card');
@@ -67,7 +67,7 @@ test('--rewrite: CLI flag; current versions are sum-v4 and tpl-v4; only older ca
 
 // ---- in-place update -------------------------------------------------------------------------
 
-test('AI card: same licensed text (allowlisted page fetch), same chain; updated in place with detail, sum-v4', async () => {
+test('AI card: same licensed text (allowlisted page fetch), same chain; updated in place with detail, sum-v5', async () => {
   const calls: string[] = [];
   const r = rewriteDeps([byId(1)], [ai({}, calls), templateSummarizer]);
   const s = await runRewrite(r.deps);
@@ -81,7 +81,7 @@ test('AI card: same licensed text (allowlisted page fetch), same chain; updated 
   assert.equal(p.id, byId(1).id, 'same card id');
   assert.equal(p.headline, 'The Fed shares a new statement');
   assert.equal(p.ai_generated, true);
-  assert.equal(p.prompt_version, 'sum-v4');
+  assert.equal(p.prompt_version, 'sum-v5');
   assert.deepEqual(p.detail, DETAIL);
   assert.ok(!('sort_at' in p) && !('category' in p), 'order and category are never sent');
 });
@@ -89,21 +89,29 @@ test('AI card: same licensed text (allowlisted page fetch), same chain; updated 
 test('template and data cards: regenerated with the plain templates (no AI) plus a factual detail', async () => {
   let aiCalls = 0;
   const spy: Summarizer = { name: 'gemini', usesAi: true, async summarize() { aiCalls++; throw new Error('no'); } };
-  const r = rewriteDeps([byId(2), byId(3)], [spy, templateSummarizer]);
+  const fedTemplate = { ...byId(1), id: 'fed-template', ai_generated: false, prompt_version: null };
+  const r = rewriteDeps([fedTemplate, byId(3)], [spy, templateSummarizer]);
   const s = await runRewrite(r.deps);
   assert.equal(aiCalls, 0);
   assert.equal(s.revised, 2);
   const [sec, data] = r.dry.revisions;
   assert.ok(sec.action === 'revise' && data.action === 'revise');
   if (sec.action !== 'revise' || data.action !== 'revise') return;
-  assert.equal(sec.headline, 'Apple Inc. shares its latest financial results');
-  assert.equal(sec.prompt_version, 'tpl-v4');
-  assert.match(sec.detail!.paragraphs[0], /Form 8-K to the SEC/);
+  assert.equal(sec.headline, 'Federal Reserve issues FOMC statement');
+  assert.equal(sec.prompt_version, 'tpl-v5');
+  assert.match(sec.detail!.paragraphs[1], /central bank/);
   assert.equal(data.body, 'The 10-year Treasury yield, a rate that many mortgage and loan rates follow, was 5.10% on Oct 16, up 0.06 points from the prior day.');
   assert.match(data.detail!.paragraphs[0], /up 0\.06 points from the prior day, when it was 5\.04%/);
   for (const d of [sec.detail!, data.detail!]) assert.deepEqual(checkDetailShape(d), []);
 });
 
+test('earnings template card (Apple 2.02, no figures) is hidden by --rewrite, not kept', async () => {
+  const r = rewriteDeps([byId(2)], [templateSummarizer]);
+  const s = await runRewrite(r.deps);
+  assert.equal(s.hidden, 1);
+  assert.equal(s.revised, 0);
+  assert.deepEqual(r.dry.revisions, [{ id: byId(2).id, action: 'hide', note: 'no_figures' }]);
+});
 // ---- failure handling --------------------------------------------------------------------------
 
 test('a draft that fails validation twice keeps the old card unchanged (no revise call)', async () => {
@@ -169,8 +177,8 @@ test('chain: a valid card with a bad detail keeps the card and drops the detail'
   assert.ok(r.log.some((l) => /detail dropped \(card kept\)/.test(l)));
 });
 
-test('prompt sum-v4 asks for the detail; Gemini and Groq schemas require it', () => {
-  assert.equal(config.promptVersion, 'sum-v4');
+test('prompt sum-v5 asks for the detail; Gemini and Groq schemas require it', () => {
+  assert.equal(config.promptVersion, 'sum-v5');
   const it = { source: 'fed_rss', source_name: 'Federal Reserve Board', doc_label: 'Press release', published_at: '2026-10-17T00:00:00Z', tickers: [], category: 'policy', event_type: 'fed' } as unknown as RawItem;
   const p = buildPrompt({ item: it, text: 'T' });
   assert.match(p, /"detail": a longer, still easy version for readers who tap the card/);
@@ -192,10 +200,10 @@ test('new cards: AI detail goes into the publish payload; template and data card
   const fed = dry.cards.find((c) => c.sources[0].name === 'Federal Reserve Board')!;
   assert.deepEqual(fed.detail, DETAIL);
   const quakes = dry.cards.filter((c) => c.category === 'science');
-  assert.equal(quakes.length, 5);
+  assert.equal(quakes.length, 2, 'only the quakes above the publishing threshold');
   for (const q of quakes) {
     assert.deepEqual(checkDetailShape(q.detail), [], q.headline);
-    assert.equal(q.prompt_version, 'tpl-v4');
+    assert.equal(q.prompt_version, 'tpl-v5');
   }
   const it = (usgsToItem(parseUsgsGeoJson(fx('usgs-significant-week.geojson'))[0], DRY_NOW) as { item: RawItem }).item;
   assert.deepEqual(templateDetail(it)!.key_points, ['Magnitude 5.7', 'Location: 48 km WNW of Khuzdar, Pakistan', 'Time: 05:06 UTC on Oct 17', 'USGS alert level: yellow']);

@@ -13,16 +13,17 @@ import { cpscToItem, cpscUrl, parseCpscJson, selectRecalls } from './sources/cps
 import { nasaToItem, parseNasaRss, selectNasaReleases } from './sources/nasa.ts';
 import { parseUsgsGeoJson, usgsDraft, usgsToItem } from './sources/usgs.ts';
 import { parseWikiFeed, wikiFeedUrl, wikiItemToItem } from './sources/wiki.ts';
-import { fedRegDocToItem, mergeFedRegDocs, parseFedRegJson, type FrDoc } from './sources/fedreg.ts';
+import { fedRegDocToItem, isAirworthinessDirective, mergeFedRegDocs, parseFedRegJson, type FrDoc } from './sources/fedreg.ts';
 import { fedItemToItem, fedPageText, mergeFedItems, parseRss } from './sources/fed.ts';
 import { buildDataCard, buildObservation, fredUrl, parseFredObservations } from './sources/macro.ts';
 import {
-  classifySecEntry, displayCompanyName, filingText, findPrimaryDocUrl, isRoutine502, mergeSecEntries, parseSec8kAtom,
+  classifySecEntry, displayCompanyName, isRoutine502, mergeSecEntries, parseSec8kAtom,
   parseSubmissionsJson, primaryItem, resolveWatchList, type Sec8kEntry, type SecSkipReason, type WatchMap,
 } from './sources/sec.ts';
+import { secFilingPageText } from './sec-text.ts';
 import { createChainState, summarizeWithChain, type ChainState, type UsageCounter } from './summarizer/chain.ts';
 import type { RawItem, Summarizer } from './types.ts';
-import { validatePublish } from './validate.ts';
+import { hasFigures, requiresFigures, validatePublish } from './validate.ts';
 
 export type SourceName = 'macro' | 'fed' | 'bea' | 'fedreg' | 'sec' | 'wiki' | 'cpsc' | 'usgs' | 'nasa';
 export const SOURCE_NAMES: readonly SourceName[] = ['macro', 'fed', 'bea', 'fedreg', 'sec', 'wiki', 'cpsc', 'usgs', 'nasa'];
@@ -126,9 +127,19 @@ async function runFedReg(deps: Deps, { stats, budget, guard, chain }: RunCtx): P
   }
   const docs = mergeFedRegDocs(lists, deps.now);
   const items: RawItem[] = [];
+  let airworthiness = 0;
   for (const d of docs) {
     const r = fedRegDocToItem(d, deps.now);
-    if ('item' in r) { items.push(r.item); continue; }
+    if ('item' in r) {
+      // FAA airworthiness directives are near-identical aircraft fix orders: only the newest N per run are candidates.
+      if (isAirworthinessDirective(r.item.title) && ++airworthiness > config.fedRegister.maxAirworthinessPerRun) {
+        stats.skipped++;
+        deps.log(`skip faa_directive_cap (max ${config.fedRegister.maxAirworthinessPerRun} airworthiness directive per run): Federal Register ${d.document_number}: ${d.title.slice(0, 80)}`);
+        continue;
+      }
+      items.push(r.item);
+      continue;
+    }
     stats.skipped++;
     deps.log(`skip ${r.skip}: Federal Register ${d.document_number}: ${d.title.slice(0, 80)}`);
   }
@@ -190,7 +201,10 @@ async function runUsgs(deps: Deps, stats: RunStats, guard: ReturnType<typeof cre
     let n = 0;
     for (const f of features) {
       const r = usgsToItem(f, deps.now);
-      if (!('item' in r)) { if (r.skip !== 'too_old') { stats.skipped++; deps.log(`skip ${r.skip}: USGS ${f.id}`); } continue; }
+      if (!('item' in r)) {
+        if (r.skip !== 'too_old') { stats.skipped++; deps.log(`skip ${r.skip}${'note' in r && r.note ? ` (${r.note})` : ''}: USGS ${f.id}`); }
+        continue;
+      }
       const it = r.item;
       n++;
       const cand = { url: it.url, tickers: [], sortAt: new Date(it.published_at) };
@@ -269,11 +283,8 @@ async function runSec(
     }
     const why = Object.entries(notCandidates).map(([k, n]) => `${k} ${n}`).join(', ');
     deps.log(`sec: ${entries.length} filings (feed + watch list), ${items.length} card candidates${why ? ` (not candidates: ${why})` : ''}`);
-    await processItems(items, deps, stats, budget, guard, chain, async (it) => {
-      const index = await deps.fetchText(it.url, 'page', config.cacheTtlMinutes);
-      const doc = findPrimaryDocUrl(index, it.url);
-      return doc ? filingText(await deps.fetchText(doc, 'page', config.cacheTtlMinutes)) : '';
-    }, (it, text) => (isRoutine502(it.items ?? [], text) ? 'routine_5.02' : null));
+    await processItems(items, deps, stats, budget, guard, chain, (it) => secFilingPageText(deps.fetchText, it, deps.log),
+      (it, text) => (isRoutine502(it.items ?? [], text) ? 'routine_5.02' : null));
   } catch (e) {
     deps.log(`sec: feed failed: ${(e as Error).message}`);
   }
@@ -286,7 +297,8 @@ async function runSec(
  *   3. record the item; skip it if an earlier run already handled it
  *   4. fetch page text (failure = feed text only)
  *   5. source-specific preCheck (e.g. routine 5.02) -> skipped
- *   6. summarizer chain -> low relevance (skipped) / template not allowed (skipped)
+ *   6. summarizer chain -> low relevance (skipped) / earnings card without figures (skipped, no_figures) /
+ *      template not allowed (skipped)
  *   7. build payload, validate, publish, count and log
  * Any error in 6-7 marks the item failed and the loop continues.
  */
@@ -336,6 +348,15 @@ async function processItems(
         stats.skipped++;
         deps.log(`skip low_relevance (${r.relevance}): ${it.title}`);
         await deps.publisher.setItemStatus(row.id, 'skipped', `low_relevance (${r.relevance})`).catch(() => {});
+        continue;
+      }
+      if (requiresFigures(it) && !hasFigures(r.draft.body)) {
+        // An earnings card without a single figure (the AI could not find any, or only the template was left)
+        // is never published. If an AI draft was tried and rejected for it, retrying later would repeat the
+        // same result, so the item is closed; if no AI was available, it stays 'new' for a later run.
+        stats.skipped++;
+        deps.log(`skip no_figures (earnings card without figures, ${r.ai_generated ? 'AI' : r.provider}): ${it.title}`);
+        if (r.log.some((l) => /no_figures/.test(l))) await deps.publisher.setItemStatus(row.id, 'skipped', 'no_figures').catch(() => {});
         continue;
       }
       if (!r.ai_generated && !templateAllowed(it)) {

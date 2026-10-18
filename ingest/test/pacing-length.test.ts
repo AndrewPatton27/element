@@ -25,7 +25,7 @@ const GOOD: SummaryDraft = {
 };
 
 // Three sentences, 66 words in total; the first two (46 words) fit the 60-word limit.
-const S1 = 'The camera maker told regulators about its latest quarterly results in a short filing that points readers to an attached press release for the details.';
+const S1 = 'The camera maker told regulators about its latest quarterly results in a 2026-10-16 filing that points readers to an attached press release for the details.';
 const S2 = 'The company also flagged that some earlier financial statements may need another look, which usually means extra review by its auditors.';
 const S3 = 'Readers who follow the company may want to watch for a fuller report and any restated figures later this year.';
 const LONG_BODY: SummaryDraft = { ...GOOD, body: `${S1} ${S2} ${S3}` };

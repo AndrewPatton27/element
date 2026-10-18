@@ -131,7 +131,7 @@ function appleRun(draft: Partial<SummaryDraft>) {
     name: 'gemini', usesAi: true, model: 'm',
     async summarize(i) {
       calls.push(1);
-      return { headline: 'Apple shares its latest results', body: null, category: 'earnings', event_type: 'earnings', tickers: ['AAPL'], ...draft } as SummaryDraft;
+      return { headline: 'Apple shares its latest results', body: 'Apple reported revenue of $102.5 billion for the quarter.', category: 'earnings', event_type: 'earnings', tickers: ['AAPL'], ...draft } as SummaryDraft;
     },
   };
   const lines: string[] = [];
@@ -164,13 +164,15 @@ test('relevance 3 or more is published (threshold from config)', async () => {
   assert.equal(r.dry.cards[0].headline, 'Apple shares its latest results');
 });
 
-test('an AI draft without a valid score is rejected (retry, then the template for an allowed 8-K item)', async () => {
+test('an AI draft without a valid score is rejected (retry, then the template: a figure-less Apple 2.02 template card is skipped, not published)', async () => {
   for (const bad of [undefined, 7, 2.5, '4']) {
     const r = appleRun({ everyday_relevance: bad as number | undefined });
     const s = await runOnce(r.deps, { only: ['sec'] });
     assert.equal(r.calls.length, 2, `retried once (${String(bad)})`);
-    assert.equal(s.template, 1, 'Apple 2.02 is a template-allowed item');
-    assert.equal(r.dry.cards[0].headline, 'Apple Inc. shares its latest financial results');
+    assert.equal(s.template, 0, 'the 2.02 template card has no figures, so it is never published');
+    assert.equal(s.published, 0);
+    assert.equal(r.dry.cards.length, 0);
+    assert.ok(r.lines.includes('skip no_figures (earnings card without figures, template): Apple Inc. 8-K'), r.lines.join('\n'));
   }
 });
 
