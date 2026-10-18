@@ -71,7 +71,7 @@ test('credentials and auth error messages', () => {
 
 test('onboarding, topic toggles and feedback rules', () => {
   assert.equal(needsOnboarding(true, EMPTY_PREFS, false), true);
-  assert.equal(needsOnboarding(true, { followed: [], hidden: [], onboarded: true }, false), false, 'saved (even with no topics)');
+  assert.equal(needsOnboarding(true, { followed: [], hidden: [], hiddenSources: [], onboarded: true }, false), false, 'saved (even with no topics)');
   assert.equal(needsOnboarding(true, EMPTY_PREFS, true), false, 'skipped');
   assert.equal(needsOnboarding(false, EMPTY_PREFS, false), false, 'signed out');
   assert.equal(needsOnboarding(true, null, false), false, 'prefs not loaded yet');
@@ -109,7 +109,16 @@ test('parseUserPrefs reads api.get_prefs; RPC arguments match the migration', ()
   assert.deepEqual(parseUserPrefs({ followed_categories: ['world', 'tech', 'world'], hidden_categories: ['deals'], onboarded: true, affinity: {} }), {
     followed: ['world', 'tech'],
     hidden: ['deals'],
+    hiddenSources: null, // older server: no hidden_sources, so the Sources switches stay hidden
     onboarded: true,
+  });
+  assert.deepEqual(parseUserPrefs({ followed_categories: [], hidden_categories: [], hidden_sources: ['nasa'], onboarded: true }).hiddenSources, [
+    'nasa',
+  ]);
+  assert.deepEqual(ACCOUNT_RPC.setPrefs.args(['world'], ['deals'], ['nasa']), {
+    p_followed: ['world'],
+    p_hidden: ['deals'],
+    p_hidden_sources: ['nasa'],
   });
   assert.deepEqual(parseUserPrefs(null), EMPTY_PREFS);
   assert.deepEqual(ACCOUNT_RPC.setPrefs.args(['world']), { p_followed: ['world'], p_hidden: null });
@@ -462,4 +471,17 @@ test('hidden topics leave the chips and the feed', () => {
     ['b'],
   );
   assert.equal(withoutHidden(cards, []), cards, 'nothing hidden: same list');
+});
+
+test('mock account: prefs saved by an older build get hiddenSources filled in', async () => {
+  const store = memoryStore();
+  store.set(
+    'element.mock-account.v1',
+    JSON.stringify({ user: { id: 'u', email: 'a@b.co' }, prefs: { u: { followed: ['tech'], hidden: [], onboarded: true } }, feedback: {} }),
+  );
+  const acct = createMockAccount(() => [card()], store);
+  const p = await acct.getPrefs();
+  assert.deepEqual(p.hiddenSources, []);
+  assert.deepEqual(p.followed, ['tech']);
+  assert.deepEqual((await acct.setPrefs(['tech'], [], ['nasa'])).hiddenSources, ['nasa']);
 });

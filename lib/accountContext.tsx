@@ -23,6 +23,10 @@ export interface AccountState {
   /** Hide one topic right away (optimistic); resolves with the topics to restore for Undo. */
   hideTopic(slug: string): Promise<{ followed: string[]; hidden: string[] }>;
   restoreTopics(previous: { followed: string[]; hidden: string[] }): Promise<void>;
+  /** Saves the switched-off sources (only when the server supports them). */
+  saveSources(hiddenSources: string[]): Promise<void>;
+  /** Switch one source off right away; resolves with the list to restore for Undo. */
+  hideSource(key: string): Promise<string[]>;
   skipOnboarding(): void;
   react(card: BlurbCard, pressed: Feedback): void;
   noteCards(cards: BlurbCard[]): void; // pick up my_reaction from For you cards
@@ -141,6 +145,23 @@ export function AccountProvider({ account, children }: { account: AccountApi; ch
       },
       async restoreTopics(previous) {
         setPrefs(await account.setPrefs(previous.followed, previous.hidden));
+      },
+      async saveSources(hiddenSources) {
+        const before = prefs ?? EMPTY_PREFS;
+        setPrefs(await account.setPrefs(before.followed, before.hidden, hiddenSources));
+      },
+      async hideSource(key) {
+        const before = prefs ?? EMPTY_PREFS;
+        const previous = before.hiddenSources ?? [];
+        const next = previous.includes(key) ? previous : [...previous, key];
+        setPrefs({ ...before, hiddenSources: next }); // the cards disappear at once
+        try {
+          setPrefs(await account.setPrefs(before.followed, before.hidden, next));
+        } catch (e) {
+          setPrefs(before);
+          throw e;
+        }
+        return previous;
       },
       skipOnboarding() {
         if (user) store.set(skipKey(user.id), '1');

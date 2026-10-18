@@ -35,7 +35,7 @@ export interface AccountApi {
   signOut(): Promise<void>;
   getPrefs(): Promise<UserPrefs>;
   /** Saves followed topics (and optionally hidden ones); marks the user onboarded. */
-  setPrefs(followed: string[], hidden?: string[]): Promise<UserPrefs>;
+  setPrefs(followed: string[], hidden?: string[], hiddenSources?: string[]): Promise<UserPrefs>;
   feedForYou(cursor: string | null, limit?: number): Promise<FeedPage>;
   track(cardId: string, event: TrackEvent): Promise<void>;
   /** Deletes the user's prefs and events. The login stays (deleted in the dashboard). */
@@ -70,9 +70,12 @@ export const ACCOUNT_RPC = {
   getPrefs: { fn: 'get_prefs', args: () => ({}) },
   setPrefs: {
     fn: 'set_prefs',
-    args: (followed: string[], hidden?: string[]): SetPrefsParams => ({
+    // p_hidden_sources only when the Sources screen changed it: before migration 070000
+    // the server has no such argument, and sending it would fail.
+    args: (followed: string[], hidden?: string[], hiddenSources?: string[]): SetPrefsParams & { p_hidden_sources?: string[] } => ({
       p_followed: followed as SetPrefsParams['p_followed'],
       p_hidden: (hidden ?? null) as SetPrefsParams['p_hidden'],
+      ...(hiddenSources ? { p_hidden_sources: hiddenSources } : {}),
     }),
   },
   feedForYou: { fn: 'feed_for_you', args: (cursor: string | null, limit: number): FeedForYouParams => ({ p_cursor: cursor, p_limit: limit }) },
@@ -88,7 +91,12 @@ const slugList = (x: unknown): string[] => (Array.isArray(x) ? [...new Set(x.fil
 export function parseUserPrefs(x: unknown): UserPrefs {
   if (!x || typeof x !== 'object' || Array.isArray(x)) return { ...EMPTY_PREFS };
   const o = x as Record<string, unknown>;
-  return { followed: slugList(o.followed_categories), hidden: slugList(o.hidden_categories), onboarded: o.onboarded === true };
+  return {
+    followed: slugList(o.followed_categories),
+    hidden: slugList(o.hidden_categories),
+    hiddenSources: Array.isArray(o.hidden_sources) ? slugList(o.hidden_sources) : null,
+    onboarded: o.onboarded === true,
+  };
 }
 
 // get_prefs may return ["world", ...], [{category:"world"}], or {categories:[...]}.
@@ -266,8 +274,8 @@ export function createSupabaseAccount(opts: SupabaseAccountOptions): AccountApi 
     async getPrefs() {
       return parseUserPrefs(await rpc(ACCOUNT_RPC.getPrefs.fn, ACCOUNT_RPC.getPrefs.args()));
     },
-    async setPrefs(followed, hidden) {
-      return parseUserPrefs(await rpc(ACCOUNT_RPC.setPrefs.fn, ACCOUNT_RPC.setPrefs.args(followed, hidden)));
+    async setPrefs(followed, hidden, hiddenSources) {
+      return parseUserPrefs(await rpc(ACCOUNT_RPC.setPrefs.fn, ACCOUNT_RPC.setPrefs.args(followed, hidden, hiddenSources)));
     },
     async feedForYou(cursor, limit) {
       return parseFeedPage(await rpc(ACCOUNT_RPC.feedForYou.fn, ACCOUNT_RPC.feedForYou.args(cursor, clampLimit(limit))));
@@ -374,12 +382,18 @@ export function createMockAccount(cards: () => BlurbCard[], store: KeyValueStore
       setUser(null);
     },
     async getPrefs() {
-      return wait(state.prefs[need().id] ?? { ...EMPTY_PREFS });
+      // prefs saved by an older build may lack newer fields: fill in the defaults
+      return wait({ ...EMPTY_PREFS, ...(state.prefs[need().id] ?? {}) });
     },
-    async setPrefs(followed, hidden) {
+    async setPrefs(followed, hidden, hiddenSources) {
       const u = need();
       const prev = state.prefs[u.id] ?? EMPTY_PREFS;
-      const next = { followed: [...new Set(followed)], hidden: hidden ? [...new Set(hidden)] : prev.hidden, onboarded: true };
+      const next = {
+        followed: [...new Set(followed)],
+        hidden: hidden ? [...new Set(hidden)] : prev.hidden,
+        hiddenSources: hiddenSources ? [...new Set(hiddenSources)] : (prev.hiddenSources ?? []),
+        onboarded: true,
+      };
       state.prefs[u.id] = next;
       save();
       return wait(next);

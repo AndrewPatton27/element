@@ -3,7 +3,9 @@
 // in-page because browser dialogs don't exist on native.
 
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { SOURCES } from '../lib/sourcesInfo';
+import { SOURCE_KEYS, toggleSource } from '../lib/sourceKeys';
 import { router } from 'expo-router';
 import { useAccount } from '../lib/accountContext';
 import { useAppData } from '../lib/appData';
@@ -16,7 +18,7 @@ import { Shell } from '../components/Shell';
 import { Button } from '../components/States';
 import { TopicStatePicker } from '../components/TopicStatePicker';
 
-type Section = 'email' | 'password' | 'topics' | 'data' | 'account' | 'session';
+type Section = 'email' | 'password' | 'topics' | 'sources' | 'data' | 'account' | 'session';
 type Msg = { text: string; error: boolean };
 
 export default function AccountScreen() {
@@ -86,6 +88,7 @@ export default function AccountScreen() {
   const card = [styles.card, { backgroundColor: p.surface, borderColor: p.border }];
   const input = [fieldStyles.input, { borderColor: p.borderStrong, backgroundColor: p.surface, color: p.ink }];
   const saved = acct.prefs?.followed ?? [];
+  const hiddenSources = acct.prefs?.hiddenSources ?? null; // null: server doesn't support it yet
   const key = (l: string[]) => l.slice().sort().join();
   const topicsChanged = key(saved) !== key(topics.followed) || key(acct.prefs?.hidden ?? []) !== key(topics.hidden);
   const message = (s: Section) => {
@@ -176,12 +179,12 @@ export default function AccountScreen() {
 
       <View style={card}>
         <Text style={[styles.h2, { color: p.ink }]} accessibilityRole="header">
-          Your topics
+          Your favorite topics
         </Text>
         <Text style={[styles.help, { color: p.muted }]}>
           {saved.length
-            ? `“For you” puts ${saved.map((s) => categoryName(s, categories)).join(', ')} first.`
-            : 'Pick topics to put them first in your “For you” feed.'}
+            ? `Your favorites (${saved.map((s) => categoryName(s, categories)).join(', ')}) come first in “For you”. Change any topic to Favorite, Normal or Hide, then save.`
+            : 'Mark topics as Favorite to put them first in your “For you” feed, or Hide the ones you never want to see.'}
         </Text>
         <TopicStatePicker categories={categories} value={topics} onChange={setTopics} />
         {topicsChanged ? (
@@ -192,6 +195,52 @@ export default function AccountScreen() {
         ) : null}
         {message('topics')}
       </View>
+
+      {hiddenSources !== null ? (
+        <View style={card}>
+          <Text style={[styles.h2, { color: p.ink }]} accessibilityRole="header">
+            Sources
+          </Text>
+          <Text style={[styles.help, { color: p.muted }]}>
+            Choose which sources you see cards from. Changes apply to every feed right away. At least one source stays on.
+          </Text>
+          {SOURCE_KEYS.map((s) => {
+            const on = !hiddenSources.includes(s.key);
+            const info = SOURCES.find((i) => i.key === s.key);
+            return (
+              <View key={s.key} style={[styles.sourceRow, { borderTopColor: p.rowDivider }]}>
+                <View style={styles.sourceText}>
+                  <Text style={[styles.sourceName, { color: on ? p.ink : p.muted }]}>{s.name}</Text>
+                  {info ? (
+                    <Text style={[styles.help, { color: p.muted }]} numberOfLines={2}>
+                      {info.gives}
+                    </Text>
+                  ) : null}
+                  <Text
+                    style={[styles.aboutLink, { color: p.accentInk }]}
+                    onPress={() => router.navigate('/about' as never)}
+                    accessibilityRole="link"
+                  >
+                    About this source
+                  </Text>
+                </View>
+                <Switch
+                  value={on}
+                  onValueChange={() => {
+                    const next = toggleSource(hiddenSources, s.key);
+                    if (!next) return fail('sources', 'Keep at least one source on.');
+                    void run('sources', () => acct.saveSources(next), on ? `${s.name} turned off.` : `${s.name} turned on.`);
+                  }}
+                  disabled={busy === 'sources'}
+                  trackColor={{ false: p.borderStrong, true: p.accent }}
+                  accessibilityLabel={`${s.name}: ${on ? 'on' : 'off'}`}
+                />
+              </View>
+            );
+          })}
+          {message('sources')}
+        </View>
+      ) : null}
 
       <View style={card}>
         <Text style={[styles.h2, { color: p.ink }]} accessibilityRole="header">
@@ -272,6 +321,10 @@ const styles = StyleSheet.create({
   help: { fontFamily: fonts.sans, fontSize: 14, lineHeight: 20 },
   outline: { minHeight: 48, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   outlineText: { fontFamily: fonts.sansSemi, fontSize: 16 },
+  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 10, borderTopWidth: 1 },
+  sourceText: { flex: 1, gap: 2 },
+  sourceName: { fontFamily: fonts.sansSemi, fontSize: 15 },
+  aboutLink: { fontFamily: fonts.sansSemi, fontSize: 13, textDecorationLine: 'underline' },
   danger: { minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   dangerText: { fontFamily: fonts.sansSemi, fontSize: 16 },
 });

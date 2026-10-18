@@ -4,6 +4,7 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { BlurbCard, Category } from '../contract/types.ts';
 import { categoryName } from '../lib/format';
+import { cardSourceKey, sourceName } from '../lib/sourceKeys';
 import { usePalette } from '../lib/useTheme';
 import { fonts } from '../lib/theme';
 
@@ -11,12 +12,15 @@ interface Props {
   card: BlurbCard | null;
   categories: Category[];
   onHideTopic: (card: BlurbCard) => void;
+  /** When the server supports hidden sources and the card's source can be switched off. */
+  onHideSource?: (card: BlurbCard, key: string) => void;
   onClose: () => void;
 }
 
-export function CardMenu({ card, categories, onHideTopic, onClose }: Props) {
+export function CardMenu({ card, categories, onHideTopic, onClose, onHideSource }: Props) {
   const p = usePalette();
   const topic = card ? categoryName(card.category, categories) : '';
+  const sourceKey = card && onHideSource ? cardSourceKey(card) : null;
   return (
     <Modal visible={card !== null} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, { backgroundColor: p.overlay }]} onPress={onClose} accessibilityLabel="Close options" />
@@ -30,6 +34,16 @@ export function CardMenu({ card, categories, onHideTopic, onClose }: Props) {
             <Text style={[styles.itemText, { color: p.ink }]}>Hide {topic} topics</Text>
             <Text style={[styles.hint, { color: p.muted }]}>You won’t see {topic} cards. Change it any time in Account.</Text>
           </Pressable>
+          {sourceKey && card && onHideSource ? (
+            <Pressable
+              onPress={() => onHideSource(card, sourceKey)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.item, styles.divided, { borderTopColor: p.divider, opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={[styles.itemText, { color: p.ink }]}>Hide cards from {sourceName(sourceKey)}</Text>
+              <Text style={[styles.hint, { color: p.muted }]}>Turn it back on any time in Account → Sources.</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={onClose}
             accessibilityRole="button"
@@ -50,6 +64,7 @@ const styles = StyleSheet.create({
   item: { paddingVertical: 16, paddingHorizontal: 20, gap: 4 },
   itemText: { fontFamily: fonts.sansSemi, fontSize: 16 },
   hint: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 18 },
+  divided: { borderTopWidth: 1 },
   cancel: { borderTopWidth: 1, alignItems: 'center' },
   cancelText: { fontFamily: fonts.sansSemi, fontSize: 16 },
 });

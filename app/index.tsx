@@ -9,6 +9,7 @@ import type { BlurbCard, CategorySlug } from '../contract/types.ts';
 import { useAppData } from '../lib/appData';
 import { useAccount } from '../lib/accountContext';
 import { forYouCoversTopics, withoutHidden } from '../lib/accountLogic';
+import { sourceName, withoutHiddenSources } from '../lib/sourceKeys';
 import { SIGN_IN_AGAIN_MESSAGE } from '../lib/session';
 import type { FeedTab } from '../lib/feedLogic';
 import { categoryName } from '../lib/format';
@@ -43,7 +44,11 @@ export default function FeedScreen() {
   const [sheetCard, setSheetCard] = useState<BlurbCard | null>(null);
   const [detailCard, setDetailCard] = useState<BlurbCard | null>(null);
   const [menuCard, setMenuCard] = useState<BlurbCard | null>(null);
-  const [undo, setUndo] = useState<{ message: string; previous: { followed: string[]; hidden: string[] } } | null>(null);
+  const [undo, setUndo] = useState<
+    | { message: string; kind: 'topic'; previous: { followed: string[]; hidden: string[] } }
+    | { message: string; kind: 'source'; previous: string[] }
+    | null
+  >(null);
   // The feed stays mounted under Numbers / About / Account; only drive it (keys,
   // view tracking) while it's the screen on top (B2).
   const [focused, setFocused] = useState(true);
@@ -70,7 +75,9 @@ export default function FeedScreen() {
 
   // Signed in: hidden topics leave the feed and the chips at once (the server filters too).
   const hidden = signedIn ? (acct.prefs?.hidden ?? []) : [];
-  const items = withoutHidden(state.items, hidden);
+  const hiddenSources = signedIn ? (acct.prefs?.hiddenSources ?? []) : [];
+  const sourcesSupported = signedIn && acct.prefs?.hiddenSources != null;
+  const items = withoutHiddenSources(withoutHidden(state.items, hidden), hiddenSources);
   const chipCategories = withoutHidden(categories, hidden);
   useEffect(() => {
     if (category && hidden.includes(category)) setCategory(null);
@@ -82,13 +89,24 @@ export default function FeedScreen() {
       const topic = categoryName(c.category, categories);
       acct
         .hideTopic(c.category)
-        .then((previous) => setUndo({ message: `${topic} topics hidden.`, previous }))
+        .then((previous) => setUndo({ message: `${topic} topics hidden.`, kind: 'topic', previous }))
         .catch(() => setUndo(null));
     },
     [acct, categories],
   );
+  const hideSource = useCallback(
+    (_c: BlurbCard, key: string) => {
+      setMenuCard(null);
+      acct
+        .hideSource(key)
+        .then((previous) => setUndo({ message: `Cards from ${sourceName(key)} hidden.`, kind: 'source', previous }))
+        .catch(() => setUndo(null));
+    },
+    [acct],
+  );
   const undoHide = useCallback(() => {
-    if (undo) void acct.restoreTopics(undo.previous).catch(() => undefined);
+    if (undo?.kind === 'topic') void acct.restoreTopics(undo.previous).catch(() => undefined);
+    if (undo?.kind === 'source') void acct.saveSources(undo.previous).catch(() => undefined);
     setUndo(null);
   }, [acct, undo]);
   const clearUndo = useCallback(() => setUndo(null), []);
@@ -225,7 +243,13 @@ export default function FeedScreen() {
       <View style={[styles.fill, wide && { marginTop: 14 }]}>{body}</View>
       <SourcesSheet card={sheetCard} config={config} onClose={() => setSheetCard(null)} />
       <DetailSheet card={detailCard} config={config} categories={categories} onClose={() => setDetailCard(null)} />
-      <CardMenu card={menuCard} categories={categories} onHideTopic={hideTopic} onClose={() => setMenuCard(null)} />
+      <CardMenu
+        card={menuCard}
+        categories={categories}
+        onHideTopic={hideTopic}
+        onHideSource={sourcesSupported ? hideSource : undefined}
+        onClose={() => setMenuCard(null)}
+      />
       <UndoToast message={undo?.message ?? null} onUndo={undoHide} onDone={clearUndo} />
     </Shell>
   );

@@ -112,6 +112,20 @@ function loadDotEnv(): void {
   }
 }
 
+/**
+ * Recompute the Trending boosts after a run. Never fails the run: if the database does not have
+ * the RPC yet (older migration) or the call errors, it logs one line and moves on.
+ */
+export async function refreshTrendingSafely(publisher: Deps['publisher'], log: (s: string) => void): Promise<void> {
+  if (!publisher.refreshTrending) return;
+  try {
+    const r = await publisher.refreshTrending();
+    log(`trending refreshed: ${JSON.stringify(r)}`);
+  } catch (e) {
+    log(`warning: trending refresh failed (${(e as Error).message}); cards are still published`);
+  }
+}
+
 export async function main(argv: string[]): Promise<number> {
   const args = parseArgs(argv);
   const log = (s: string) => console.log(s);
@@ -135,6 +149,7 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     }
     const stats = await runOnce(deps, { only: args.only, limit: args.limit });
+    await refreshTrendingSafely(deps.publisher, log);
     log(`dry run: ${JSON.stringify(stats)}`);
     if (args.json) console.log(JSON.stringify({ cards: dry.cards, macro: dry.macro }, null, 2));
     return 0;
@@ -162,6 +177,7 @@ export async function main(argv: string[]): Promise<number> {
   do {
     deps.now = new Date();
     const stats = await runOnce(deps, { only: args.only, limit: args.limit });
+    await refreshTrendingSafely(deps.publisher, log);
     log(`run finished ${deps.now.toISOString()}: ${JSON.stringify(stats)}`);
     if (args.loop) await new Promise((r) => setTimeout(r, config.pollIntervalMinutes * 60_000));
   } while (args.loop);

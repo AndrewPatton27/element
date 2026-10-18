@@ -9,10 +9,12 @@ export type TrackEvent = 'view' | 'like' | 'dislike' | 'open_source' | 'clear';
 export interface UserPrefs {
   followed: string[];
   hidden: string[];
+  /** Source keys switched off; null when the server doesn't support it yet (before migration 070000). */
+  hiddenSources: string[] | null;
   onboarded: boolean;
 }
 
-export const EMPTY_PREFS: UserPrefs = { followed: [], hidden: [], onboarded: false };
+export const EMPTY_PREFS: UserPrefs = { followed: [], hidden: [], hiddenSources: [], onboarded: false };
 
 // Onboarding ("pick topics") shows once after sign-in until the user saves topics
 // (the server's onboarded flag) or skips it on this device.

@@ -47,10 +47,11 @@ export default function OnboardingScreen() {
   return (
     <Shell active="account" scroll>
       <Text style={[styles.title, { color: p.ink }]} accessibilityRole="header">
-        Pick topics you care about
+        Pick your favorite topics
       </Text>
       <Text style={[styles.sub, { color: p.muted }]}>
-        Your “For you” feed puts these first. Likes and “less like this” fine-tune it over time. You can change this any time.
+        Your “For you” feed puts your favorites first. Likes and “less like this” fine-tune it over time. You can change your favorites any time in
+        Account.
       </Text>
       <TopicPicker categories={categories} selected={selected} onChange={setSelected} />
       <Text style={[styles.sub, { color: p.muted }]}>Topics to hide (optional): you won’t see these at all.</Text>

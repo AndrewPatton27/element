@@ -10,7 +10,7 @@ import { fonts } from '../lib/theme';
 import { LoadingState } from './States';
 
 const STATES: { state: TopicState; label: string }[] = [
-  { state: 'follow', label: 'Follow' },
+  { state: 'follow', label: 'Favorite' }, // stored as "followed" on the server
   { state: 'normal', label: 'Normal' },
   { state: 'hide', label: 'Hide' },
 ];

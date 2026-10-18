@@ -16,6 +16,8 @@ export interface Publisher {
   listToRevise?(current: string[], limit: number): Promise<RevisableCard[]>;
   /** --rewrite: update a card in place or hide it (api.revise_blurb). */
   reviseBlurb?(p: RevisePayload): Promise<{ status: 'revised' | 'hidden' | 'not_found'; id: string }>;
+  /** End of a run: recompute the Trending boosts from recent interactions (api.refresh_trending). */
+  refreshTrending?(): Promise<unknown>;
 }
 
 export class SupabaseError extends Error {
@@ -58,6 +60,7 @@ export function createSupabasePublisher(opts: { url: string; key: string; fetchI
     upsertMacro: async ({ move: _move, ...o }) => { await rpc('upsert_macro', { p: o }); },   // move is not stored
     listToRevise: (current, limit) => rpc('blurbs_to_revise', { p_current: current, p_limit: limit }),
     reviseBlurb: (p) => rpc('revise_blurb', { p }),
+    refreshTrending: () => rpc('refresh_trending', {}),
   };
 }
 
@@ -68,6 +71,7 @@ export function createDryRunPublisher(toRevise: RevisableCard[] = []) {
   const macro: MacroObservation[] = [];
   const revisions: RevisePayload[] = [];
   const seen = new Set<string>();
+  const trending = { refreshes: 0 };
   const publisher: Publisher = {
     async upsertItem(item) {
       const is_new = !seen.has(item.url);
@@ -89,8 +93,9 @@ export function createDryRunPublisher(toRevise: RevisableCard[] = []) {
       revisions.push(p);
       return { status: p.action === 'hide' ? 'hidden' : 'revised', id: p.id };
     },
+    async refreshTrending() { trending.refreshes += 1; return { generation: trending.refreshes, boosted: 0 }; },
   };
-  return { publisher, items, cards, macro, revisions };
+  return { publisher, items, cards, macro, revisions, trending };
 }
 
 export function itemPayload(item: RawItem) {

@@ -129,7 +129,7 @@ export default function AboutScreen() {
           items={[
             'Trending: the most important cards first, balanced with freshness and how much readers engage with them.',
             'Latest: newest first.',
-            'For you (with an account): learns from the topics you follow or hide and the cards you like or dislike. Only taps are stored, such as likes, cards viewed and sources opened.',
+            'For you (with an account): learns from your favorite and hidden topics, the sources you switch off, and the cards you like or dislike. Only taps are stored, such as likes, cards viewed and sources opened.',
           ]}
         />
       </Section>
