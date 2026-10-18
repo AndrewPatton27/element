@@ -25,7 +25,7 @@ Row-level security is on for every table. The app never reads `core` or `ingest`
 | `20261017060000_signals.sql` | Reading signals for For you: event kinds `open_detail` and `dwell` (with `dwell_ms`), `api.track(p_blurb, p_kind, p_ms)` (2-key calls still work), signal weights in `core.rank_params`, learned topic affinity per user, and a "seen" penalty for cards already read. |
 | `20261017070000_trending_foryou.sql` | Trending (`api.feed` mode `top`: rank plus a capped engagement boost from counts of distinct readers, `core.trend_generations` / `core.trend_boosts`, service-role `api.refresh_trending`), For you v2 (follows, learned affinity that fades over time, exploration, seen penalties), `api.my_categories`, hidden sources (`core.source_keys`, `api.sources()`, `hidden_sources` in `api.set_prefs` / `api.get_prefs`), and one card shape for every feed (`core.cards_json`). |
 | `20261017071000_diversity_patch.sql` | Keeps Trending and For you varied: replaces `core.diversify` (no 3rd card in a row from one category, no repeated story type, ticker or source cluster next to each other, at most 2 per source in any 5), with carry-over of held-back cards in the cursor. Recreates `api.feed` and `api.feed_for_you`. |
-| `20261017080000_collab.sql` | For you v3: personal affinity per topic, card type and source (shrunk toward zero when there are few signals), "readers who engaged with X also engaged with Y" tables built from aggregate counts of at least 3 different readers (no user ids), a smoothed engagement rate in Trending boosts (extends `core.refresh_trending`), and a recreated `api.feed_for_you`. `api.feed` is not recreated. No SQL check file covers it yet. |
+| `20261017080000_collab.sql` | For you v3: personal affinity per topic, card type and source (shrunk toward zero when there are few signals), "readers who engaged with X also engaged with Y" tables built from aggregate counts of at least 3 different readers (no user ids), a smoothed engagement rate in Trending boosts (extends `core.refresh_trending`), crowd topic hints for users with few signals, and a recreated `api.feed_for_you`. `api.feed` is not recreated. Checked by `tests/collab_check.sql`. |
 
 Every migration is written to be re-runnable (`if not exists`, `create or replace`, `on conflict`).
 
@@ -38,6 +38,7 @@ Every migration is written to be re-runnable (`if not exists`, `create or replac
 | `account_delete_check.sql` | Anon cannot delete; a user can delete only their own login; their data goes with it; other users are untouched. | `ERROR: ALL ACCOUNT DELETE CHECKS PASSED (test data rolled back on purpose)` |
 | `signals_check.sql` | Dwell minimum, dedupe and keep-the-longest; quick skips lower a topic, opening the detail raises it; per-card and per-topic caps; the "seen" penalty; old 2-key `track` calls still work; anon denied. | `ERROR: ALL SIGNAL CHECKS PASSED (test data rolled back on purpose)` |
 | `trending_check.sql` | Trending boost and Latest order, hidden topics, For you v2 (needs the two test users, like the account tests). | `ERROR: ALL TRENDING CHECKS PASSED (test data rolled back on purpose)` |
+| `collab_check.sql` | Crowd tables are private; no crowd = same order as before; card links and topic hints need at least 3 different readers; a new user gets crowd-informed picks; a like pulls up a card other readers also liked; importance still wins; For you pages never repeat across a refresh; old calls and card keys unchanged; deleted data leaves the aggregates. Needs the two test users; creates six more test users inside the block (rolled back). | `ERROR: ALL COLLAB CHECKS PASSED (test data rolled back on purpose)` |
 
 Each test ends with a deliberate error so that all test rows are rolled back. The account tests need two test users, `element-test-a@example.com` and `element-test-b@example.com` (Authentication → Users → Add user, "Auto Confirm User"); delete them afterwards. They simulate a signed-in user by switching to the `authenticated` role and setting `request.jwt.claims`, which is what `auth.uid()` reads.
 
@@ -50,7 +51,7 @@ One-off data fixes for a live project, not migrations (`maintenance/hide_offtopi
 1. Create a Supabase project. In **Project Settings → Data API → Exposed schemas**, set `api` only.
 2. In the SQL editor, paste and run each migration in the order above. Each should report "Success. No rows returned".
 3. Run `tests/ranking_check.sql` (part 1, then part 2).
-4. Create the two test users, run `tests/accounts_check.sql`, `tests/account_delete_check.sql`, `tests/signals_check.sql` and `tests/trending_check.sql`, then delete the test users.
+4. Create the two test users, run `tests/accounts_check.sql`, `tests/account_delete_check.sql`, `tests/signals_check.sql`, `tests/trending_check.sql` and `tests/collab_check.sql`, then delete the test users.
 5. Set the dashboard-only settings below.
 
 ## Settings that live only in the dashboard
