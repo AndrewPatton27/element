@@ -126,10 +126,11 @@ begin
   -- Y 0+0.75 first; X 2+0.75-100 = -97.25 and Z 1+1.5-100 = -97.5 go to the end
   select string_agg(replace(x->>'headline', 'SIG ', ''), ',' order by o) into got
     from jsonb_array_elements(api.feed_for_you(null, 30) -> 'items') with ordinality as t(x, o);
-  -- (the "no more than 2 in a row" rule may slot Z between the earnings cards G2 and G3)
-  if got not like 'Y,%' or got not like '%,X'
-     or 'Z' <> all ((string_to_array(got, ','))[cardinality(string_to_array(got, ',')) - 2 :]) then
-    raise exception 'FAIL: seen penalty order for B is %, expected Y first, X last, Z in the last three', got;
+  -- (the breadth rules may slot X and Z between the three earnings cards G1..G3 at the end)
+  if got not like 'Y,%'
+     or 'X' <> all ((string_to_array(got, ','))[cardinality(string_to_array(got, ',')) - 4 :])
+     or 'Z' <> all ((string_to_array(got, ','))[cardinality(string_to_array(got, ',')) - 4 :]) then
+    raise exception 'FAIL: seen penalty order for B is %, expected Y first, X and Z in the last five', got;
   end if;
 
   -- three earnings cards at the card cap (+1.5 each = 4.5) -> category cap 4

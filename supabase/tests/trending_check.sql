@@ -86,7 +86,8 @@ begin
 
   -- ---- 2. before any engagement: importance x recency -------------------------------
   select string_agg(replace(x->>'headline', 'TR ', ''), ',' order by o) into got
-    from jsonb_array_elements(api.feed('top', null, 10) -> 'items') with ordinality as t(x, o) where o <= 4;
+    from jsonb_array_elements(api.feed('top', null, 10) -> 'items') with ordinality as t(x, o)
+   where x->>'headline' in ('TR FED', 'TR SMALL', 'TR N1', 'TR N2');   -- relative order (breadth may slot cards between)
   if got is distinct from 'FED,SMALL,N1,N2' then raise exception 'FAIL: trending order before engagement is %', got; end if;
   if (select count(*) from jsonb_array_elements(api.feed() -> 'items')) <> 20 then
     raise exception 'FAIL: api.feed() with defaults (old app call) broke';
@@ -108,7 +109,8 @@ begin
 
   perform set_config('role', 'anon', true);
   select string_agg(replace(x->>'headline', 'TR ', ''), ',' order by o) into got
-    from jsonb_array_elements(api.feed('top', null, 10) -> 'items') with ordinality as t(x, o) where o <= 4;
+    from jsonb_array_elements(api.feed('top', null, 10) -> 'items') with ordinality as t(x, o)
+   where x->>'headline' in ('TR FED', 'TR SMALL', 'TR N1', 'TR N2');   -- relative order (breadth may slot cards between)
   -- SMALL gets ~+4 h (16.4 points), still ~15 h behind FED: importance dominates.
   -- N2 (+2.6 h for two likes) passes N1.
   if got is distinct from 'FED,SMALL,N2,N1' then raise exception 'FAIL: trending order after engagement is %', got; end if;
@@ -401,6 +403,72 @@ begin
   if core.source_key_of('summary', (select id from core.blurbs where dedupe_key = 'br-Q1')) <> 'usgs' then
     raise exception 'FAIL: USGS card not mapped to usgs';
   end if;
+
+  -- ---- 14. four FAA rules (Federal Register, no event_type) + others ---------------------
+  -- (diversity patch 071000) never two FAA rules back to back, at most 2 Federal Register
+  -- cards in any 5 in a row, the top card stays first
+  perform set_config('role', 'none', true);
+  update core.blurbs set status = 'hidden' where dedupe_key like 'br-%' or dedupe_key like 'tr-%';
+  for i in 1 .. 4 loop
+    insert into core.blurbs (dedupe_key, kind, headline, category, attribution, as_of, sort_at, rank_score)
+    values ('faa-' || i, 'summary', 'FAA ' || i, 'policy', 'Federal Register, Federal Aviation Administration',
+            now(), now(), base + 20 - 0.1 * i)
+    returning id into b;
+    insert into core.blurb_sources (blurb_id, name, kind, url, license_class, attribution, is_primary)
+    values (b, 'Federal Register', 'government', 'https://www.federalregister.gov/d/faa' || i, 'public_domain',
+            'Federal Register, Federal Aviation Administration', true);
+  end loop;
+  -- others: label, category, event_type, source name, rank offset
+  for r in select value from jsonb_array_elements('[
+      {"l":"QUAKE","c":"science","e":"earthquake","s":"U.S. Geological Survey","o":19.55},
+      {"l":"EPA",  "c":"policy", "e":null,        "s":"Federal Register",      "o":19.5},
+      {"l":"SEC1", "c":"earnings","e":"earnings", "s":"SEC",                   "o":19.0},
+      {"l":"WIKI", "c":"world",  "e":"world_event","s":"Wikipedia",            "o":18.5},
+      {"l":"NASA", "c":"science","e":"science",   "s":"NASA",                  "o":16.45},
+      {"l":"NASA2","c":"tech",   "e":"tech",      "s":"NASA",                  "o":16.4},
+      {"l":"WIKI2","c":"world",  "e":"world_event","s":"Wikipedia",            "o":16.3},
+      {"l":"CPSC", "c":"safety", "e":"recall",    "s":"U.S. Consumer Product Safety Commission", "o":17.5},
+      {"l":"BEA",  "c":"economy","e":"macro_release","s":"U.S. Bureau of Economic Analysis",   "o":17.0},
+      {"l":"SEC2", "c":"deals",  "e":"deal",      "s":"SEC",                   "o":16.5}]') loop
+    insert into core.blurbs (dedupe_key, kind, headline, category, event_type, attribution, as_of, sort_at, rank_score)
+    values ('faa-x-' || (r->>'l'), 'summary', 'FAA ' || (r->>'l'), r->>'c', r->>'e',
+            case when r->>'l' = 'EPA' then 'Federal Register, Environmental Protection Agency' end,
+            now(), now(), base + (r->>'o')::numeric)
+    returning id into b;
+    insert into core.blurb_sources (blurb_id, name, kind, url, license_class, is_primary)
+    values (b, r->>'s', 'government', 'https://www.federalregister.gov/x/' || (r->>'l'), 'public_domain', true);
+  end loop;
+  perform set_config('role', 'anon', true);
+  perform set_config('request.jwt.claims', '{"role":"anon"}', true);
+  foreach mode in array array['10', '30'] loop
+    page := '[]'::jsonb; cur := null; n := 0;
+    loop
+      r := api.feed('top', cur, mode::int);
+      page := page || (r->'items');
+      cur := r->>'next_cursor'; n := n + 1;
+      exit when cur is null or n > 10;
+    end loop;
+    select array_agg(replace(x->>'headline', 'FAA ', '') order by o) into seen
+      from jsonb_array_elements(page) with ordinality as t(x, o);
+    got := array_to_string(seen, ',');
+    if cardinality(seen) <> 14 or (select count(distinct x) from unnest(seen) x) <> 14 then
+      raise exception 'FAIL: FAA case paging (limit %) returned %', mode, got;
+    end if;
+    if seen[1] <> '1' then raise exception 'FAIL: FAA case: the top card is not first (limit %): %', mode, got; end if;
+    for i in 2 .. cardinality(seen) loop
+      if seen[i] ~ '^[1-4]$' and seen[i-1] ~ '^[1-4]$' then
+        raise exception 'FAIL: two FAA rules back to back (limit %): %', mode, got;
+      end if;
+      if seen[i] like 'NASA%' and seen[i-1] like 'NASA%' then         -- same source, different topic
+        raise exception 'FAIL: two NASA cards back to back (limit %): %', mode, got;
+      end if;
+    end loop;
+    for i in 1 .. cardinality(seen) - 4 loop
+      if (select count(*) from unnest(seen[i:i+4]) x where x ~ '^[1-4]$' or x = 'EPA') > 2 then
+        raise exception 'FAIL: more than 2 Federal Register cards in 5 (limit %): %', mode, got;
+      end if;
+    end loop;
+  end loop;
 
   raise exception 'ALL TRENDING CHECKS PASSED (test data rolled back on purpose)';
 end;
