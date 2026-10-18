@@ -27,6 +27,7 @@ export interface Palette {
   down: string; // change went down
   flat: string; // unchanged
   overlay: string; // behind sheets
+  warn: string; // design --warn: alerts, "updated" dots, rises in a number
 }
 
 export const light: Palette = {
@@ -55,6 +56,7 @@ export const light: Palette = {
   down: '#0A5A4E',
   flat: '#56635B',
   overlay: 'rgba(20,33,28,0.5)',
+  warn: '#8A3B12',
 };
 
 export const dark: Palette = {
@@ -83,7 +85,28 @@ export const dark: Palette = {
   down: '#6FD0BD',
   flat: '#98A59D',
   overlay: 'rgba(0,0,0,0.6)',
+  warn: '#F0A07A',
 };
+
+// The design files' CSS variable names (docs/design/*.dc.html, Classic teal)
+// mapped to Palette roles, so new screens can be written straight from the
+// design: design.line -> p[design.line] === '#E1E6DE'.
+export const design = {
+  bg: 'bg',
+  surface: 'surface',
+  surface2: 'surfaceMuted',
+  ink: 'ink',
+  ink2: 'inkSoft',
+  muted: 'muted',
+  line: 'border',
+  lineSoft: 'divider',
+  lineStrong: 'borderStrong',
+  accent: 'accent',
+  tint: 'accentSoft',
+  tintInk: 'accentInk',
+  warn: 'warn',
+  onAccent: 'onAccent',
+} as const satisfies Record<string, keyof Palette>;
 
 // Light only for now. The dark palette above is kept for later; set this to
 // true (and app.json "userInterfaceStyle" to "automatic") to follow the system.
@@ -102,9 +125,53 @@ export const fonts = {
   sansSemi: 'InstrumentSans_600SemiBold',
 } as const;
 
-export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
-export const radius = { sm: 12, md: 14, lg: 18, card: 24, sheet: 28, pill: 999 } as const;
-export const font = { small: 12, meta: 13, chip: 14, body: 16, cardBody: 18, title: 32, big: 64 } as const;
+// Spacing, radii and type sizes from the design files. Existing keys keep their
+// values; the later keys were added for the UI overhaul (P0.4).
+export const space = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+  page: 16, // mobile page side padding
+  pageWide: 32, // web page side padding
+  section: 22, // gap between sections on a web page
+  pageTopWide: 40, // web page top padding under the top bar
+  pageBottomWide: 90, // room for the floating About pill
+} as const;
+export const radius = {
+  sm: 12, // source row, inputs
+  md: 14, // badges
+  lg: 18,
+  tile: 20, // list cards (Following, Search results)
+  chip: 22, // 44 px chips and the Sign in pill
+  card: 24, // feed card
+  sheet: 28,
+  pill: 999,
+} as const;
+export const font = {
+  small: 12, // tab labels, disclaimer
+  meta: 13,
+  chip: 14,
+  nav: 15, // web top-bar links, mobile tab text in headers
+  body: 16,
+  navTab: 16, // web Main nav / feed tabs
+  cardBody: 18,
+  headerWordmark: 22, // mobile header
+  wordmark: 26, // web top bar
+  cardTitle: 28,
+  title: 32,
+  pageTitle: 44, // web page h1 (Brief, Search, Following, Me)
+  big: 64,
+} as const;
+
+// Fixed bar heights from the design.
+export const TOP_BAR_HEIGHT = 64; // web top bar
+export const MOBILE_HEADER_HEIGHT = 56; // mobile screen header
+export const TAB_BAR_MIN_HEIGHT = 48; // each mobile tab's touch target
+// Max width of a web page body (Brief, Search, Following, Me).
+export const PAGE_MAX_WIDTH = 1000;
 
 // At this width and above the web layout switches to three columns.
 export const WIDE_BREAKPOINT = 1024;

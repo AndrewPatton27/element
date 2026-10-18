@@ -1,9 +1,12 @@
-// Page frame shared by every screen. Phones: content, then a bottom nav (Feed,
-// Numbers, About, Account / Sign in). Wide web: no bottom nav. A 64 px top bar
-// (wordmark, Trending / Latest / For you, Numbers, Sign in or Account), a scrolling
-// Numbers strip, then a body of left categories, the main column and a right aside
-// (top stories and trends), with a floating About pill at the bottom left (design:
-// docs/design/web/Web-Final.dc.html). The SAMPLE DATA banner sits on top in mock mode.
+// Page frame shared by every screen. Phones: content, then the 5-tab bottom bar
+// (Feed / Brief / Search / Following / Me; components/TabBar.tsx). Numbers and
+// About are no longer tabs, so on Me, Numbers and About a slim "Numbers · About"
+// row sits above the bar to keep them one tap away. Wide web: a 64 px top bar
+// (wordmark, Trending / Latest / For you, the Feed / Brief / Search / Following /
+// Me links, Numbers, Sign in or Account), a scrolling Numbers strip, then a body
+// of left categories, the main column and a right aside, with a floating About
+// pill at the bottom left (design: docs/design/web/Web-Final.dc.html). The SAMPLE
+// DATA banner sits on top in mock mode.
 
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -14,31 +17,15 @@ import { useAppData } from '../lib/appData';
 import { useAccount } from '../lib/accountContext';
 import type { FeedTab } from '../lib/feedLogic';
 import { usePalette, useWide } from '../lib/useTheme';
-import { fonts } from '../lib/theme';
+import { fonts, font, TOP_BAR_HEIGHT } from '../lib/theme';
 import type { Palette } from '../lib/theme';
-import { FeedIcon, InfoIcon, NumbersIcon, PersonIcon } from './Icons';
+import { InfoIcon } from './Icons';
 import { NumbersTicker } from './NumbersTicker';
 import { SampleBanner } from './SampleBanner';
 import { SortToggle } from './SortToggle';
+import { go, TabBar, TopNavLinks, type Tab } from './TabBar';
 
-export type Tab = 'feed' | 'numbers' | 'about' | 'account';
-type Href = '/' | '/numbers' | '/about' | '/account' | '/signin';
-type NavItem = { key: Tab; label: string; href: Href; Icon: typeof FeedIcon };
-
-function navItems(signedIn: boolean): NavItem[] {
-  return [
-    { key: 'feed', label: 'Feed', href: '/', Icon: FeedIcon },
-    { key: 'numbers', label: 'Numbers', href: '/numbers', Icon: NumbersIcon },
-    { key: 'about', label: 'About', href: '/about', Icon: InfoIcon },
-    signedIn
-      ? { key: 'account', label: 'Account', href: '/account', Icon: PersonIcon }
-      : { key: 'account', label: 'Sign in', href: '/signin', Icon: PersonIcon },
-  ];
-}
-
-function go(href: Href) {
-  router.navigate(href as never); // typed routes regenerate on the next `expo start`
-}
+export type { Tab } from './TabBar';
 
 export function Wordmark({ size = 24 }: { size?: number }) {
   const p = usePalette();
@@ -49,21 +36,24 @@ export function Wordmark({ size = 24 }: { size?: number }) {
   );
 }
 
-function BottomNav({ active, p, items }: { active: Tab; p: Palette; items: NavItem[] }) {
+// Phones only: Numbers and About links (they used to be bottom tabs).
+function MoreLinks({ active, p }: { active: Tab; p: Palette }) {
+  const items = [
+    { key: 'numbers' as const, label: 'Numbers to know', href: '/numbers' as const },
+    { key: 'about' as const, label: 'About Element', href: '/about' as const },
+  ];
   return (
-    <View style={[styles.bottomNav, { backgroundColor: p.surface, borderTopColor: p.navBorder }]} accessibilityRole="tablist">
-      <View style={styles.bottomInner}>
-        {items.map(({ key, label, href, Icon }) => {
-          const on = key === active;
-          const color = on ? p.accent : p.muted;
-          return (
-            <Pressable key={key} onPress={() => go(href)} accessibilityRole="tab" aria-selected={on} style={styles.bottomItem}>
-              <Icon color={color} />
-              <Text style={{ color, fontSize: 12, fontFamily: on ? fonts.sansSemi : fonts.sansMedium }}>{label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+    <View style={[styles.moreRow, { borderTopColor: p.divider }]}>
+      {items.map(({ key, label, href }) => {
+        const on = key === active;
+        return (
+          <Pressable key={key} onPress={() => go(href)} accessibilityRole="link" accessibilityState={{ selected: on }} style={styles.moreLink}>
+            <Text style={{ color: on ? p.accentInk : p.inkSoft, fontSize: font.chip, fontFamily: on ? fonts.sansSemi : fonts.sansMedium }}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -79,6 +69,7 @@ function TopBar({ active, p, signedIn, feedTab }: { active: Tab; p: Palette; sig
       </Pressable>
       <SortToggle mode={feedTab ? feedTab.mode : null} onChange={onChange} wide forYou={signedIn} />
       <View style={styles.spacer} />
+      <TopNavLinks active={active} signedIn={signedIn} />
       <Pressable onPress={() => go('/numbers')} accessibilityRole="link" accessibilityLabel="Numbers to know" style={styles.textLink}>
         <Text style={{ color: active === 'numbers' ? p.accentInk : p.inkSoft, fontSize: 15, fontFamily: active === 'numbers' ? fonts.sansSemi : fonts.sansMedium }}>
           Numbers
@@ -101,10 +92,11 @@ interface ShellProps {
   left?: ReactNode; // wide only: categories column
   aside?: ReactNode; // wide only: right column
   scroll?: boolean; // wrap content in a ScrollView (Numbers, About)
+  bare?: boolean; // children fill the area under the bars as-is (ScreenShell does its own layout)
   feedTab?: { mode: FeedTab; onChange: (m: FeedTab) => void }; // wide only: top bar tabs (feed screen)
 }
 
-export function Shell({ active, children, left, aside, scroll, feedTab }: ShellProps) {
+export function Shell({ active, children, left, aside, scroll, bare, feedTab }: ShellProps) {
   const p = usePalette();
   const wide = useWide();
   const { api, config } = useAppData();
@@ -119,7 +111,9 @@ export function Shell({ active, children, left, aside, scroll, feedTab }: ShellP
         <View style={[styles.strip, { backgroundColor: p.bg, borderBottomColor: p.border }]}>
           <NumbersTicker api={api} config={config} />
         </View>
-        {scroll ? (
+        {bare ? (
+          <View style={styles.fill}>{children}</View>
+        ) : scroll ? (
           <ScrollView style={styles.fill} contentContainerStyle={styles.scrollWide}>
             {children}
           </ScrollView>
@@ -153,18 +147,21 @@ export function Shell({ active, children, left, aside, scroll, feedTab }: ShellP
     );
   }
 
-  const content = scroll ? (
-    <ScrollView style={styles.fill} contentContainerStyle={styles.scrollNarrow}>
-      {children}
-    </ScrollView>
-  ) : (
-    <View style={styles.fill}>{children}</View>
-  );
+  const content =
+    scroll && !bare ? (
+      <ScrollView style={styles.fill} contentContainerStyle={styles.scrollNarrow}>
+        {children}
+      </ScrollView>
+    ) : (
+      <View style={styles.fill}>{children}</View>
+    );
+  const showMore = active === 'account' || active === 'me' || active === 'numbers' || active === 'about';
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: p.bg }]} edges={['top', 'bottom']}>
       {api.sample ? <SampleBanner /> : null}
       {content}
-      <BottomNav active={active} p={p} items={navItems(signedIn)} />
+      {showMore ? <MoreLinks active={active} p={p} /> : null}
+      <TabBar active={active} signedIn={signedIn} />
     </SafeAreaView>
   );
 }
@@ -178,7 +175,7 @@ const styles = StyleSheet.create({
     columnGap: 28,
     rowGap: 8,
     paddingHorizontal: 32,
-    minHeight: 64,
+    minHeight: TOP_BAR_HEIGHT,
     borderBottomWidth: 1,
   },
   wordmark: { fontFamily: fonts.serif, fontSize: 26, letterSpacing: -0.26 },
@@ -216,7 +213,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
   },
-  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 6, paddingBottom: 10, paddingHorizontal: 8 },
-  bottomInner: { flex: 1, flexDirection: 'row', justifyContent: 'space-evenly' },
-  bottomItem: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  moreRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, borderTopWidth: 1, paddingHorizontal: 16 },
+  moreLink: { minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },
 });

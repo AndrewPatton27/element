@@ -196,3 +196,31 @@ export function ChevronRightIcon(p: IconProps) {
     </Icon>
   );
 }
+
+// Bottom-bar icons for Brief, Search and Following (design Mobile-Final nav).
+export function BriefIcon(p: IconProps) {
+  return (
+    <Icon {...p}>
+      <Circle cx={12} cy={12} r={4} />
+      <Path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </Icon>
+  );
+}
+
+export function SearchIcon(p: IconProps) {
+  return (
+    <Icon {...p}>
+      <Circle cx={11} cy={11} r={6.5} />
+      <Path d="M16 16l4.5 4.5" />
+    </Icon>
+  );
+}
+
+// Pulse line: Following tab and the card's "Follow this story" button.
+export function PulseIcon(p: IconProps) {
+  return (
+    <Icon {...p}>
+      <Path d="M3 12h4l3-7 4 14 3-7h4" />
+    </Icon>
+  );
+}

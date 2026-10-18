@@ -1,6 +1,7 @@
 // Root layout: loads the fonts, picks the API (sample fixtures or Supabase),
 // shows a full-screen error if the build is misconfigured, and provides shared
-// data to every screen. Feed, Numbers and About are peers (tab-like), not modals.
+// data to every screen. The five tabs (Feed, Brief, Search, Following, Me) plus
+// Numbers and About are peers (tab-like), not modals.
 
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -42,6 +43,9 @@ export default function RootLayout() {
             <AccountProvider account={result.account}>
               <Stack screenOptions={{ headerShown: false, animation: 'none', contentStyle: { backgroundColor: p.bg } }}>
                 <Stack.Screen name="index" />
+                <Stack.Screen name="brief" />
+                <Stack.Screen name="search" />
+                <Stack.Screen name="following" />
                 <Stack.Screen name="numbers" />
                 <Stack.Screen name="about" />
                 <Stack.Screen name="account" />
