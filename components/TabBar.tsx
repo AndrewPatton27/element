@@ -1,8 +1,8 @@
-// The five main places (design: docs/design/mobile/Mobile-Final.dc.html nav and
-// docs/design/web/Web-Following.dc.html top bar): Feed / Brief / Search /
-// Following / Me. Phones show them as a bottom bar (TabBar); wide web shows them
-// as text links in the top bar (TopNavLinks). Me opens Account when signed in,
-// Sign in otherwise.
+// The five main places (design: docs/design/mobile/Mobile-Final.dc.html nav):
+// Feed / Brief / Search / Following / Me. Phones show them as the bottom bar
+// (TabBar). Wide web shows only Brief / Search / Following as top-bar links
+// (TopNavLinks, design Web-Final); Feed and Me live elsewhere there (see below).
+// Me opens /account on phones, signed in or not (guests get device settings).
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -76,14 +76,17 @@ export function TabBar({ active, signedIn }: { active: Tab; signedIn: boolean })
   );
 }
 
-// Wide web: the same five places as top-bar links, with an underline on the
-// current one (design Web-Following).
+// Wide web (design Web-Final "More" nav): Brief / Search / Following only. Feed is the
+// wordmark and the Trending / Latest tabs; Me is the account entry on the right
+// (AccountEntry in Shell.tsx); Numbers is the ticker strip. Underline on the current one.
+export const WEB_LINK_KEYS: MainTab[] = ['brief', 'search', 'following'];
+
 export function TopNavLinks({ active, signedIn }: { active: Tab; signedIn: boolean }) {
   const p = usePalette();
   const current = mainTabFor(active);
   return (
-    <View style={styles.links} aria-label="Main">
-      {mainTabs(signedIn).map(({ key, label, href }) => {
+    <View style={styles.links} aria-label="More">
+      {mainTabs(signedIn).filter((t) => WEB_LINK_KEYS.includes(t.key)).map(({ key, label, href }) => {
         const on = key === current;
         return (
           <Pressable
@@ -93,7 +96,7 @@ export function TopNavLinks({ active, signedIn }: { active: Tab; signedIn: boole
             accessibilityState={{ selected: on }}
             style={[styles.link, { borderBottomColor: on ? p.accent : 'transparent' }]}
           >
-            <Text style={{ color: on ? p.ink : p.muted, fontSize: font.navTab, fontFamily: on ? fonts.sansSemi : fonts.sansMedium }}>
+            <Text style={{ color: on ? p.ink : p.muted, fontSize: font.nav, fontFamily: on ? fonts.sansSemi : fonts.sansMedium }}>
               {label}
             </Text>
           </Pressable>
@@ -107,5 +110,5 @@ const styles = StyleSheet.create({
   bar: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 6, paddingBottom: 10, paddingHorizontal: 8 },
   item: { flex: 1, minHeight: TAB_BAR_MIN_HEIGHT, alignItems: 'center', justifyContent: 'center', gap: 2 },
   links: { flexDirection: 'row', gap: 4 },
-  link: { height: TOP_BAR_HEIGHT, paddingHorizontal: 14, justifyContent: 'center', borderBottomWidth: 3, borderTopWidth: 3, borderTopColor: 'transparent' },
+  link: { height: TOP_BAR_HEIGHT, paddingHorizontal: 12, justifyContent: 'center', borderBottomWidth: 3, borderTopWidth: 3, borderTopColor: 'transparent' },
 });

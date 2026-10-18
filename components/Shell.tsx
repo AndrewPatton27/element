@@ -1,11 +1,12 @@
 // Page frame shared by every screen. Phones: content, then the 5-tab bottom bar
-// (Feed / Brief / Search / Following / Me; components/TabBar.tsx). Numbers and
-// About are not tabs: the Me page links to both. Wide web: a 64 px top bar
-// (wordmark, Trending / Latest / For you, the Feed / Brief / Search / Following /
-// Me links, Numbers, Sign in or Account), a scrolling Numbers strip, then a body
-// of left categories, the main column and a right aside, with a floating About
-// pill at the bottom left (design: docs/design/web/Web-Final.dc.html). The SAMPLE
-// DATA banner sits on top in mock mode.
+// (Feed / Brief / Search / Following / Me; components/TabBar.tsx) and a round
+// "About Element" info button floating above it. Numbers is reached from the ticker.
+// Wide web: a 64 px top bar (wordmark, Trending / Latest / For you, Brief / Search /
+// Following links, then the account entry: the reader's email when signed in, or a
+// small Me button plus the "Sign in" pill when not), a scrolling Numbers strip (tap =
+// Numbers to know), then left categories, the main column and a right aside, with the
+// round About button at the bottom left (design: docs/design/web/Web-Final.dc.html).
+// No Me or Numbers text links. The SAMPLE DATA banner sits on top in mock mode.
 
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -18,7 +19,7 @@ import type { FeedTab } from '../lib/feedLogic';
 import { usePalette, useWide } from '../lib/useTheme';
 import { fonts, font, TOP_BAR_HEIGHT } from '../lib/theme';
 import type { Palette } from '../lib/theme';
-import { InfoIcon } from './Icons';
+import { InfoIcon, PersonIcon } from './Icons';
 import { NumbersTicker } from './NumbersTicker';
 import { SampleBanner } from './SampleBanner';
 import { SortToggle } from './SortToggle';
@@ -35,8 +36,44 @@ export function Wordmark({ size = 24, text = APP_NAME }: { size?: number; text?:
   );
 }
 
+// Right end of the wide top bar. Design Web-Final has only the "Sign in" pill (no Me or
+// Numbers links); Web-Me / Web-Brief show the reader's email instead once signed in.
+// Signed in: the email (or "Account") is the link to /account. Signed out: the pill goes
+// to /signin, and a small person button keeps /account (device topics, settings) reachable.
+function AccountEntry({ active, p, email }: { active: Tab; p: Palette; email: string | null }) {
+  const onAccount = active === 'me' || active === 'account';
+  if (email !== null) {
+    return (
+      <Pressable
+        onPress={() => go('/account')}
+        accessibilityRole="link"
+        accessibilityLabel="Account"
+        style={styles.emailLink}
+      >
+        <Text numberOfLines={1} style={{ color: onAccount ? p.ink : p.muted, fontSize: 14, fontFamily: fonts.sansSemi }}>
+          {email || 'Account'}
+        </Text>
+      </Pressable>
+    );
+  }
+  return (
+    <>
+      <Pressable onPress={() => go('/account')} accessibilityRole="link" accessibilityLabel="Me and settings" style={styles.personBtn}>
+        <PersonIcon color={onAccount ? p.accent : p.muted} size={22} strokeWidth={onAccount ? 1.9 : 1.8} />
+      </Pressable>
+      <Pressable
+        onPress={() => go('/signin')}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.pill, { backgroundColor: p.accent, opacity: pressed ? 0.85 : 1 }]}
+      >
+        <Text style={{ color: p.onAccent, fontSize: 15, fontFamily: fonts.sansSemi }}>Sign in</Text>
+      </Pressable>
+    </>
+  );
+}
+
 // Wide only. Feed passes its tab state; on other screens the tabs go back to the feed.
-function TopBar({ active, p, signedIn, feedTab }: { active: Tab; p: Palette; signedIn: boolean; feedTab?: ShellProps['feedTab'] }) {
+function TopBar({ active, p, email, signedIn, feedTab }: { active: Tab; p: Palette; email: string | null; signedIn: boolean; feedTab?: ShellProps['feedTab'] }) {
   const onChange =
     feedTab?.onChange ?? ((m: FeedTab) => router.navigate({ pathname: '/', params: { tab: m, t: String(Date.now()) } } as never));
   // Laptops (about 1280 px): tighter gaps so the bar stays on one row, also with "Account".
@@ -49,18 +86,7 @@ function TopBar({ active, p, signedIn, feedTab }: { active: Tab; p: Palette; sig
       <SortToggle mode={feedTab ? feedTab.mode : null} onChange={onChange} wide forYou={signedIn} />
       <View style={styles.spacer} />
       <TopNavLinks active={active} signedIn={signedIn} />
-      <Pressable onPress={() => go('/numbers')} accessibilityRole="link" accessibilityLabel="Numbers to know" style={styles.textLink}>
-        <Text style={{ color: active === 'numbers' ? p.accentInk : p.inkSoft, fontSize: 15, fontFamily: active === 'numbers' ? fonts.sansSemi : fonts.sansMedium }}>
-          Numbers
-        </Text>
-      </Pressable>
-      <Pressable
-        onPress={() => go(signedIn ? '/account' : '/signin')}
-        accessibilityRole="button"
-        style={({ pressed }) => [styles.pill, { backgroundColor: p.accent, opacity: pressed ? 0.85 : 1 }]}
-      >
-        <Text style={{ color: p.onAccent, fontSize: 15, fontFamily: fonts.sansSemi }}>{signedIn ? 'Account' : 'Sign in'}</Text>
-      </Pressable>
+      <AccountEntry active={active} p={p} email={email} />
     </View>
   );
 }
@@ -87,7 +113,7 @@ export function Shell({ active, children, left, aside, scroll, bare, noFab, feed
     return (
       <SafeAreaView style={[styles.fill, { backgroundColor: p.bg }]}>
         {api.sample ? <SampleBanner /> : null}
-        <TopBar active={active} p={p} signedIn={signedIn} feedTab={feedTab} />
+        <TopBar active={active} p={p} email={user ? user.email : null} signedIn={signedIn} feedTab={feedTab} />
         <View style={[styles.strip, { backgroundColor: p.bg, borderBottomColor: p.border }]}>
           <NumbersTicker api={api} config={config} />
         </View>
@@ -116,7 +142,7 @@ export function Shell({ active, children, left, aside, scroll, bare, noFab, feed
           <Pressable
             onPress={() => go('/about')}
             accessibilityRole="link"
-            accessibilityLabel="About"
+            accessibilityLabel="About Element"
             style={[styles.aboutFabWide, { backgroundColor: p.surface, borderColor: p.borderStrong }]}
           >
             <InfoIcon color={p.inkSoft} size={24} />
@@ -176,7 +202,8 @@ const styles = StyleSheet.create({
   topBarTight: { columnGap: 16, paddingHorizontal: 24 },
   wordmark: { fontFamily: fonts.serif, fontSize: 26, letterSpacing: -0.26 },
   spacer: { flex: 1 },
-  textLink: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  emailLink: { minHeight: 44, maxWidth: 240, justifyContent: 'center', paddingHorizontal: 4 },
+  personBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   pill: { minHeight: 44, paddingHorizontal: 18, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   strip: { height: 44, borderBottomWidth: 1, justifyContent: 'center', overflow: 'hidden' },
   body: {
